@@ -1,4 +1,4 @@
-import { Patch } from './Patch';
+import { Patch } from '@/parser/interfaces/Patch';
 
 export interface Texture {
   texName: string;

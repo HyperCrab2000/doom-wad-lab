@@ -1,7 +1,7 @@
-import { Lump } from '@/interfaces/Lump';
-import { ColourPalette } from '@/interfaces/ColourPalette';
-import { Texture } from 'apl-easy-gl';
-import { WadMap } from '@/interfaces/WadMap';
+import { ColourPalette } from '@/parser/interfaces/ColourPalette';
+import { Lump } from '@/parser/interfaces/Lump';
+import { WadMap } from '@/parser/interfaces/WadMap';
+import { Texture } from '@/parser/interfaces/Texture';
 
 export interface Wad {
   indentification: string;
