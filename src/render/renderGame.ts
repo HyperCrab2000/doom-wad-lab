@@ -17,7 +17,7 @@ import { insertAabbCacheItem } from '@/utils/insertAabbCache';
 import { findTrianglesAtPosition } from '@/utils/findTrianglesAtPosition';
 import { pointInTriangle } from '@/utils/pointInTriangle';
 import { freenavControls } from '@/controls/freenavControls';
-import { createMapBuffers, MapBuffers } from '@/geometry/createBuffers';
+import { createMapBuffers, MapBuffers } from '@/parser/geometry/createBuffers';
 import { drawWadAssets, WadAssets } from '@/render/drawWadAssets';
 
 import wallsVert from '@/shaders/walls.vert';

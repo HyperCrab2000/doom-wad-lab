@@ -1,21 +1,21 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import type { FlatBuffer } from '@/interfaces/FlatBuffer';
-import type { WadMap } from '@/interfaces/WadMap';
-import type { SkyBuffer } from '@/interfaces/SkyBuffer';
-import type { ThingBuffer } from '@/interfaces/ThingBuffer';
-import type { Triangle } from '@/interfaces/Triangle';
-import type { Vertex } from '@/interfaces/Vertex';
-import type { WallBuffer } from '@/interfaces/WallBuffer';
-import type { WallTexture } from '@/interfaces/WallTexture';
+import type { FlatBuffer } from '@/parser/interfaces/FlatBuffer';
+import type { WadMap } from '@/parser/interfaces/WadMap';
+import type { SkyBuffer } from '@/parser/interfaces/SkyBuffer';
+import type { ThingBuffer } from '@/parser/interfaces/ThingBuffer';
+import type { Triangle } from '@/parser/interfaces/Triangle';
+import type { Vertex } from '@/parser/interfaces/Vertex';
+import type { WallBuffer } from '@/parser/interfaces/WallBuffer';
+import type { WallTexture } from '@/parser/interfaces/WallTexture';
 
 import { getLineDefsBySector } from '@/wad/getLineDefsBySector';
 import { getLinkedSkySectors } from '@/wad/getLinkedSkySectors';
-import { createThing } from './createThing';
-import { mapToFlats } from './mapToFlats';
-import { mapToSkys } from './mapToSkys';
-import { mapToWalls } from './mapToWalls';
-import { sectorLinesToTriangles } from './sectorLinesToTriangles';
+import { createThing } from '@/parser/geometry/createThing';
+import { mapToFlats } from '@/parser/geometry/mapToFlats';
+import { mapToSkys } from '@/parser/geometry/mapToSkys';
+import { mapToWalls } from '@/parser/geometry/mapToWalls';
+import { sectorLinesToTriangles } from '@/parser/geometry/sectorLinesToTriangles';
 
 export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
