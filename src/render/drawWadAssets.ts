@@ -1,14 +1,14 @@
-import { skyFlats } from "../constants/WadInfo";
+import { skyFlats } from '../constants/WadInfo';
 
-import type { SpriteTexture } from "../interfaces/SpriteTexture";
-import type { FlatTexture } from "../interfaces/FlatTexture";
-import type { Wad } from "../interfaces/Wad";
-import type { WallTexture } from "../interfaces/WallTexture";
+import type { SpriteTexture } from '../interfaces/SpriteTexture';
+import type { FlatTexture } from '../interfaces/FlatTexture';
+import type { Wad } from '../interfaces/Wad';
+import type { WallTexture } from '../interfaces/WallTexture';
 
-import { drawFlat } from "./drawFlat";
-import { drawPatch } from "./drawPatch";
-import { drawSprite } from "./drawSprite";
-import { drawTexture } from "./drawTexture";
+import { drawFlat } from './drawFlat';
+import { drawPatch } from './drawPatch';
+import { drawSprite } from './drawSprite';
+import { drawTexture } from './drawTexture';
 
 export interface WadAssets {
   texturesByName: Record<string, WallTexture>;
@@ -19,25 +19,28 @@ export interface WadAssets {
 }
 
 export const drawWadAssets = (wad: Wad): WadAssets => {
-  const patchesByName = wad.pnames.reduce<Record<string, CanvasRenderingContext2D>>((acc, patchName) => {
-    let patchLump = wad.lumpHash[patchName];
-
-    if (!patchLump) {
-      //some wads misplace their patches (freedoom :P)
-      patchLump = wad.sprites[patchName];
+  const patchesByName = wad.pnames.reduce<Record<string, CanvasRenderingContext2D>>(
+    (acc, patchName) => {
+      let patchLump = wad.lumpHash[patchName];
 
       if (!patchLump) {
-        throw new Error('Patch not found: ' + patchName);
-      }
-    }
+        //some wads misplace their patches (freedoom :P)
+        patchLump = wad.sprites[patchName];
 
-    acc[patchName] = drawPatch(patchLump, wad.playpal);
-    return acc;
-  }, {});
+        if (!patchLump) {
+          throw new Error('Patch not found: ' + patchName);
+        }
+      }
+
+      acc[patchName] = drawPatch(patchLump, wad.playpal);
+      return acc;
+    },
+    {}
+  );
 
   const textures = Object.keys(wad.textures).map((texName) => ({
     ...drawTexture(wad.textures[texName], wad, patchesByName),
-    name: texName
+    name: texName,
   }));
 
   const texturesByName = textures.reduce<Record<string, WallTexture>>((acc, texture) => {
@@ -45,14 +48,16 @@ export const drawWadAssets = (wad: Wad): WadAssets => {
     return acc;
   }, {});
 
-  const flats = Object.keys(wad.flats).filter((flatName) => !skyFlats.includes(flatName)).map((flatName) => ({
-    name: flatName, 
-    graphics: drawFlat(wad.flats[flatName], wad.playpal)
-  }));
+  const flats = Object.keys(wad.flats)
+    .filter((flatName) => !skyFlats.includes(flatName))
+    .map((flatName) => ({
+      name: flatName,
+      graphics: drawFlat(wad.flats[flatName], wad.playpal),
+    }));
 
   const sprites = Object.keys(wad.sprites).map((spriteName) => ({
     ...drawSprite(wad.sprites[spriteName], wad.playpal),
-    name: spriteName
+    name: spriteName,
   }));
 
   const spritesByName = sprites.reduce<Record<string, SpriteTexture>>((acc, sprite) => {
@@ -65,6 +70,6 @@ export const drawWadAssets = (wad: Wad): WadAssets => {
     flats,
     sprites,
     texturesByName,
-    spritesByName
+    spritesByName,
   };
 };

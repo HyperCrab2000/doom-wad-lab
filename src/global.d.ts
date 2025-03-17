@@ -1,14 +1,14 @@
-declare module "*.html" {
+declare module '*.html' {
   const content: string;
   export default content;
 }
 
-declare module "*.vert" {
+declare module '*.vert' {
   const content: string;
   export default content;
 }
 
-declare module "*.frag" {
+declare module '*.frag' {
   const content: string;
   export default content;
 }

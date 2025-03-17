@@ -1,4 +1,4 @@
-import {difficulty} from "@/constants/WadInfo";
+import { difficulty } from '@/constants/WadInfo';
 
 export interface Thing {
   x: number;
@@ -16,7 +16,7 @@ export interface Thing {
     class1Only?: boolean;
     class2Only?: boolean;
     class3Only?: boolean;
-  }
+  };
   action?: number;
   arg1?: number;
   arg2?: number;

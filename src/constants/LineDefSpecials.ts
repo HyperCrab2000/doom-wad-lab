@@ -1,14 +1,14 @@
 enum DoorLocks {
   yellow,
   red,
-  blue
+  blue,
 }
 
 enum DoorTypes {
   openWaitClose,
   closeWaitOpen,
   openStayOpen,
-  closeStayClosed
+  closeStayClosed,
 }
 
 enum MotionSpeed {
@@ -16,20 +16,20 @@ enum MotionSpeed {
   normal,
   fast,
   turbo,
-  instant
+  instant,
 }
 
 enum DelayTimes {
   threeSeconds,
   fourSeconds,
-  thirtySeconds
+  thirtySeconds,
 }
 
 enum Trigger {
   push,
   switch,
   walkover,
-  gun
+  gun,
 }
 
 enum SpecialCategory {
@@ -44,7 +44,7 @@ enum SpecialCategory {
   telport,
   donut,
   transfer,
-  scroll
+  scroll,
 }
 
 interface LineDefBase {
@@ -55,7 +55,7 @@ interface LineDefBase {
 
 enum ScrollDirection {
   left = 'left',
-  right = 'right'
+  right = 'right',
 }
 
 interface Scroller extends LineDefBase {
@@ -67,7 +67,7 @@ interface Scroller extends LineDefBase {
 type LineDefSpecial = Scroller;
 
 export const lineDefSpecials: Record<number, LineDefSpecial> = {
-  48: { category: SpecialCategory.scroll, direction: ScrollDirection.left, wall: true }
+  48: { category: SpecialCategory.scroll, direction: ScrollDirection.left, wall: true },
 };
 
 /*

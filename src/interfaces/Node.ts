@@ -3,9 +3,6 @@ export interface Node {
   y: number;
   dx: number;
   dy: number;
-  bbox: [
-    [number, number, number, number],
-    [number, number, number, number]
-  ],
-  children: [number, number],
+  bbox: [[number, number, number, number], [number, number, number, number]];
+  children: [number, number];
 }

@@ -4,7 +4,10 @@ import { flatSize } from '../constants/WadInfo';
 
 import { ByteReader } from '../classes/ByteReader';
 
-export const drawFlat = (data: ArrayBuffer, colourPalette: ColourPalette): CanvasRenderingContext2D => {
+export const drawFlat = (
+  data: ArrayBuffer,
+  colourPalette: ColourPalette
+): CanvasRenderingContext2D => {
   //when a flat name is selected, render a preview of the raw data in the canvas
   const flatCanvas = document.createElement('canvas');
   const flatContext = flatCanvas.getContext('2d');
@@ -21,10 +24,10 @@ export const drawFlat = (data: ArrayBuffer, colourPalette: ColourPalette): Canva
   const imgData = flatContext.getImageData(0, 0, flatSize, flatSize);
   const pixels = imgData.data;
 
-  for (let i=0, pix=0; i<size; i++) {
+  for (let i = 0, pix = 0; i < size; i++) {
     const pixData = flatData.readUint8();
     const rgb = colourPalette[pixData];
-    
+
     //convert the 256 colours to 32bit
     pixels[pix++] = rgb[0];
     pixels[pix++] = rgb[1];

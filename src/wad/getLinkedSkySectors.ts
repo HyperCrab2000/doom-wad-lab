@@ -11,12 +11,15 @@ export interface LinkedSkySectors {
   floors: Record<number, LinkedSector>;
 }
 
-const mergeGroupedSectors = (map: WadMap, skySectorsBySector: Record<string, Array<string>>): Array<Set<string>> => {
+const mergeGroupedSectors = (
+  map: WadMap,
+  skySectorsBySector: Record<string, Array<string>>
+): Array<Set<string>> => {
   map.LINEDEFS.forEach((lineDef) => {
     if (lineDef.sidenum[0] !== -1 && lineDef.sidenum[1] !== -1) {
       const sectorNumber = String(map.SIDEDEFS[lineDef.sidenum[0]].sector),
         otherSectorNumber = String(map.SIDEDEFS[lineDef.sidenum[1]].sector);
-      
+
       if (sectorNumber in skySectorsBySector && otherSectorNumber in skySectorsBySector) {
         skySectorsBySector[sectorNumber].push(otherSectorNumber);
         skySectorsBySector[otherSectorNumber].push(sectorNumber);
@@ -27,7 +30,7 @@ const mergeGroupedSectors = (map: WadMap, skySectorsBySector: Record<string, Arr
   const linkedSkySectorsList = new Array<Set<string>>();
 
   for (let sectorNumber in skySectorsBySector) {
-    if (!(skySectorsBySector.hasOwnProperty(sectorNumber))) {
+    if (!skySectorsBySector.hasOwnProperty(sectorNumber)) {
       continue;
     }
 
@@ -37,7 +40,12 @@ const mergeGroupedSectors = (map: WadMap, skySectorsBySector: Record<string, Arr
     while (i < connectedSectors.length) {
       const connectedSector = connectedSectors[i];
       if (skySectorsBySector.hasOwnProperty(connectedSector)) {
-        connectedSectors = [...connectedSectors, ...(skySectorsBySector[connectedSector].filter((newItem) => connectedSectors.indexOf(newItem) < 0))];
+        connectedSectors = [
+          ...connectedSectors,
+          ...skySectorsBySector[connectedSector].filter(
+            (newItem) => connectedSectors.indexOf(newItem) < 0
+          ),
+        ];
         delete skySectorsBySector[connectedSector];
       }
       i++;
@@ -53,7 +61,7 @@ const mergeGroupedSectors = (map: WadMap, skySectorsBySector: Record<string, Arr
 export const getLinkedSkySectors = (map: WadMap): LinkedSkySectors => {
   const skySectorsBySector: Record<string, Array<string>> = {};
   const floorskySectorsBySector: Record<string, Array<string>> = {};
-    
+
   map.SECTORS.forEach((sector, i) => {
     if (skyFlats.indexOf(sector.ceilingpic) >= 0) {
       skySectorsBySector[String(i)] = new Array<string>();
@@ -65,7 +73,7 @@ export const getLinkedSkySectors = (map: WadMap): LinkedSkySectors => {
 
   const linkedSkySectorsList = mergeGroupedSectors(map, skySectorsBySector);
   const linkedFloorSkySectorsList = mergeGroupedSectors(map, floorskySectorsBySector);
-  
+
   const ceilings: Record<number, LinkedSector> = {};
 
   linkedSkySectorsList.forEach((linkedSkySectors, sectorIndex) => {
@@ -92,6 +100,6 @@ export const getLinkedSkySectors = (map: WadMap): LinkedSkySectors => {
 
   return {
     ceilings,
-    floors
+    floors,
   };
 };

@@ -20,21 +20,21 @@ enum LoadMode {
   normal,
   sprites,
   flat,
-  map
-};
+  map,
+}
 
 const mapLumps = [
-  LumpName.THINGS, 
-  LumpName.LINEDEFS, 
-  LumpName.SIDEDEFS, 
-  LumpName.VERTEXES, 
-  LumpName.SEGS, 
-  LumpName.SSECTORS, 
-  LumpName.NODES, 
-  LumpName.SECTORS, 
-  LumpName.REJECT, 
-  LumpName.BLOCKMAP, 
-  LumpName.BEHAVIOR
+  LumpName.THINGS,
+  LumpName.LINEDEFS,
+  LumpName.SIDEDEFS,
+  LumpName.VERTEXES,
+  LumpName.SEGS,
+  LumpName.SSECTORS,
+  LumpName.NODES,
+  LumpName.SECTORS,
+  LumpName.REJECT,
+  LumpName.BLOCKMAP,
+  LumpName.BEHAVIOR,
 ];
 
 export const loadWadFromUrl = async (url: string): Promise<Wad> => {
@@ -63,7 +63,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
     maps: {},
 
     animatedFlats: {},
-    animatedTextures: {}
+    animatedTextures: {},
   };
 
   wadinfo.indentification = byteReader.readASCII(4);
@@ -90,7 +90,9 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
   const animatedFlatEndNames = animatedFlatStartNames.map<string>((item) => animatedFlatMap[item]);
 
   const animatedTextureStartNames = Object.keys(animatedTextureMap);
-  const animatedTextureEndNames = animatedTextureStartNames.map<string>((item) => animatedTextureMap[item]);
+  const animatedTextureEndNames = animatedTextureStartNames.map<string>(
+    (item) => animatedTextureMap[item]
+  );
 
   let animatedFlatKey: string | undefined;
   let animatedTextureKey: string | undefined;
@@ -104,7 +106,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
     lumpData = arrayBuffer.slice(filepos, filepos + size);
     newLump = {
       name: lumpName as LumpName,
-      data: lumpData
+      data: lumpData,
     };
 
     if (lumpName === LumpName.BEHAVIOR) {
@@ -121,31 +123,31 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
 
     //based on the current mode and the lump name decide what to do with the data
     switch (lumpName) {
-      case LumpName.FF_START: 
-      case LumpName.F_START: 
-      case LumpName.F1_START: 
-      case LumpName.F2_START: 
+      case LumpName.FF_START:
+      case LumpName.F_START:
+      case LumpName.F1_START:
+      case LumpName.F2_START:
       case LumpName.F3_START:
         mode = LoadMode.flat;
         return;
-      case LumpName.SS_START: 
+      case LumpName.SS_START:
       case LumpName.S_START:
         mode = LoadMode.sprites;
         return;
-      case LumpName.P_START: 
-      case LumpName.P1_START: 
-      case LumpName.P2_START: 
+      case LumpName.P_START:
+      case LumpName.P1_START:
+      case LumpName.P2_START:
       case LumpName.P3_START:
-      case LumpName.FF_END: 
-      case LumpName.F_END: 
-      case LumpName.F1_END: 
-      case LumpName.F2_END: 
+      case LumpName.FF_END:
+      case LumpName.F_END:
+      case LumpName.F1_END:
+      case LumpName.F2_END:
       case LumpName.F3_END:
-      case LumpName.SS_END: 
+      case LumpName.SS_END:
       case LumpName.S_END:
-      case LumpName.P_END: 
-      case LumpName.P1_END: 
-      case LumpName.P2_END: 
+      case LumpName.P_END:
+      case LumpName.P1_END:
+      case LumpName.P2_END:
       case LumpName.P3_END:
         mode = LoadMode.normal;
         return;
@@ -159,7 +161,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
         VERTEXES: [],
         LINEDEFS: [],
         SIDEDEFS: [],
-        SECTORS: []
+        SECTORS: [],
       };
       mode = LoadMode.map;
       return;
@@ -242,7 +244,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             patches.push({
               originX: originX,
               originY: originY,
-              patchIndex: patchIndex
+              patchIndex: patchIndex,
             });
           }
 
@@ -264,7 +266,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             texName: texName,
             texWidth: texWidth,
             texHeight: texHeight,
-            patches: patches
+            patches: patches,
           };
         }
 
@@ -292,9 +294,9 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             x: lumpDataReader.readInt16(),
             y: lumpDataReader.readInt16(),
             columns: lumpDataReader.readInt16(),
-            rows: lumpDataReader.readInt16()
+            rows: lumpDataReader.readInt16(),
           },
-          blocks: []
+          blocks: [],
         };
 
         const numBlocks = blockMap.header.columns * blockMap.header.rows;
@@ -311,7 +313,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
           let lineIndex;
 
           //keep reading the line definition indexes until we hit the end token
-          while ((lineIndex = lumpDataReader.readUint16()) != 0xFFFF) {
+          while ((lineIndex = lumpDataReader.readUint16()) != 0xffff) {
             block.push(lineIndex);
           }
 
@@ -328,7 +330,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
         while (lumpDataReader.hasMore()) {
           vertexes.push({
             x: lumpDataReader.readInt16(),
-            y: lumpDataReader.readInt16()
+            y: lumpDataReader.readInt16(),
           });
         }
 
@@ -346,7 +348,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             ceilingpic: lumpDataReader.readASCII(8),
             lightlevel: lumpDataReader.readInt16(),
             type: lumpDataReader.readInt16(),
-            tag: lumpDataReader.readInt16()
+            tag: lumpDataReader.readInt16(),
           };
 
           newSector.lightIntensity = newSector.lightlevel / 255;
@@ -367,7 +369,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             topTexture: lumpDataReader.readASCII(8).toUpperCase().trim(),
             bottomTexture: lumpDataReader.readASCII(8).toUpperCase().trim(),
             midTexture: lumpDataReader.readASCII(8).toUpperCase().trim(),
-            sector: lumpDataReader.readInt16()
+            sector: lumpDataReader.readInt16(),
           });
         }
 
@@ -406,7 +408,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
                 activateShotThrough: Boolean(flags[10] && flags[12]),
                 activatePlayerPassthrough: Boolean(flags[11] && flags[12]),
                 activatePlayerMonster: Boolean(flags[13]),
-                blockAll: Boolean(flags[15])
+                blockAll: Boolean(flags[15]),
               },
               special: lumpDataReader.readUint8(),
               arg1: lumpDataReader.readUint8(),
@@ -414,7 +416,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
               arg3: lumpDataReader.readUint8(),
               arg4: lumpDataReader.readUint8(),
               arg5: lumpDataReader.readUint8(),
-              sidenum: [lumpDataReader.readInt16(), lumpDataReader.readInt16()]
+              sidenum: [lumpDataReader.readInt16(), lumpDataReader.readInt16()],
             };
           } else {
             lineDef = {
@@ -429,11 +431,11 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
                 secret: !!flags[5],
                 blockSound: !!flags[6],
                 notOnMap: !!flags[7],
-                alreadyOnMap: !!flags[8]
+                alreadyOnMap: !!flags[8],
               },
               special: lumpDataReader.readInt16(),
               tag: lumpDataReader.readInt16(),
-              sidenum: [lumpDataReader.readInt16(), lumpDataReader.readInt16()]
+              sidenum: [lumpDataReader.readInt16(), lumpDataReader.readInt16()],
             };
           }
 
@@ -450,7 +452,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
         while (lumpDataReader.hasMore()) {
           ssectors.push({
             numsegs: lumpDataReader.readInt16(),
-            firstseg: lumpDataReader.readInt16()
+            firstseg: lumpDataReader.readInt16(),
           });
         }
 
@@ -467,8 +469,18 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             dx: lumpDataReader.readInt16(),
             dy: lumpDataReader.readInt16(),
             bbox: [
-              [lumpDataReader.readInt16(), lumpDataReader.readInt16(), lumpDataReader.readInt16(), lumpDataReader.readInt16()],
-              [lumpDataReader.readInt16(), lumpDataReader.readInt16(), lumpDataReader.readInt16(), lumpDataReader.readInt16()]
+              [
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+              ],
+              [
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+                lumpDataReader.readInt16(),
+              ],
             ],
             children: [lumpDataReader.readInt16(), lumpDataReader.readInt16()],
           });
@@ -487,7 +499,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
             angle: lumpDataReader.readInt16(),
             linedef: lumpDataReader.readInt16(),
             side: lumpDataReader.readInt16(),
-            offset: lumpDataReader.readInt16()
+            offset: lumpDataReader.readInt16(),
           });
         }
 
@@ -516,7 +528,11 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
               angle,
               type,
               flags: {
-                difficulty: flags[0] ? difficulty.easy : flags[1] ? difficulty.intermediate : difficulty.hard,
+                difficulty: flags[0]
+                  ? difficulty.easy
+                  : flags[1]
+                    ? difficulty.intermediate
+                    : difficulty.hard,
                 isDeaf: !!flags[3],
                 isDormant: !!flags[4],
                 class1Only: !!flags[5],
@@ -524,7 +540,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
                 class3Only: !!flags[7],
                 hideInSingleplayer: !!flags[9] || !!flags[10],
                 hideInCoop: !!flags[8] || !!flags[10],
-                hideInDeathmatch: !!flags[8] || !!flags[9]
+                hideInDeathmatch: !!flags[8] || !!flags[9],
               },
               thingId,
               startHeight,
@@ -552,13 +568,17 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
               angle,
               type,
               flags: {
-                difficulty: flags[0] ? difficulty.easy : flags[1] ? difficulty.intermediate : difficulty.hard,
+                difficulty: flags[0]
+                  ? difficulty.easy
+                  : flags[1]
+                    ? difficulty.intermediate
+                    : difficulty.hard,
                 isDeaf: !!flags[3],
                 hideInSingleplayer: !!flags[4],
                 hideInDeathmatch: !!flags[5],
                 hideInCoop: !!flags[6],
-                friendly: !!flags[7]
-              }
+                friendly: !!flags[7],
+              },
             };
 
             things.push(thing);

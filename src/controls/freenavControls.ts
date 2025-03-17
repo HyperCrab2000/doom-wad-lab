@@ -5,7 +5,7 @@ export interface KeyAction {
   action: (moveVec: vec3) => void;
 }
 
-export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): () => void => {
+export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): (() => void) => {
   let moveId: number;
   let shouldStop = false;
 
@@ -21,54 +21,60 @@ export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): () =>
   const moveSpeed = 5;
   const moveExtraVec = vec3.create();
   const moveKeys: Array<KeyAction> = [
-    { //forward
+    {
+      //forward
       keys: [87],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, forward, moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
+      },
     },
-    { //back
+    {
+      //back
       keys: [83],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, forward, -moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
+      },
     },
-    { //left
+    {
+      //left
       keys: [65],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, right, moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
+      },
     },
-    { //right
+    {
+      //right
       keys: [68],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, right, -moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
+      },
     },
-    { //up
+    {
+      //up
       keys: [32],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, up, -moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
+      },
     },
-    { //down
+    {
+      //down
       keys: [17, 67],
       action: (moveVec: vec3) => {
         extractView();
         vec3.scale(moveExtraVec, up, moveSpeed);
         vec3.add(moveVec, moveVec, moveExtraVec);
-      }
-    }
+      },
+    },
   ];
 
   const moveKeysByKey: Record<string, KeyAction> = {};
@@ -92,57 +98,59 @@ export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): () =>
 
     if (!shouldStop && moveKeyDown.length) {
       vec3.set(moveVec, 0, 0, 0);
-      
+
       moveKeyDown.forEach((moveKey) => {
         moveKey.action(moveVec);
       });
-      
+
       vec3.subtract(pos, pos, moveVec);
       vec3.negate(negPos, pos);
       mat4.translate(viewMatrix, viewMatrix, moveVec);
     }
   };
-  
+
   const mouseMove = (e: MouseEvent) => {
     deltaPos.x = (e.pageX - startPos.x) / dom.width;
     deltaPos.y = (e.pageY - startPos.y) / dom.height;
-    
+
     //TODO: limit the angle of rotation when we rotate around y (need to ensure the up direction remains up)
-    
+
     extractView();
     mat4.translate(viewMatrix, viewMatrix, pos);
-    mat4.rotateY(viewMatrix, viewMatrix, deltaPos.x*Math.PI);
-    
+    mat4.rotateY(viewMatrix, viewMatrix, deltaPos.x * Math.PI);
+
     extractView();
-    mat4.rotate(viewMatrix, viewMatrix, deltaPos.y*Math.PI, right);
+    mat4.rotate(viewMatrix, viewMatrix, deltaPos.y * Math.PI, right);
     mat4.translate(viewMatrix, viewMatrix, negPos);
-    
+
     startPos.x = e.pageX;
     startPos.y = e.pageY;
   };
-  
+
   const mouseUp = () => {
     window.removeEventListener('mousemove', mouseMove);
     window.removeEventListener('mouseup', mouseUp);
   };
-  
+
   const keyDown = (e: KeyboardEvent) => {
-    if (!moveKeyPressed.hasOwnProperty(e.which) && 
-      moveKeysByKey.hasOwnProperty(e.which) && 
-      moveKeyDown.indexOf(moveKeysByKey[e.which]) < 0) {
-        moveKeyPressed[e.which] = true;
-        moveKeyDown.push(moveKeysByKey[e.which]);
+    if (
+      !moveKeyPressed.hasOwnProperty(e.which) &&
+      moveKeysByKey.hasOwnProperty(e.which) &&
+      moveKeyDown.indexOf(moveKeysByKey[e.which]) < 0
+    ) {
+      moveKeyPressed[e.which] = true;
+      moveKeyDown.push(moveKeysByKey[e.which]);
     }
   };
-  
+
   const keyUp = (e: KeyboardEvent) => {
     if (moveKeyPressed.hasOwnProperty(e.which) && moveKeysByKey.hasOwnProperty(e.which)) {
       delete moveKeyPressed[e.which];
-      
+
       const obj = moveKeysByKey[e.which];
       const index = moveKeyDown.indexOf(obj);
-      
-      if (index>=0) {
+
+      if (index >= 0) {
         moveKeyDown.splice(index, 1);
       }
     }
@@ -151,21 +159,21 @@ export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): () =>
   const startMove = (e: MouseEvent) => {
     startPos.x = e.pageX;
     startPos.y = e.pageY;
-    
+
     extractPosition();
-    
+
     window.addEventListener('mousemove', mouseMove);
     window.addEventListener('mouseup', mouseUp);
   };
-  
+
   moveKeys.forEach((moveKey) => {
     moveKey.keys.forEach((key) => {
       moveKeysByKey[key] = moveKey;
     });
   });
-  
+
   moveId = requestAnimationFrame(move);
-  
+
   dom.addEventListener('mousedown', startMove);
   window.addEventListener('keydown', keyDown);
   window.addEventListener('keyup', keyUp);
@@ -174,7 +182,7 @@ export const freenavControls = (viewMatrix: mat4, dom: HTMLCanvasElement): () =>
     shouldStop = true;
 
     cancelAnimationFrame(moveId);
-    
+
     dom.removeEventListener('mousedown', startMove);
     window.removeEventListener('mousemove', mouseMove);
     window.removeEventListener('mouseup', mouseUp);

@@ -1,3 +1,3 @@
-import {Vertex} from "@/interfaces/Vertex";
+import { Vertex } from '@/interfaces/Vertex';
 
 export type Triangle = [Vertex, Vertex, Vertex];

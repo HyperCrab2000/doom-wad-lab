@@ -6,6 +6,6 @@ export interface Sector {
   lightlevel: number;
   type: number;
   tag: number;
-  
+
   lightIntensity?: number; //normalised light level
 }

@@ -1,4 +1,4 @@
-import { vec3 } from "gl-matrix";
+import { vec3 } from 'gl-matrix';
 
 export interface Aabb3D {
   min: vec3;

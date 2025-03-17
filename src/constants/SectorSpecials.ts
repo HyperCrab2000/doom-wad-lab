@@ -15,21 +15,21 @@ export enum SectorKind {
   automap = 'automap',
   combo = 'combo',
   both = 'both',
-  secret = 'secret'
+  secret = 'secret',
 }
 export const enum Direction {
   north = 'north',
   east = 'east',
   south = 'south',
-  west = 'west'
-};
+  west = 'west',
+}
 
 export const enum DiagonalDirection {
   northeast = 'northeast',
   northwest = 'northwest',
   southeast = 'southeast',
-  southwest = 'southwest'
-};
+  southwest = 'southwest',
+}
 
 export interface SectorBase {
   id: number;
@@ -109,24 +109,24 @@ export interface SectorTypeSecret extends SectorBase {
   kind: SectorKind.secret;
 }
 
-export type SectorType = 
-  SectorTypeNone |
-  SectorTypeLight |
-  SectorTypeStairs |
-  SectorTypeWind |
-  SectorTypeDamage |
-  SectorTypeDoor |
-  SectorTypeEnd |
-  SectorTypeFriction |
-  SectorTypeFog |
-  SectorTypeScroller |
-  SectorTypeHealing |
-  SectorTypeLightning |
-  SectorTypeSky |
-  SectorTypeAutomap |
-  SectorTypeCombo |
-  SectorTypeBoth |
-  SectorTypeSecret;
+export type SectorType =
+  | SectorTypeNone
+  | SectorTypeLight
+  | SectorTypeStairs
+  | SectorTypeWind
+  | SectorTypeDamage
+  | SectorTypeDoor
+  | SectorTypeEnd
+  | SectorTypeFriction
+  | SectorTypeFog
+  | SectorTypeScroller
+  | SectorTypeHealing
+  | SectorTypeLightning
+  | SectorTypeSky
+  | SectorTypeAutomap
+  | SectorTypeCombo
+  | SectorTypeBoth
+  | SectorTypeSecret;
 
 export const SectorSpecials: Array<SectorType> = [
   { id: 0, kind: SectorKind.none, description: 'Normal' },
@@ -138,27 +138,51 @@ export const SectorSpecials: Array<SectorType> = [
   { id: 12, kind: SectorKind.light, description: 'Blink 0.5 second, synchronized' },
   { id: 13, kind: SectorKind.light, description: 'Blink 1.0 second, synchronized' },
   { id: 17, kind: SectorKind.light, description: 'Flickers randomly' },
-  
-  { id: 4, kind: SectorKind.both, description: '20% damage per second plus light blink 0.5 second' },
-  
+
+  {
+    id: 4,
+    kind: SectorKind.both,
+    description: '20% damage per second plus light blink 0.5 second',
+  },
+
   { id: 5, kind: SectorKind.damage, description: '10% damage per second' },
   { id: 7, kind: SectorKind.damage, description: '5% damage per second' },
   { id: 16, kind: SectorKind.damage, description: '20% damage per second' },
-  
+
   { id: 9, kind: SectorKind.secret, description: 'Secret area' },
-  
-  { id: 10, kind: SectorKind.door, description: '30 seconds after level start, ceiling closes like a door' },
-  { id: 14, kind: SectorKind.door, description: '300 seconds after level start, ceiling opens like a door' },
-  
-  { id: 11, kind: SectorKind.end, description: '20% damage per second. When player dies, level ends' }
+
+  {
+    id: 10,
+    kind: SectorKind.door,
+    description: '30 seconds after level start, ceiling closes like a door',
+  },
+  {
+    id: 14,
+    kind: SectorKind.door,
+    description: '300 seconds after level start, ceiling opens like a door',
+  },
+
+  {
+    id: 11,
+    kind: SectorKind.end,
+    description: '20% damage per second. When player dies, level ends',
+  },
 ];
 
 export const ExtendedSectorSpecials: Array<SectorType> = [
   { id: 0, kind: SectorKind.none, description: 'Normal' },
-  
-  { id: 26, kind: SectorKind.stairs, description: 'Mark sector to be used for building normal stairs' },
-  { id: 27, kind: SectorKind.stairs, description: 'Mark sector to be used for building synchronized stairs' },
-  
+
+  {
+    id: 26,
+    kind: SectorKind.stairs,
+    description: 'Mark sector to be used for building normal stairs',
+  },
+  {
+    id: 27,
+    kind: SectorKind.stairs,
+    description: 'Mark sector to be used for building synchronized stairs',
+  },
+
   { id: 40, kind: SectorKind.wind, direction: Direction.east, amount: 5 },
   { id: 41, kind: SectorKind.wind, direction: Direction.east, amount: 10 },
   { id: 42, kind: SectorKind.wind, direction: Direction.east, amount: 25 },
@@ -171,20 +195,52 @@ export const ExtendedSectorSpecials: Array<SectorType> = [
   { id: 49, kind: SectorKind.wind, direction: Direction.west, amount: 5 },
   { id: 50, kind: SectorKind.wind, direction: Direction.west, amount: 10 },
   { id: 51, kind: SectorKind.wind, direction: Direction.west, amount: 25 },
-  
-  { id: 68, kind: SectorKind.both, description: '20% damage per second plus light blink 0.5 second' },
-  
-  { id: 75, kind: SectorKind.end, description: '20% damage per second. When player dies, level ends' },
-  
-  { id: 74, kind: SectorKind.door, description: '30 seconds after level start, ceiling closes like a door' },
-  { id: 78, kind: SectorKind.door, description: '300 seconds after level start, ceiling opens like a door' },
-  
+
+  {
+    id: 68,
+    kind: SectorKind.both,
+    description: '20% damage per second plus light blink 0.5 second',
+  },
+
+  {
+    id: 75,
+    kind: SectorKind.end,
+    description: '20% damage per second. When player dies, level ends',
+  },
+
+  {
+    id: 74,
+    kind: SectorKind.door,
+    description: '30 seconds after level start, ceiling closes like a door',
+  },
+  {
+    id: 78,
+    kind: SectorKind.door,
+    description: '300 seconds after level start, ceiling opens like a door',
+  },
+
   { id: 79, kind: SectorKind.friction, description: 'Low friction' },
-  
-  { id: 1, kind: SectorKind.light, description: 'Phased light (use lightlevel between 0 and 63 for the starting phase)' },
-  { id: 2, kind: SectorKind.light, description: 'Phased light sequence start (use types 3 and 4 in neighboring sectors)' },
-  { id: 3, kind: SectorKind.light, description: 'Light sequence step (to be used alternatively with type 4 for a light sequence)' },
-  { id: 4, kind: SectorKind.light, description: 'Light sequence step (to be used alternatively with type 3 for a light sequence)' },
+
+  {
+    id: 1,
+    kind: SectorKind.light,
+    description: 'Phased light (use lightlevel between 0 and 63 for the starting phase)',
+  },
+  {
+    id: 2,
+    kind: SectorKind.light,
+    description: 'Phased light sequence start (use types 3 and 4 in neighboring sectors)',
+  },
+  {
+    id: 3,
+    kind: SectorKind.light,
+    description: 'Light sequence step (to be used alternatively with type 4 for a light sequence)',
+  },
+  {
+    id: 4,
+    kind: SectorKind.light,
+    description: 'Light sequence step (to be used alternatively with type 3 for a light sequence)',
+  },
   { id: 65, kind: SectorKind.light, description: 'Blink random' },
   { id: 66, kind: SectorKind.light, description: 'Blink 0.5 second' },
   { id: 67, kind: SectorKind.light, description: 'Blink 1.0 second' },
@@ -192,11 +248,19 @@ export const ExtendedSectorSpecials: Array<SectorType> = [
   { id: 76, kind: SectorKind.light, description: 'Blink 0.5 second, synchronized' },
   { id: 77, kind: SectorKind.light, description: 'Blink 1.0 second, synchronized' },
   { id: 81, kind: SectorKind.light, description: 'Flickers randomly' },
-  
-  { id: 84, kind: SectorKind.combo, description: '5% lava damage per second plus scroll east and light blink 0.5 second' },
-  
-  { id: 87, kind: SectorKind.fog, description: 'Sector uses outside fog even if the ceiling texture isn\'t the sky texture' },
-  
+
+  {
+    id: 84,
+    kind: SectorKind.combo,
+    description: '5% lava damage per second plus scroll east and light blink 0.5 second',
+  },
+
+  {
+    id: 87,
+    kind: SectorKind.fog,
+    description: "Sector uses outside fog even if the ceiling texture isn't the sky texture",
+  },
+
   { id: 69, kind: SectorKind.damage, description: '10% damage per second' },
   { id: 71, kind: SectorKind.damage, description: '5% damage per second' },
   { id: 80, kind: SectorKind.damage, description: '20% damage per second' },
@@ -206,18 +270,38 @@ export const ExtendedSectorSpecials: Array<SectorType> = [
   { id: 105, kind: SectorKind.damage, description: '+2 increase to nukagecount' },
   { id: 115, kind: SectorKind.damage, description: 'Instant death: 999% damage every tic' },
   { id: 116, kind: SectorKind.damage, description: '+4 to nukagecount' },
-  
-  { id: 195, kind: SectorKind.automap, description: 'Hidden: sector texture is not shown on the textured automap' },
-  
+
+  {
+    id: 195,
+    kind: SectorKind.automap,
+    description: 'Hidden: sector texture is not shown on the textured automap',
+  },
+
   { id: 196, kind: SectorKind.healing, description: 'Restores 1 hit point every 32 tics' },
-  
-  { id: 197, kind: SectorKind.lightning, description: 'Light level increases'},
-  { id: 198, kind: SectorKind.lightning, description: 'Light level increases by up to 64 units during a lightning flash' },
-  { id: 199, kind: SectorKind.lightning, description: 'Light level increases by up to 32 units during a lightning flash' },
-  
-  { id: 200, kind: SectorKind.sky, description: 'Use the secondary sky texture if the level doesn\'t use a double sky' },
-  
-  { id: 118, kind: SectorKind.scroller, description: 'Water current, angle and strength depend on sector tag value' },
+
+  { id: 197, kind: SectorKind.lightning, description: 'Light level increases' },
+  {
+    id: 198,
+    kind: SectorKind.lightning,
+    description: 'Light level increases by up to 64 units during a lightning flash',
+  },
+  {
+    id: 199,
+    kind: SectorKind.lightning,
+    description: 'Light level increases by up to 32 units during a lightning flash',
+  },
+
+  {
+    id: 200,
+    kind: SectorKind.sky,
+    description: "Use the secondary sky texture if the level doesn't use a double sky",
+  },
+
+  {
+    id: 118,
+    kind: SectorKind.scroller,
+    description: 'Water current, angle and strength depend on sector tag value',
+  },
   { id: 201, kind: SectorKind.scroller, direction: Direction.north, amount: 5 },
   { id: 202, kind: SectorKind.scroller, direction: Direction.north, amount: 10 },
   { id: 203, kind: SectorKind.scroller, direction: Direction.north, amount: 25 },

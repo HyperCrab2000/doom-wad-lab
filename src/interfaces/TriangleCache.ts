@@ -1,7 +1,7 @@
 export const enum AabbPointType {
   min,
-  max
-};
+  max,
+}
 
 export interface AabbCacheItem<T> {
   obj: T;

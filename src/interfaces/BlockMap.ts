@@ -4,6 +4,6 @@ export interface BlockMap {
     y: number;
     columns: number;
     rows: number;
-  },
+  };
   blocks: Array<Array<number>>;
 }
