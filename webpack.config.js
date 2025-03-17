@@ -4,7 +4,7 @@ const buildPath = path.resolve(__dirname, './dist');
 
 module.exports = {
   mode: 'development',
-  entry: './src/index.ts',
+  entry: './src/wadload.ts',
   devtool: 'inline-source-map',
   output: {
     filename: 'app.js',
