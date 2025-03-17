@@ -16,10 +16,10 @@ function loadMap(mapName: string, wad: Wad) {
 }
 
 export const useDoomLoader = ({
-                                game,
-                                mapCanvas,
-                                mapSelect,
-                              }: {
+  game,
+  mapCanvas,
+  mapSelect,
+}: {
   game: any | null;
   mapCanvas: HTMLCanvasElement | null;
   mapSelect: HTMLSelectElement | null;
@@ -69,7 +69,7 @@ export const useDoomLoader = ({
 
   return {
     wad,
-    setWadPath,      // call this on <select> WAD change
+    setWadPath, // call this on <select> WAD change
     handleMapChange, // call this on <select> MAP change
   };
 };

@@ -29,11 +29,7 @@ export const DoomCanvas: React.FC = () => {
     <>
       <div style={{ marginBottom: '1rem' }}>
         <label>Select WAD: </label>
-        <select
-          ref={wadSelectRef}
-          onChange={(e) => setWadPath(e.target.value)}
-          defaultValue=""
-        >
+        <select ref={wadSelectRef} onChange={(e) => setWadPath(e.target.value)} defaultValue="">
           <option value="" disabled>
             Select a wad
           </option>
@@ -44,10 +40,7 @@ export const DoomCanvas: React.FC = () => {
 
       <div style={{ marginBottom: '1rem' }}>
         <label>Select Map: </label>
-        <select
-          ref={mapSelectRef}
-          onChange={(e) => handleMapChange(e.target.value)}
-        />
+        <select ref={mapSelectRef} onChange={(e) => handleMapChange(e.target.value)} />
       </div>
 
       <div style={{ display: 'flex', gap: '1rem' }}>
