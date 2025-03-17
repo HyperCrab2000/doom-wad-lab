@@ -1,8 +1,8 @@
-import { skyFlats } from '../constants/WadInfo';
+import { skyFlats } from '@/constants/WadInfo';
 
-import { FlatObject } from '../interfaces/FlatObject';
-import { Triangle } from '../interfaces/Triangle';
-import { WadMap } from '../interfaces/WadMap';
+import { FlatObject } from '@/interfaces/FlatObject';
+import { Triangle } from '@/interfaces/Triangle';
+import { WadMap } from '@/interfaces/WadMap';
 
 const createFlat = (triangles: Array<Triangle>, height: number, reverseOrientation?: boolean): Pick<FlatObject, 'position' | 'indices'> => {
   const flatPositions = new Array<number>();

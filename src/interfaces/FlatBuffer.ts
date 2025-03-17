@@ -1,5 +1,5 @@
 import { Buffer, ElementBuffer } from 'apl-easy-gl';
-import { Sector } from './Sector';
+import {Sector} from "@/interfaces/Sector";
 
 export interface FlatBuffer {
   position: Buffer;

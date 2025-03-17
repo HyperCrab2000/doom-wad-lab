@@ -1,13 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import string from 'vite-plugin-string';
+import path from 'path';
 
 export default defineConfig({
   plugins: [
     react(),
     string({
-      include: ['**/*.vert', '**/*.frag'] // GLSL support
+      include: ['**/*.vert', '**/*.frag']
     })
   ],
-  assetsInclude: ['**/*.wad'] // still needed for wad binary files
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    }
+  },
+  assetsInclude: ['**/*.wad']
 });

@@ -1,16 +1,16 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import { skyFlats } from '../constants/WadInfo';
+import { skyFlats } from '@/constants/WadInfo';
 
-import type { WadMap } from '../interfaces/WadMap';
-import type { SkyBuffer } from "../interfaces/SkyBuffer";
-import type { SideDef } from "../interfaces/SideDef";
-import type { Sector } from "../interfaces/Sector";
-import type { LineDef } from '../interfaces/LineDef';
-import type { Triangle } from '../interfaces/Triangle';
-import type { Vertex } from '../interfaces/Vertex';
+import type { WadMap } from '@/interfaces/WadMap';
+import type { SkyBuffer } from "@/interfaces/SkyBuffer";
+import type { SideDef } from "@/interfaces/SideDef";
+import type { Sector } from "@/interfaces/Sector";
+import type { LineDef } from '@/interfaces/LineDef';
+import type { Triangle } from '@/interfaces/Triangle';
+import type { Vertex } from '@/interfaces/Vertex';
 
-import type { LinkedSkySectors } from '../wad/getLinkedSkySectors';
+import type { LinkedSkySectors } from '@/wad/getLinkedSkySectors';
 
 const createSkyFlat = (gl: WebGLRenderingContext, height: number, triangles: Array<Triangle>, reverseOrientation?: boolean): SkyBuffer => {
   const skyPositions = new Array<number>();

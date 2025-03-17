@@ -1,6 +1,6 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import { ThingBuffer } from "../interfaces/ThingBuffer";
+import { ThingBuffer } from "@/interfaces/ThingBuffer";
 
 export const createThing = (gl: WebGLRenderingContext): ThingBuffer => {
   return {

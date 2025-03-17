@@ -1,4 +1,4 @@
-import { Sector } from "./Sector";
+import {Sector} from "@/interfaces/Sector";
 
 export interface FlatObject {
   sector: Sector;

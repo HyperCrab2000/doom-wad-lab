@@ -1,4 +1,4 @@
-import { DoomCanvas } from './components/DoomCanvas';
+import {DoomCanvas} from "@/components/DoomCanvas";
 
 export const App = () => {
     console.log("App loaded!"); // Debug here

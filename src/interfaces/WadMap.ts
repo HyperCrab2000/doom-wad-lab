@@ -1,8 +1,8 @@
-import { Sector } from './Sector';
-import { SideDef } from './SideDef';
-import { LineDef } from './LineDef';
-import { Vertex } from './Vertex';
-import { Thing } from './Thing';
+import {Thing} from "@/interfaces/Thing";
+import {Vertex} from "@/interfaces/Vertex";
+import {LineDef} from "@/interfaces/LineDef";
+import {SideDef} from "@/interfaces/SideDef";
+import {Sector} from "@/interfaces/Sector";
 
 export interface WadMap {
   THINGS: Array<Thing>;

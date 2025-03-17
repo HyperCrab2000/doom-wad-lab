@@ -1,11 +1,11 @@
 import earcut from 'earcut';
 
-import { WadMap } from "../interfaces/WadMap";
-import { Triangle } from "../interfaces/Triangle";
-import { Vertex } from '../interfaces/Vertex';
+import { WadMap } from "@/interfaces/WadMap";
+import { Triangle } from "@/interfaces/Triangle";
+import { Vertex } from '@/interfaces/Vertex';
 
-import { objectValues } from '../utils/objectValues';
-import { subtract, angle } from "../utils/math";
+import { objectValues } from '@/utils/objectValues';
+import { subtract, angle } from "@/utils/math";
 
 interface Line {
   v1: number;
@@ -256,7 +256,7 @@ const sectorsToTriangles = (map: WadMap, sectors: Sectors): Array<Triangle> => {
   //now punch holes through each outer polygon
   const triangles = new Array<Triangle>();
 
-  outerPolygons.forEach((outerPolygon, i) => {
+  outerPolygons.forEach((outerPolygon) => {
     const vertices = Array.from(outerPolygon);
     
     const holeIndices = new Array<number>();
