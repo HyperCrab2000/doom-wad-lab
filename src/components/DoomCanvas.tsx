@@ -4,6 +4,45 @@ import { renderGame } from '@/parser/render/renderGame';
 import { loadWadFromBlob } from '@/parser/wad/loadWadFromBlob';
 import { Wad } from '@/parser/interfaces/Wad';
 
+/* ------------------------ HELPER FUNCTIONS ------------------------ */
+
+async function fetchWadBuffer(wadPath: string): Promise<ArrayBuffer> {
+  const response = await fetch(wadPath);
+  return await response.arrayBuffer();
+}
+
+function parseWadFromBuffer(buffer: ArrayBuffer): Wad {
+  return loadWadFromBlob(buffer);
+}
+
+function populateMapSelect(
+  mapSelectEl: HTMLSelectElement,
+  wadData: Wad,
+  onMapChange: (mapName: string) => void
+) {
+  const mapNames = Object.keys(wadData.maps);
+  mapSelectEl.innerHTML = '';
+  mapNames.forEach((mapName) => {
+    const option = document.createElement('option');
+    option.value = mapName;
+    option.innerText = mapName;
+    mapSelectEl.appendChild(option);
+  });
+  mapSelectEl.value = mapNames[0];
+  onMapChange(mapNames[0]);
+}
+
+function loadMap(mapName: string, wadData: Wad) {
+  return wadData.maps[mapName];
+}
+
+function renderMap(map: any, mapCanvas: HTMLCanvasElement, game: any, wadData: Wad) {
+  drawMap(mapCanvas, map);
+  game.loadWad(wadData, map);
+}
+
+/* ------------------------ COMPONENT ------------------------ */
+
 export const DoomCanvas: React.FC = () => {
   const wadSelectRef = useRef<HTMLSelectElement>(null);
   const mapSelectRef = useRef<HTMLSelectElement>(null);
@@ -13,6 +52,7 @@ export const DoomCanvas: React.FC = () => {
   const [wad, setWad] = useState<Wad | null>(null);
   const [game, setGame] = useState<any>(null);
 
+  // Init the game
   useEffect(() => {
     if (gameCanvasRef.current && !game) {
       const g = renderGame(gameCanvasRef.current);
@@ -20,41 +60,39 @@ export const DoomCanvas: React.FC = () => {
     }
   }, [game]);
 
-  const loadWad = async (wadPath: string) => {
-    const result = await fetch(wadPath);
-    const wadData = loadWadFromBlob(await result.arrayBuffer());
+  // Handle WAD selection
+  const handleWadChange = async (wadPath: string) => {
+    const buffer = await fetchWadBuffer(wadPath);
+    const wadData = parseWadFromBuffer(buffer);
     setWad(wadData);
-    loadMapList(wadData);
+
+    if (mapSelectRef.current) {
+      populateMapSelect(mapSelectRef.current, wadData, (mapName) => {
+        if (mapCanvasRef.current && game) {
+          const map = loadMap(mapName, wadData);
+          renderMap(map, mapCanvasRef.current, game, wadData);
+        }
+      });
+    }
   };
 
-  const loadMapList = (wadData: Wad) => {
-    if (!mapSelectRef.current) return;
-
-    const mapNames = Object.keys(wadData.maps);
-    mapSelectRef.current.innerHTML = '';
-    mapNames.forEach((mapName) => {
-      const option = document.createElement('option');
-      option.value = mapName;
-      option.innerText = mapName;
-      mapSelectRef.current?.appendChild(option);
-    });
-
-    mapSelectRef.current.value = mapNames[0];
-    loadMap(mapNames[0], wadData);
-  };
-
-  const loadMap = (mapName: string, wadData: Wad) => {
-    if (!mapCanvasRef.current || !game) return;
-    const map = wadData.maps[mapName];
-    drawMap(mapCanvasRef.current, map);
-    game.loadWad(wadData, map);
+  // Handle map change
+  const handleMapChange = (mapName: string) => {
+    if (wad && mapCanvasRef.current && game) {
+      const map = loadMap(mapName, wad);
+      renderMap(map, mapCanvasRef.current, game, wad);
+    }
   };
 
   return (
     <>
       <div style={{ marginBottom: '1rem' }}>
         <label>Select WAD: </label>
-        <select ref={wadSelectRef} onChange={(e) => loadWad(e.target.value)} defaultValue="">
+        <select
+          ref={wadSelectRef}
+          onChange={(e) => handleWadChange(e.target.value)}
+          defaultValue=""
+        >
           <option value="" disabled>
             Select a wad
           </option>
@@ -66,7 +104,10 @@ export const DoomCanvas: React.FC = () => {
       {wad && (
         <div style={{ marginBottom: '1rem' }}>
           <label>Select Map: </label>
-          <select ref={mapSelectRef} onChange={(e) => loadMap(e.target.value, wad)} />
+          <select
+            ref={mapSelectRef}
+            onChange={(e) => handleMapChange(e.target.value)}
+          />
         </div>
       )}
 
