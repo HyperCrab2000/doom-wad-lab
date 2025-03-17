@@ -1,5 +1,5 @@
 {
-  "name": "apl-doom",
+  "name": "gl-doom-redo",
   "version": "0.0.1",
   "description": "Doom in WebGL",
   "main": "build/index.js",
