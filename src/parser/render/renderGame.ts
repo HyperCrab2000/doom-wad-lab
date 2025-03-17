@@ -4,7 +4,6 @@ import {
   canvasToTexture,
   ShaderProgram,
   createProgram,
-  Triangle,
 } from 'apl-easy-gl';
 import { mat4, vec3 } from 'gl-matrix';
 
@@ -33,6 +32,7 @@ import { SpriteTexture } from '@/parser/interfaces/SpriteTexture';
 import { Wad } from '@/parser/interfaces/Wad';
 import { WadMap } from '@/parser/interfaces/WadMap';
 import { Thing } from '@/parser/interfaces/Thing';
+import { Triangle } from '@/parser/interfaces/Triangle';
 import { AabbPointType } from '@/parser/interfaces/TriangleCache';
 
 interface TriangleHashObject {
