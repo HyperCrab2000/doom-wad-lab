@@ -1,6 +1,6 @@
 import { vec3 } from 'gl-matrix';
 
-import { skyFlats } from '@/constants/WadInfo';
+import { skyFlats } from '@/parser/constants/WadInfo';
 
 import { WallObject } from '@/interfaces/WallObject';
 import { LineDef } from '@/interfaces/LineDef';
@@ -9,7 +9,7 @@ import { SideDef } from '@/interfaces/SideDef';
 import { Vertex } from '@/interfaces/Vertex';
 import { WallTexture } from '@/interfaces/WallTexture';
 
-import { firstObjectKey } from '@/utils/firstObjectKey';
+import { firstObjectKey } from '@/parser/utils/firstObjectKey';
 
 interface CreateWallProps {
   v1: Vertex;

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Wad } from '@/interfaces/Wad';
-import { drawMap } from '@/render/drawMap';
-import { renderGame } from '@/render/renderGame';
-import { loadWadFromBlob } from '@/wad/loadWadFromBlob';
+import { drawMap } from '@/parser/render/drawMap';
+import { renderGame } from '@/parser/render/renderGame';
+import { loadWadFromBlob } from '@/parser/wad/loadWadFromBlob';
 
 export const DoomCanvas: React.FC = () => {
   const wadSelectRef = useRef<HTMLSelectElement>(null);

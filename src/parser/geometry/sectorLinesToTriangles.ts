@@ -4,8 +4,8 @@ import { WadMap } from '@/interfaces/WadMap';
 import { Triangle } from '@/interfaces/Triangle';
 import { Vertex } from '@/interfaces/Vertex';
 
-import { objectValues } from '@/utils/objectValues';
-import { subtract, angle } from '@/utils/math';
+import { objectValues } from '@/parser/utils/objectValues';
+import { subtract, angle } from '@/parser/utils/math';
 
 interface Line {
   v1: number;

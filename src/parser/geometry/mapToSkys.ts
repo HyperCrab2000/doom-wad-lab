@@ -1,6 +1,6 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import { skyFlats } from '@/constants/WadInfo';
+import { skyFlats } from '@/parser/constants/WadInfo';
 
 import type { WadMap } from '@/interfaces/WadMap';
 import type { SkyBuffer } from '@/interfaces/SkyBuffer';
@@ -10,7 +10,7 @@ import type { LineDef } from '@/interfaces/LineDef';
 import type { Triangle } from '@/interfaces/Triangle';
 import type { Vertex } from '@/interfaces/Vertex';
 
-import type { LinkedSkySectors } from '@/wad/getLinkedSkySectors';
+import type { LinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';
 
 const createSkyFlat = (
   gl: WebGLRenderingContext,

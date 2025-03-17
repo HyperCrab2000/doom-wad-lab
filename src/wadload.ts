@@ -1,8 +1,8 @@
 import type { Wad } from './interfaces/Wad';
 
-import { drawMap } from './render/drawMap';
-import { renderGame } from './render/renderGame';
-import { loadWadFromBlob } from './wad/loadWadFromBlob';
+import { drawMap } from '@/parser/render/drawMap';
+import { renderGame } from '@/parser/render/renderGame';
+import { loadWadFromBlob } from '@/parser/wad/loadWadFromBlob';
 
 (async () => {
   //allow selection of a wad file, when loaded populate the info of the wad file

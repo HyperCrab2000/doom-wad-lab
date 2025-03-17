@@ -1,4 +1,4 @@
-import { skyFlats } from '@/constants/WadInfo';
+import { skyFlats } from '@/parser/constants/WadInfo';
 
 import { FlatObject } from '@/interfaces/FlatObject';
 import { Triangle } from '@/interfaces/Triangle';

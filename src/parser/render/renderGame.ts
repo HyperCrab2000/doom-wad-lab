@@ -8,17 +8,17 @@ import {
 } from 'apl-easy-gl';
 import { mat4, vec3 } from 'gl-matrix';
 
-import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/constants/WadInfo';
-import { thingTypesById, ThingKind } from '@/constants/ThingTypes';
-import { playerHeight } from '@/constants/GameInfo';
+import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/parser/constants/WadInfo';
+import { thingTypesById, ThingKind } from '@/parser/constants/ThingTypes';
+import { playerHeight } from '@/parser/constants/GameInfo';
 
-import { angle } from '@/utils/math';
-import { insertAabbCacheItem } from '@/utils/insertAabbCache';
-import { findTrianglesAtPosition } from '@/utils/findTrianglesAtPosition';
-import { pointInTriangle } from '@/utils/pointInTriangle';
-import { freenavControls } from '@/controls/freenavControls';
+import { angle } from '@/parser/utils/math';
+import { insertAabbCacheItem } from '@/parser/utils/insertAabbCache';
+import { findTrianglesAtPosition } from '@/parser/utils/findTrianglesAtPosition';
+import { pointInTriangle } from '@/parser/utils/pointInTriangle';
+import { freenavControls } from '@/parser/controls/freenavControls';
 import { createMapBuffers, MapBuffers } from '@/parser/geometry/createBuffers';
-import { drawWadAssets, WadAssets } from '@/render/drawWadAssets';
+import { drawWadAssets, WadAssets } from '@/parser/render/drawWadAssets';
 
 import wallsVert from '@/shaders/walls.vert';
 import wallsFrag from '@/shaders/walls.frag';

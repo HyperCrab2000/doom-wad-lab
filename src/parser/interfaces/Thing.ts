@@ -1,4 +1,4 @@
-import { difficulty } from '@/constants/WadInfo';
+import { difficulty } from '@/parser/constants/WadInfo';
 
 export interface Thing {
   x: number;

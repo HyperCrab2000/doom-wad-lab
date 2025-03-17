@@ -1,13 +1,13 @@
-import { skyFlats } from '@/constants/WadInfo';
+import { skyFlats } from '@/parser/constants/WadInfo';
 
-import type { SpriteTexture } from '@/interfaces/SpriteTexture';
-import type { FlatTexture } from '@/interfaces/FlatTexture';
-import type { Wad } from '@/interfaces/Wad';
-import type { WallTexture } from '@/interfaces/WallTexture';
-import { drawPatch } from '@/render/drawPatch';
-import { drawTexture } from '@/render/drawTexture';
-import { drawFlat } from '@/render/drawFlat';
-import { drawSprite } from '@/render/drawSprite';
+import type { SpriteTexture } from '@/parser/interfaces/SpriteTexture';
+import type { FlatTexture } from '@/parser/interfaces/FlatTexture';
+import type { Wad } from '@/parser/interfaces/Wad';
+import type { WallTexture } from '@/parser/interfaces/WallTexture';
+import { drawPatch } from '@/parser/render/drawPatch';
+import { drawTexture } from '@/parser/render/drawTexture';
+import { drawFlat } from '@/parser/render/drawFlat';
+import { drawSprite } from '@/parser/render/drawSprite';
 
 export interface WadAssets {
   texturesByName: Record<string, WallTexture>;
@@ -19,7 +19,7 @@ export interface WadAssets {
 
 export const drawWadAssets = (wad: Wad): WadAssets => {
   const patchesByName = wad.pnames.reduce<Record<string, CanvasRenderingContext2D>>(
-    (acc, patchName) => {
+    (acc: { [x: string]: CanvasRenderingContext2D }, patchName: string) => {
       let patchLump = wad.lumpHash[patchName];
 
       if (!patchLump) {

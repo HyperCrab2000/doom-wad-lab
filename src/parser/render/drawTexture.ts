@@ -2,7 +2,7 @@ import { Texture } from '@/interfaces/Texture';
 import { WallTexture } from '@/interfaces/WallTexture';
 import { Wad } from '@/interfaces/Wad';
 
-import { roundToPow2 } from '@/utils/math';
+import { roundToPow2 } from '@/parser/utils/math';
 
 //some doom textures actually contain transparency when they shouldn't (MAP30), use a threshold to determine if it should be transparent or not (in pixels)
 const texturePixelsThreshold = 2;

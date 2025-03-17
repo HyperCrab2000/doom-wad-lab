@@ -1,8 +1,8 @@
 import type { ColourPalette } from '@/interfaces/ColourPalette';
 import type { SpriteTexture } from '@/interfaces/SpriteTexture';
 
-import { roundToPow2 } from '@/utils/math';
-import { drawPatch } from '@/render/drawPatch';
+import { roundToPow2 } from '@/parser/utils/math';
+import { drawPatch } from '@/parser/render/drawPatch';
 
 export const drawSprite = (patchLump: ArrayBuffer, colourPalette: ColourPalette): SpriteTexture => {
   const patch = drawPatch(patchLump, colourPalette);
