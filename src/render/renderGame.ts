@@ -7,34 +7,34 @@ import {
 } from 'apl-easy-gl';
 import { mat4, vec3 } from 'gl-matrix';
 
-import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '../constants/WadInfo';
-import { thingTypesById, ThingKind } from '../constants/ThingTypes';
-import { playerHeight } from '../constants/GameInfo';
+import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/constants/WadInfo';
+import { thingTypesById, ThingKind } from '@/constants/ThingTypes';
+import { playerHeight } from '@/constants/GameInfo';
 
-import { Triangle } from '../interfaces/Triangle';
-import { Thing } from '../interfaces/Thing';
-import { Sector } from '../interfaces/Sector';
-import { AabbPointType } from '../interfaces/TriangleCache';
-import { Wad } from '../interfaces/Wad';
-import { WadMap } from '../interfaces/WadMap';
-import { SpriteTexture } from '../interfaces/SpriteTexture';
+import { Triangle } from '@/interfaces/Triangle';
+import { Thing } from '@/interfaces/Thing';
+import { Sector } from '@/interfaces/Sector';
+import { AabbPointType } from '@/interfaces/TriangleCache';
+import { Wad } from '@/interfaces/Wad';
+import { WadMap } from '@/interfaces/WadMap';
+import { SpriteTexture } from '@/interfaces/SpriteTexture';
 
-import { angle } from '../utils/math';
-import { insertAabbCacheItem } from '../utils/insertAabbCache';
-import { findTrianglesAtPosition } from '../utils/findTrianglesAtPosition';
-import { pointInTriangle } from '../utils/pointInTriangle';
-import { freenavControls } from '../controls/freenavControls';
-import { createMapBuffers, MapBuffers } from '../geometry/createBuffers';
-import { drawWadAssets, WadAssets } from './drawWadAssets';
+import { angle } from '@/utils/math';
+import { insertAabbCacheItem } from '@/utils/insertAabbCache';
+import { findTrianglesAtPosition } from '@/utils/findTrianglesAtPosition';
+import { pointInTriangle } from '@/utils/pointInTriangle';
+import { freenavControls } from '@/controls/freenavControls';
+import { createMapBuffers, MapBuffers } from '@/geometry/createBuffers';
+import { drawWadAssets, WadAssets } from '@/render/drawWadAssets';
 
-import wallsVert from '../shaders/walls.vert';
-import wallsFrag from '../shaders/walls.frag';
-import flatVert from '../shaders/flat.vert';
-import flatFrag from '../shaders/flat.frag';
-import skyVert from '../shaders/sky.vert';
-import skyFrag from '../shaders/sky.frag';
-import thingsVert from '../shaders/things.vert';
-import thingsFrag from '../shaders/things.frag';
+import wallsVert from '@/shaders/walls.vert';
+import wallsFrag from '@/shaders/walls.frag';
+import flatVert from '@/shaders/flat.vert';
+import flatFrag from '@/shaders/flat.frag';
+import skyVert from '@/shaders/sky.vert';
+import skyFrag from '@/shaders/sky.frag';
+import thingsVert from '@/shaders/things.vert';
+import thingsFrag from '@/shaders/things.frag';
 
 interface TriangleHashObject {
   triangle: Triangle;

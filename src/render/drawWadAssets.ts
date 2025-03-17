@@ -1,14 +1,13 @@
-import { skyFlats } from '../constants/WadInfo';
+import { skyFlats } from '@/constants/WadInfo';
 
-import type { SpriteTexture } from '../interfaces/SpriteTexture';
-import type { FlatTexture } from '../interfaces/FlatTexture';
-import type { Wad } from '../interfaces/Wad';
-import type { WallTexture } from '../interfaces/WallTexture';
-
-import { drawFlat } from './drawFlat';
-import { drawPatch } from './drawPatch';
-import { drawSprite } from './drawSprite';
-import { drawTexture } from './drawTexture';
+import type { SpriteTexture } from '@/interfaces/SpriteTexture';
+import type { FlatTexture } from '@/interfaces/FlatTexture';
+import type { Wad } from '@/interfaces/Wad';
+import type { WallTexture } from '@/interfaces/WallTexture';
+import { drawPatch } from '@/render/drawPatch';
+import { drawTexture } from '@/render/drawTexture';
+import { drawFlat } from '@/render/drawFlat';
+import { drawSprite } from '@/render/drawSprite';
 
 export interface WadAssets {
   texturesByName: Record<string, WallTexture>;

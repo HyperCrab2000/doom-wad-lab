@@ -1,5 +1,5 @@
-import { ByteReader } from '../classes/ByteReader';
-import { ColourPalette } from '../interfaces/ColourPalette';
+import { ColourPalette } from '@/interfaces/ColourPalette';
+import { ByteReader } from '@/parser/classes/ByteReader';
 
 export const drawPatch = (
   patchLump: ArrayBuffer,
