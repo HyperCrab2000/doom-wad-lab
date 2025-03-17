@@ -1,19 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Wad } from '@/parser/interfaces/Wad';
-import { loadWadFromBlob } from '@/parser/wad/loadWadFromBlob';
-import { drawMap } from '@/parser/render/drawMap';
-
-// HELPER: fetch + parse the WAD
-async function fetchWad(path: string): Promise<Wad> {
-  const res = await fetch(path);
-  const buffer = await res.arrayBuffer();
-  return loadWadFromBlob(buffer);
-}
-
-// HELPER: load map from wad object
-function loadMap(mapName: string, wad: Wad) {
-  return wad.maps[mapName];
-}
+import { fetchWad } from '@/wad/loader/fetchWad';
+import { renderMap } from '@/wad/loader/renderMap';
+import { populateMapSelect } from '@/wad/loader/populateMapSelect';
 
 export const useDoomLoader = ({
   game,
@@ -27,49 +16,32 @@ export const useDoomLoader = ({
   const [wad, setWad] = useState<Wad | null>(null);
   const [wadPath, setWadPath] = useState<string | null>(null);
 
-  // Trigger loading when wadPath + game are ready
   useEffect(() => {
     if (wadPath && game) {
       (async () => {
         const wadData = await fetchWad(wadPath);
         setWad(wadData);
 
-        // Populate <select>
         if (mapSelect) {
-          const mapNames = Object.keys(wadData.maps);
-          mapSelect.innerHTML = '';
-          mapNames.forEach((mapName) => {
-            const option = document.createElement('option');
-            option.value = mapName;
-            option.innerText = mapName;
-            mapSelect.appendChild(option);
+          populateMapSelect(mapSelect, wadData, (mapName) => {
+            if (mapCanvas && game) {
+              renderMap(mapName, wadData, mapCanvas, game);
+            }
           });
-
-          mapSelect.value = mapNames[0];
-          renderMap(mapNames[0], wadData);
         }
       })();
     }
   }, [wadPath, game]);
 
-  // Render selected map
-  const renderMap = (mapName: string, wadData: Wad) => {
-    if (!mapCanvas || !game) return;
-    const map = loadMap(mapName, wadData);
-    drawMap(mapCanvas, map);
-    game.loadWad(wadData, map);
-  };
-
-  // Handle map <select> changes
   const handleMapChange = (mapName: string) => {
-    if (wad) {
-      renderMap(mapName, wad);
+    if (wad && mapCanvas && game) {
+      renderMap(mapName, wad, mapCanvas, game);
     }
   };
 
   return {
     wad,
-    setWadPath, // call this on <select> WAD change
-    handleMapChange, // call this on <select> MAP change
+    setWadPath,
+    handleMapChange,
   };
 };
