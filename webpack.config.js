@@ -26,6 +26,8 @@ module.exports = {
     extensions: [ '.tsx', '.ts', '.js','.html' ]
   },
   devServer: {
-    contentBase: buildPath
+    static: {
+      directory: buildPath
+    }
   }
 };
