@@ -106,6 +106,33 @@ function extractTexture(
   }
 }
 
+const extractFlats = (
+  animatedFlatKey: string | undefined,
+  wadinfo: Wad,
+  lumpName: string,
+  animatedFlatStartNames: string[],
+  animatedFlatEndNames: string[],
+  lumpData: any
+): undefined | string => {
+  let returnedAnimatedFlatKey = animatedFlatKey;
+  if (animatedFlatKey === undefined) {
+    if (animatedFlatStartNames.indexOf(lumpName) >= 0) {
+      returnedAnimatedFlatKey = lumpName;
+      wadinfo.animatedFlats[returnedAnimatedFlatKey] = [lumpName];
+    }
+  } else {
+    wadinfo.animatedFlats[animatedFlatKey].push(lumpName);
+    wadinfo.animatedFlats[lumpName] = wadinfo.animatedFlats[animatedFlatKey];
+
+    if (animatedFlatEndNames.indexOf(lumpName) >= 0) {
+      returnedAnimatedFlatKey = undefined;
+    }
+  }
+
+  wadinfo.flats[lumpName] = lumpData;
+  return returnedAnimatedFlatKey;
+};
+
 function extractBlockmap(lumpDataReader: ByteReader) {
   const blockMap: BlockMap = {
     header: {
@@ -688,31 +715,4 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
   });
 
   return wadinfo;
-};
-
-const extractFlats = (
-  animatedFlatKey: string | undefined,
-  wadinfo: Wad,
-  lumpName: string,
-  animatedFlatStartNames: string[],
-  animatedFlatEndNames: string[],
-  lumpData: any
-): undefined | string => {
-  let returnedAnimatedFlatKey = animatedFlatKey;
-  if (animatedFlatKey === undefined) {
-    if (animatedFlatStartNames.indexOf(lumpName) >= 0) {
-      returnedAnimatedFlatKey = lumpName;
-      wadinfo.animatedFlats[returnedAnimatedFlatKey] = [lumpName];
-    }
-  } else {
-    wadinfo.animatedFlats[animatedFlatKey].push(lumpName);
-    wadinfo.animatedFlats[lumpName] = wadinfo.animatedFlats[animatedFlatKey];
-
-    if (animatedFlatEndNames.indexOf(lumpName) >= 0) {
-      returnedAnimatedFlatKey = undefined;
-    }
-  }
-
-  wadinfo.flats[lumpName] = lumpData;
-  return returnedAnimatedFlatKey;
 };
