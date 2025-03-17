@@ -426,6 +426,40 @@ function extractPlaypal(lumpDataReader: ByteReader, wadinfo: Wad) {
   wadinfo.playpal = palette;
 }
 
+function lumpifyWad(
+  numLumps: number,
+  byteReader: ByteReader,
+  lumpData: any,
+  arrayBuffer: ArrayBuffer,
+  wadinfo: Wad
+) {
+  let isExtended: boolean = false;
+  let filepos: number;
+  let size: number;
+  let lumpName: string;
+  let newLump: Lump;
+
+  for (let j = 0; j < numLumps; j++) {
+    filepos = byteReader.readInt32();
+    size = byteReader.readInt32();
+    lumpName = byteReader.readASCII(8).trim().toUpperCase();
+
+    //extract the data into a hash now rather than later
+    lumpData = arrayBuffer.slice(filepos, filepos + size);
+    newLump = {
+      name: lumpName as LumpName,
+      data: lumpData,
+    };
+
+    if (lumpName === LumpName.BEHAVIOR) {
+      isExtended = true;
+    }
+
+    wadinfo.lumpInfo.push(newLump);
+  }
+  return { isExtended };
+}
+
 export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
   //now parse the wad file like any other file type
   const byteReader = new ByteReader(arrayBuffer);
@@ -461,13 +495,10 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
   let mode = LoadMode.normal;
 
   //we need to figure out if this is a standard wad or an extended wad
-  let isExtended = false;
+  // let isExtended = false;
 
-  let filepos: number;
-  let size: number;
   let lumpName: string;
   let lumpData: any;
-  let newLump: Lump;
   let mapName: string;
 
   const animatedFlatStartNames = Object.keys(animatedFlatMap);
@@ -480,25 +511,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
 
   let animatedFlatKey: string | undefined;
   let animatedTextureKey: string | undefined;
-
-  for (let j = 0; j < numLumps; j++) {
-    filepos = byteReader.readInt32();
-    size = byteReader.readInt32();
-    lumpName = byteReader.readASCII(8).trim().toUpperCase();
-
-    //extract the data into a hash now rather than later
-    lumpData = arrayBuffer.slice(filepos, filepos + size);
-    newLump = {
-      name: lumpName as LumpName,
-      data: lumpData,
-    };
-
-    if (lumpName === LumpName.BEHAVIOR) {
-      isExtended = true;
-    }
-
-    wadinfo.lumpInfo.push(newLump);
-  }
+  const { isExtended } = lumpifyWad(numLumps, byteReader, lumpData, arrayBuffer, wadinfo);
 
   //now proccess the lumps
   wadinfo.lumpInfo.forEach((lump) => {
