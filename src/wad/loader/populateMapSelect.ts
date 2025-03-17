@@ -3,7 +3,7 @@ import { Wad } from '@/parser/interfaces/Wad';
 export function populateMapSelect(
   mapSelectEl: HTMLSelectElement,
   wad: Wad,
-  onSelect: (mapName: string) => void,
+  onSelect: (mapName: string) => void
 ) {
   const mapNames = Object.keys(wad.maps);
   mapSelectEl.innerHTML = '';
