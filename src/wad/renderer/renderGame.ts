@@ -15,8 +15,8 @@ import { angle } from '@/wad/utils/math';
 import { insertAabbCacheItem } from '@/wad/utils/insertAabbCache';
 import { findTrianglesAtPosition } from '@/wad/utils/findTrianglesAtPosition';
 import { pointInTriangle } from '@/wad/utils/pointInTriangle';
-import { freenavControls } from '@/parser/controls/freenavControls';
-import { createMapBuffers, MapBuffers } from '@/parser/geometry/createBuffers';
+import { freenavControls } from '@/wad/renderer/controls/freenavControls';
+import { createMapBuffers, MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import { drawWadAssets, WadAssets } from '@/wad/renderer/drawAssets/drawWadAssets';
 
 import wallsVert from '@/wad/renderer/shaders/walls.vert';

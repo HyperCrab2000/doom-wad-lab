@@ -11,11 +11,11 @@ import type { WallTexture } from '@/wad/interfaces/WallTexture';
 
 import { getLineDefsBySector } from '@/parser/wad/getLineDefsBySector';
 import { getLinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';
-import { createThing } from '@/parser/geometry/createThing';
-import { mapToFlats } from '@/parser/geometry/mapToFlats';
-import { mapToSkys } from '@/parser/geometry/mapToSkys';
-import { mapToWalls } from '@/parser/geometry/mapToWalls';
-import { sectorLinesToTriangles } from '@/parser/geometry/sectorLinesToTriangles';
+import { createThing } from '@/wad/renderer/geometry/createThing';
+import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
+import { mapToSkys } from '@/wad/renderer/geometry/mapToSkys';
+import { mapToWalls } from '@/wad/renderer/geometry/mapToWalls';
+import { sectorLinesToTriangles } from '@/wad/renderer/geometry/sectorLinesToTriangles';
 
 export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
