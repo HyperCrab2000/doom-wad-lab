@@ -10,7 +10,7 @@ import type { LineDef } from '@/wad/interfaces/LineDef';
 import type { Triangle } from '@/wad/interfaces/Triangle';
 import type { Vertex } from '@/wad/interfaces/Vertex';
 
-import type { LinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';
+import type { LinkedSkySectors } from '@/wad/renderer/geometry/getLinkedSkySectors';
 
 const createSkyFlat = (
   gl: WebGLRenderingContext,

@@ -9,8 +9,8 @@ import type { Vertex } from '@/wad/interfaces/Vertex';
 import type { WallBuffer } from '@/wad/interfaces/WallBuffer';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 
-import { getLineDefsBySector } from '@/parser/wad/getLineDefsBySector';
-import { getLinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';
+import { getLineDefsBySector } from '@/wad/renderer/geometry/getLineDefsBySector';
+import { getLinkedSkySectors } from '@/wad/renderer/geometry/getLinkedSkySectors';
 import { createThing } from '@/wad/renderer/geometry/createThing';
 import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
 import { mapToSkys } from '@/wad/renderer/geometry/mapToSkys';
