@@ -1,14 +1,14 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import { skyFlats } from '@/parser/constants/WadInfo';
+import { skyFlats } from '@/wad/constants/WadInfo';
 
-import type { WadMap } from '@/interfaces/WadMap';
-import type { SkyBuffer } from '@/interfaces/SkyBuffer';
-import type { SideDef } from '@/interfaces/SideDef';
-import type { Sector } from '@/interfaces/Sector';
-import type { LineDef } from '@/interfaces/LineDef';
-import type { Triangle } from '@/interfaces/Triangle';
-import type { Vertex } from '@/interfaces/Vertex';
+import type { WadMap } from '@/wad/interfaces/WadMap';
+import type { SkyBuffer } from '@/wad/interfaces/SkyBuffer';
+import type { SideDef } from '@/wad/interfaces/SideDef';
+import type { Sector } from '@/wad/interfaces/Sector';
+import type { LineDef } from '@/wad/interfaces/LineDef';
+import type { Triangle } from '@/wad/interfaces/Triangle';
+import type { Vertex } from '@/wad/interfaces/Vertex';
 
 import type { LinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';
 

@@ -1,4 +1,4 @@
-import { skyFlats } from '@/parser/constants/WadInfo';
+import { skyFlats } from '@/wad/constants/WadInfo';
 import { WadMap } from '@/wad/interfaces/WadMap';
 
 export interface LinkedSector {

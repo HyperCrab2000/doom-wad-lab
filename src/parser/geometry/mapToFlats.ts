@@ -1,8 +1,8 @@
-import { skyFlats } from '@/parser/constants/WadInfo';
+import { skyFlats } from '@/wad/constants/WadInfo';
 
-import { FlatObject } from '@/interfaces/FlatObject';
-import { Triangle } from '@/interfaces/Triangle';
-import { WadMap } from '@/interfaces/WadMap';
+import { FlatObject } from '@/wad/interfaces/FlatObject';
+import { Triangle } from '@/wad/interfaces/Triangle';
+import { WadMap } from '@/wad/interfaces/WadMap';
 
 const createFlat = (
   triangles: Array<Triangle>,

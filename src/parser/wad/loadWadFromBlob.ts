@@ -1,5 +1,5 @@
-import { animatedFlatMap, animatedTextureMap } from '@/parser/constants/WadInfo';
-import { difficulty } from '@/parser/constants/WadInfo';
+import { animatedFlatMap, animatedTextureMap } from '@/wad/constants/WadInfo';
+import { difficulty } from '@/wad/constants/WadInfo';
 
 import { ByteReader } from '@/parser/classes/ByteReader';
 import { Lump, LumpName } from '@/wad/interfaces/Lump';

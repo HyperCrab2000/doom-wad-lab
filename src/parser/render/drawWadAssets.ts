@@ -1,4 +1,4 @@
-import { skyFlats } from '@/parser/constants/WadInfo';
+import { skyFlats } from '@/wad/constants/WadInfo';
 
 import type { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
 import type { FlatTexture } from '@/wad/interfaces/FlatTexture';

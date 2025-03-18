@@ -7,9 +7,9 @@ import {
 } from 'apl-easy-gl';
 import { mat4, vec3 } from 'gl-matrix';
 
-import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/parser/constants/WadInfo';
-import { thingTypesById, ThingKind } from '@/parser/constants/ThingTypes';
-import { playerHeight } from '@/parser/constants/GameInfo';
+import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/wad/constants/WadInfo';
+import { thingTypesById, ThingKind } from '@/wad/constants/ThingTypes';
+import { playerHeight } from '@/wad/constants/GameInfo';
 
 import { angle } from '@/parser/utils/math';
 import { insertAabbCacheItem } from '@/parser/utils/insertAabbCache';
