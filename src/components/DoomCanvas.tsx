@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { renderGame } from '@/parser/render/renderGame';
+import { renderGame } from '@/wad/renderer/renderGame';
 import { useDoomLoader } from '@/hooks/useDoomLoader';
 
 export const DoomCanvas: React.FC = () => {
