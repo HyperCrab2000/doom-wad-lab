@@ -17,7 +17,7 @@ import { findTrianglesAtPosition } from '@/wad/utils/findTrianglesAtPosition';
 import { pointInTriangle } from '@/wad/utils/pointInTriangle';
 import { freenavControls } from '@/parser/controls/freenavControls';
 import { createMapBuffers, MapBuffers } from '@/parser/geometry/createBuffers';
-import { drawWadAssets, WadAssets } from '@/parser/render/drawWadAssets';
+import { drawWadAssets, WadAssets } from '@/wad/renderer/drawAssets/drawWadAssets';
 
 import wallsVert from '@/parser/shaders/walls.vert';
 import wallsFrag from '@/parser/shaders/walls.frag';

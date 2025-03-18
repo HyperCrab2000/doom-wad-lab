@@ -1,6 +1,6 @@
 import { Wad } from '@/wad/interfaces/Wad';
 import { loadMap } from '@/wad/loader/loadMap';
-import { drawMap } from '@/parser/render/drawMap';
+import { drawMap } from '@/wad/renderer/drawAssets/drawMap';
 
 export function renderMap(mapName: string, wad: Wad, mapCanvas: HTMLCanvasElement, game: any) {
   const map = loadMap(mapName, wad);

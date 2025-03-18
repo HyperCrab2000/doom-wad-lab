@@ -2,7 +2,7 @@ import type { ColourPalette } from '@/wad/interfaces/ColourPalette';
 import type { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
 
 import { roundToPow2 } from '@/wad/utils/math';
-import { drawPatch } from '@/parser/render/drawPatch';
+import { drawPatch } from '@/wad/renderer/drawAssets/drawPatch';
 
 export const drawSprite = (patchLump: ArrayBuffer, colourPalette: ColourPalette): SpriteTexture => {
   const patch = drawPatch(patchLump, colourPalette);

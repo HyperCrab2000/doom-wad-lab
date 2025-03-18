@@ -4,10 +4,10 @@ import type { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
 import type { FlatTexture } from '@/wad/interfaces/FlatTexture';
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
-import { drawPatch } from '@/parser/render/drawPatch';
-import { drawTexture } from '@/parser/render/drawTexture';
-import { drawFlat } from '@/parser/render/drawFlat';
-import { drawSprite } from '@/parser/render/drawSprite';
+import { drawPatch } from '@/wad/renderer/drawAssets/drawPatch';
+import { drawTexture } from '@/wad/renderer/drawAssets/drawTexture';
+import { drawFlat } from '@/wad/renderer/drawAssets/drawFlat';
+import { drawSprite } from '@/wad/renderer/drawAssets/drawSprite';
 
 export interface WadAssets {
   texturesByName: Record<string, WallTexture>;
