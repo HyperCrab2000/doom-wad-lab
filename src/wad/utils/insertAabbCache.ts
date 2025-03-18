@@ -1,5 +1,5 @@
 import { AabbCacheItem } from '@/wad/interfaces/TriangleCache';
-import { binarySearchClosestIndex } from '@/parser/utils/binarySearchClosestIndex';
+import { binarySearchClosestIndex } from '@/wad/utils/binarySearchClosestIndex';
 
 export const insertAabbCacheItem = <T>(
   cache: Array<AabbCacheItem<T>>,

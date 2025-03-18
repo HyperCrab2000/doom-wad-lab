@@ -1,11 +1,11 @@
 import earcut from 'earcut';
 
-import { WadMap } from '@/interfaces/WadMap';
-import { Triangle } from '@/interfaces/Triangle';
-import { Vertex } from '@/interfaces/Vertex';
+import { WadMap } from '@/wad/interfaces/WadMap';
+import { Triangle } from '@/wad/interfaces/Triangle';
+import { Vertex } from '@/wad/interfaces/Vertex';
 
-import { objectValues } from '@/parser/utils/objectValues';
-import { subtract, angle } from '@/parser/utils/math';
+import { objectValues } from '@/wad/utils/objectValues';
+import { subtract, angle } from '@/wad/utils/math';
 
 interface Line {
   v1: number;

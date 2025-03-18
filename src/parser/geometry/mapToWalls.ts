@@ -9,7 +9,7 @@ import { SideDef } from '@/wad/interfaces/SideDef';
 import { Vertex } from '@/wad/interfaces/Vertex';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
 
-import { firstObjectKey } from '@/parser/utils/firstObjectKey';
+import { firstObjectKey } from '@/wad/utils/firstObjectKey';
 
 interface CreateWallProps {
   v1: Vertex;

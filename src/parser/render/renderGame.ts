@@ -11,10 +11,10 @@ import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/wad/const
 import { thingTypesById, ThingKind } from '@/wad/constants/ThingTypes';
 import { playerHeight } from '@/wad/constants/GameInfo';
 
-import { angle } from '@/parser/utils/math';
-import { insertAabbCacheItem } from '@/parser/utils/insertAabbCache';
-import { findTrianglesAtPosition } from '@/parser/utils/findTrianglesAtPosition';
-import { pointInTriangle } from '@/parser/utils/pointInTriangle';
+import { angle } from '@/wad/utils/math';
+import { insertAabbCacheItem } from '@/wad/utils/insertAabbCache';
+import { findTrianglesAtPosition } from '@/wad/utils/findTrianglesAtPosition';
+import { pointInTriangle } from '@/wad/utils/pointInTriangle';
 import { freenavControls } from '@/parser/controls/freenavControls';
 import { createMapBuffers, MapBuffers } from '@/parser/geometry/createBuffers';
 import { drawWadAssets, WadAssets } from '@/parser/render/drawWadAssets';
