@@ -521,9 +521,6 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
 
   let mode = LoadMode.normal;
 
-  //we need to figure out if this is a standard wad or an extended wad
-  // let isExtended = false;
-
   let lumpName: string;
   let lumpData: any;
   let mapName: string;
@@ -538,6 +535,7 @@ export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
 
   let animatedFlatKey: string | undefined;
   let animatedTextureKey: string | undefined;
+
   const { isExtended } = lumpifyWad(numLumps, byteReader, lumpData, arrayBuffer, wadinfo);
 
   //now proccess the lumps
