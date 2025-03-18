@@ -1,4 +1,4 @@
-import { Sprite } from '../interfaces/Sprite';
+import { Sprite } from '@/wad/interfaces/Sprite';
 
 export const createSpriteIndex = (spriteNames: Array<string>): Record<string, Sprite> => {
   const spriteFrames: Record<string, Sprite> = {};

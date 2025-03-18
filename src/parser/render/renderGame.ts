@@ -27,13 +27,13 @@ import skyVert from '@/parser/shaders/sky.vert';
 import skyFrag from '@/parser/shaders/sky.frag';
 import thingsVert from '@/parser/shaders/things.vert';
 import thingsFrag from '@/parser/shaders/things.frag';
-import { Sector } from '@/parser/interfaces/Sector';
-import { SpriteTexture } from '@/parser/interfaces/SpriteTexture';
-import { Wad } from '@/parser/interfaces/Wad';
-import { WadMap } from '@/parser/interfaces/WadMap';
-import { Thing } from '@/parser/interfaces/Thing';
-import { Triangle } from '@/parser/interfaces/Triangle';
-import { AabbPointType } from '@/parser/interfaces/TriangleCache';
+import { Sector } from '@/wad/interfaces/Sector';
+import { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
+import { Wad } from '@/wad/interfaces/Wad';
+import { WadMap } from '@/wad/interfaces/WadMap';
+import { Thing } from '@/wad/interfaces/Thing';
+import { Triangle } from '@/wad/interfaces/Triangle';
+import { AabbPointType } from '@/wad/interfaces/TriangleCache';
 
 interface TriangleHashObject {
   triangle: Triangle;

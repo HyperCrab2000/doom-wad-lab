@@ -1,5 +1,5 @@
-import { AabbCache, AabbPointType } from '@/parser/interfaces/TriangleCache';
-import { Vertex } from '@/parser/interfaces/Vertex';
+import { AabbCache, AabbPointType } from '@/wad/interfaces/TriangleCache';
+import { Vertex } from '@/wad/interfaces/Vertex';
 import { binarySearchClosestIndex } from '@/parser/utils/binarySearchClosestIndex';
 
 export interface AabbCachePosition<T> {

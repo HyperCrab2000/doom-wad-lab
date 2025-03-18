@@ -1,7 +1,7 @@
-import { ColourPalette } from '@/parser/interfaces/ColourPalette';
-import { Lump } from '@/parser/interfaces/Lump';
-import { WadMap } from '@/parser/interfaces/WadMap';
-import { Texture } from '@/parser/interfaces/Texture';
+import { ColourPalette } from '@/wad/interfaces/ColourPalette';
+import { Lump } from '@/wad/interfaces/Lump';
+import { WadMap } from '@/wad/interfaces/WadMap';
+import { Texture } from '@/wad/interfaces/Texture';
 
 export interface Wad {
   indentification: string;

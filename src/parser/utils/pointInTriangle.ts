@@ -1,5 +1,5 @@
-import { Triangle } from './../interfaces/Triangle';
-import { Vertex } from './../interfaces/Vertex';
+import { Triangle } from '@/wad/interfaces/Triangle';
+import { Vertex } from '@/wad/interfaces/Vertex';
 
 export const pointInTriangle = (p: Vertex, triangle: Triangle): boolean => {
   const p0 = triangle[0];

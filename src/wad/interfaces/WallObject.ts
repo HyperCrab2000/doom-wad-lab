@@ -1,4 +1,4 @@
-import { Sector } from './Sector';
+import { Sector } from 'src/wad/interfaces/Sector';
 
 export interface WallObject {
   position: Float32Array;

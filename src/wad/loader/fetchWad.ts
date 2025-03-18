@@ -1,4 +1,4 @@
-import { Wad } from '@/parser/interfaces/Wad';
+import { Wad } from '@/wad/interfaces/Wad';
 import { loadWadFromBlob } from '@/parser/wad/loadWadFromBlob';
 
 export async function fetchWad(path: string): Promise<Wad> {

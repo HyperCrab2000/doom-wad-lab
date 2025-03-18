@@ -1,5 +1,5 @@
-import { WadMap } from '../interfaces/WadMap';
-import { Vertex } from '../interfaces/Vertex';
+import { WadMap } from '@/wad/interfaces/WadMap';
+import { Vertex } from '@/wad/interfaces/Vertex';
 
 export const drawMap = (canvas: HTMLCanvasElement, map: WadMap): CanvasRenderingContext2D => {
   let minX = map.VERTEXES[0].x;

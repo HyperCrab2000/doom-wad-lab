@@ -1,13 +1,13 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
-import type { FlatBuffer } from '@/parser/interfaces/FlatBuffer';
-import type { WadMap } from '@/parser/interfaces/WadMap';
-import type { SkyBuffer } from '@/parser/interfaces/SkyBuffer';
-import type { ThingBuffer } from '@/parser/interfaces/ThingBuffer';
-import type { Triangle } from '@/parser/interfaces/Triangle';
-import type { Vertex } from '@/parser/interfaces/Vertex';
-import type { WallBuffer } from '@/parser/interfaces/WallBuffer';
-import type { WallTexture } from '@/parser/interfaces/WallTexture';
+import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
+import type { WadMap } from '@/wad/interfaces/WadMap';
+import type { SkyBuffer } from '@/wad/interfaces/SkyBuffer';
+import type { ThingBuffer } from '@/wad/interfaces/ThingBuffer';
+import type { Triangle } from '@/wad/interfaces/Triangle';
+import type { Vertex } from '@/wad/interfaces/Vertex';
+import type { WallBuffer } from '@/wad/interfaces/WallBuffer';
+import type { WallTexture } from '@/wad/interfaces/WallTexture';
 
 import { getLineDefsBySector } from '@/parser/wad/getLineDefsBySector';
 import { getLinkedSkySectors } from '@/parser/wad/getLinkedSkySectors';

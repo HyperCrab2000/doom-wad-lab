@@ -1,5 +1,5 @@
-import { Vertex3D } from './Vertex3D';
-import { Aabb3D } from './Aabb3D';
+import { Vertex3D } from 'src/wad/interfaces/Vertex3D';
+import { Aabb3D } from 'src/wad/interfaces/Aabb3D';
 
 export interface Triangle3D {
   v1: Vertex3D;

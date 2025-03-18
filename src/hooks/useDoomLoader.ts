@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Wad } from '@/parser/interfaces/Wad';
+import { Wad } from '@/wad/interfaces/Wad';
 import { fetchWad } from '@/wad/loader/fetchWad';
 import { renderMap } from '@/wad/loader/renderMap';
 import { populateMapSelect } from '@/wad/loader/populateMapSelect';

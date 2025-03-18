@@ -1,7 +1,7 @@
 import { vec3 } from 'gl-matrix';
 
-import { Ray } from './../interfaces/Ray';
-import { Triangle3D } from '../interfaces/Triangle3D';
+import { Ray } from '@/wad/interfaces/Ray';
+import { Triangle3D } from '@/wad/interfaces/Triangle3D';
 
 const EPSILON = 0.0000001;
 

@@ -1,6 +1,6 @@
-import { LineDef } from '../interfaces/LineDef';
-import { WadMap } from '../interfaces/WadMap';
-import { SectorLine } from '../interfaces/SectorLine';
+import { LineDef } from '@/wad/interfaces/LineDef';
+import { WadMap } from '@/wad/interfaces/WadMap';
+import { SectorLine } from '@/wad/interfaces/SectorLine';
 
 export const getLineDefsBySector = (map: WadMap): Record<number, Array<SectorLine>> => {
   // - link the linedefs to a sector based on connected sectors and connected vertexes

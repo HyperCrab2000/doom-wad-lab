@@ -1,7 +1,7 @@
 import { vec3 } from 'gl-matrix';
 
-import { Triangle3D } from '../interfaces/Triangle3D';
-import { Vertex3D } from '../interfaces/Vertex3D';
+import { Triangle3D } from '@/wad/interfaces/Triangle3D';
+import { Vertex3D } from '@/wad/interfaces/Vertex3D';
 
 export const triangle3DFromPoints = (v1: Vertex3D, v2: Vertex3D, v3: Vertex3D): Triangle3D => {
   const edge1 = vec3.create();

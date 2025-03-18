@@ -1,4 +1,4 @@
-import { Sector } from './Sector';
+import { Sector } from 'src/wad/interfaces/Sector';
 import { Buffer, ElementBuffer } from 'apl-easy-gl';
 
 export interface WallBuffer {

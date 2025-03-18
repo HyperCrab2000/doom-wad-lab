@@ -1,4 +1,4 @@
-import { Wad } from '@/parser/interfaces/Wad';
+import { Wad } from '@/wad/interfaces/Wad';
 import { loadMap } from '@/wad/loader/loadMap';
 import { drawMap } from '@/parser/render/drawMap';
 

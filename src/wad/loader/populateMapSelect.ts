@@ -1,4 +1,4 @@
-import { Wad } from '@/parser/interfaces/Wad';
+import { Wad } from '@/wad/interfaces/Wad';
 
 export function populateMapSelect(
   mapSelectEl: HTMLSelectElement,

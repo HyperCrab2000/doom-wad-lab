@@ -1,4 +1,4 @@
-import { Vertex } from './../interfaces/Vertex';
+import { Vertex } from '@/wad/interfaces/Vertex';
 
 export const roundToPow2 = (size: number): number =>
   Math.pow(2, Math.ceil(Math.log(size) / Math.LN2));

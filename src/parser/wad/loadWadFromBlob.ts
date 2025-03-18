@@ -2,18 +2,18 @@ import { animatedFlatMap, animatedTextureMap } from '@/parser/constants/WadInfo'
 import { difficulty } from '@/parser/constants/WadInfo';
 
 import { ByteReader } from '@/parser/classes/ByteReader';
-import { Lump, LumpName } from '@/parser/interfaces/Lump';
-import { Wad } from '@/parser/interfaces/Wad';
-import { Patch } from '@/parser/interfaces/Patch';
-import { BlockMap } from '@/parser/interfaces/BlockMap';
-import { Vertex } from '@/parser/interfaces/Vertex';
-import { Node } from '@/parser/interfaces/Node';
-import { Sector } from '@/parser/interfaces/Sector';
-import { Segment } from '@/parser/interfaces/Segment';
-import { SSector } from '@/parser/interfaces/SSector';
-import { Thing } from '@/parser/interfaces/Thing';
-import { LineDef } from '@/parser/interfaces/LineDef';
-import { SideDef } from '@/parser/interfaces/SideDef';
+import { Lump, LumpName } from '@/wad/interfaces/Lump';
+import { Wad } from '@/wad/interfaces/Wad';
+import { Patch } from '@/wad/interfaces/Patch';
+import { BlockMap } from '@/wad/interfaces/BlockMap';
+import { Vertex } from '@/wad/interfaces/Vertex';
+import { Node } from '@/wad/interfaces/Node';
+import { Sector } from '@/wad/interfaces/Sector';
+import { Segment } from '@/wad/interfaces/Segment';
+import { SSector } from '@/wad/interfaces/SSector';
+import { Thing } from '@/wad/interfaces/Thing';
+import { LineDef } from '@/wad/interfaces/LineDef';
+import { SideDef } from '@/wad/interfaces/SideDef';
 
 enum LoadMode {
   normal,

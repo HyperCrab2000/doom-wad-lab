@@ -1,5 +1,5 @@
 import { skyFlats } from '@/parser/constants/WadInfo';
-import { WadMap } from '../interfaces/WadMap';
+import { WadMap } from '@/wad/interfaces/WadMap';
 
 export interface LinkedSector {
   sectorIndex: number;
