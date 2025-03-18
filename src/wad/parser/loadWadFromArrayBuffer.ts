@@ -36,7 +36,7 @@ const mapLumps = [
   LumpName.BEHAVIOR,
 ];
 
-function extractTexture(
+function extractTextures(
   lumpDataReader: ByteReader,
   animatedTextureKey: string | undefined,
   animatedTextureStartNames: string[],
@@ -106,8 +106,7 @@ const extractFlats = (
   wadinfo: Wad,
   lumpName: string,
   animatedFlatStartNames: string[],
-  animatedFlatEndNames: string[],
-  lumpData: any
+  animatedFlatEndNames: string[]
 ): undefined | string => {
   let returnedAnimatedFlatKey = animatedFlatKey;
   if (animatedFlatKey === undefined) {
@@ -124,7 +123,6 @@ const extractFlats = (
     }
   }
 
-  wadinfo.flats[lumpName] = lumpData;
   return returnedAnimatedFlatKey;
 };
 
@@ -344,7 +342,7 @@ function extractSegments(lumpDataReader: ByteReader) {
   return segs;
 }
 
-function extractThings(isExtended: boolean, lumpDataReader: ByteReader) {
+function extractThings(lumpDataReader: ByteReader, isExtended: boolean) {
   const things = new Array<Thing>();
 
   if (isExtended) {
@@ -423,7 +421,7 @@ function extractThings(isExtended: boolean, lumpDataReader: ByteReader) {
   return things;
 }
 
-function extractPatchNames(lumpDataReader: ByteReader, wadinfo: Wad) {
+function extractPatchNames(lumpDataReader: ByteReader): string[] {
   const numPatches = lumpDataReader.readInt32();
 
   const pnames = new Array<string>();
@@ -431,10 +429,10 @@ function extractPatchNames(lumpDataReader: ByteReader, wadinfo: Wad) {
     pnames.push(lumpDataReader.readASCII(8).trim().toUpperCase());
   }
 
-  wadinfo.pnames = pnames;
+  return pnames;
 }
 
-function extractPlaypal(lumpDataReader: ByteReader, wadinfo: Wad) {
+function extractPlaypal(lumpDataReader: ByteReader) {
   //convert the built-in palette into a rgb array for better access
   const palette = new Array<[number, number, number]>();
   for (let i = 0; i < 256; i++) {
@@ -445,7 +443,7 @@ function extractPlaypal(lumpDataReader: ByteReader, wadinfo: Wad) {
     palette.push([r, g, b]);
   }
 
-  wadinfo.playpal = palette;
+  return palette;
 }
 
 function lumpifyWad(
@@ -482,9 +480,7 @@ function lumpifyWad(
   return { isExtended };
 }
 
-export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
-  const byteReader = new ByteReader(arrayBuffer);
-
+function initializeWadObject() {
   const wadinfo: Wad = {
     indentification: '',
     lumpInfo: [],
@@ -503,33 +499,51 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
     animatedFlats: {},
     animatedTextures: {},
   };
+  return wadinfo;
+}
 
-  wadinfo.indentification = byteReader.readASCII(4);
-
+function readHeaderData(byteReader: ByteReader) {
+  const identification = byteReader.readASCII(4);
   const numLumps = byteReader.readInt32();
-  const infotableofs = byteReader.readInt32();
+  const initialOffset = byteReader.readInt32();
+  return { identification, numLumps, initialOffset };
+}
 
-  //read the lump info (directory)
-  byteReader.setIndex(infotableofs);
+function generateAnimatedFlatNames() {
+  const animatedFlatStartNames = Object.keys(animatedFlatMap);
+  const animatedFlatEndNames = animatedFlatStartNames.map<string>((item) => animatedFlatMap[item]);
+  return { animatedFlatStartNames, animatedFlatEndNames };
+}
+
+function generateAnimatedTextureNames() {
+  const animatedTextureStartNames = Object.keys(animatedTextureMap);
+  const animatedTextureEndNames = animatedTextureStartNames.map<string>(
+    (item) => animatedTextureMap[item]
+  );
+  return { animatedTextureStartNames, animatedTextureEndNames };
+}
+
+export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
+  const byteReader = new ByteReader(arrayBuffer);
+  const wadinfo = initializeWadObject();
+
+  const { identification, numLumps, initialOffset } = readHeaderData(byteReader);
+
+  wadinfo.indentification = identification;
+
+  byteReader.setIndex(initialOffset);
 
   let mode = LoadMode.normal;
 
   let lumpName: string;
   let lumpData: any;
   let mapName: string;
-
-  const animatedFlatStartNames = Object.keys(animatedFlatMap);
-  const animatedFlatEndNames = animatedFlatStartNames.map<string>((item) => animatedFlatMap[item]);
-
-  const animatedTextureStartNames = Object.keys(animatedTextureMap);
-  const animatedTextureEndNames = animatedTextureStartNames.map<string>(
-    (item) => animatedTextureMap[item]
-  );
-
   let animatedFlatKey: string | undefined;
   let animatedTextureKey: string | undefined;
 
   const { isExtended } = lumpifyWad(numLumps, byteReader, lumpData, arrayBuffer, wadinfo);
+  const { animatedFlatStartNames, animatedFlatEndNames } = generateAnimatedFlatNames();
+  const { animatedTextureStartNames, animatedTextureEndNames } = generateAnimatedTextureNames();
 
   //now proccess the lumps
   wadinfo.lumpInfo.forEach((lump) => {
@@ -592,7 +606,7 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
     switch (lumpName) {
       //handle some special lumps like textures, audio, intro, demos, help, outro
       case LumpName.PLAYPAL: {
-        extractPlaypal(lumpDataReader, wadinfo);
+        wadinfo.playpal = extractPlaypal(lumpDataReader);
         break;
       }
       case LumpName.COLORMAP:
@@ -603,13 +617,13 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
         break;
       }
       case LumpName.PNAMES: {
-        extractPatchNames(lumpDataReader, wadinfo);
+        wadinfo.pnames = extractPatchNames(lumpDataReader);
         break;
       }
       case LumpName.TEXTURES:
       case LumpName.TEXTURE1:
       case LumpName.TEXTURE2: {
-        extractTexture(
+        extractTextures(
           lumpDataReader,
           animatedTextureKey,
           animatedTextureStartNames,
@@ -670,7 +684,7 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
         break;
       }
       case LumpName.THINGS: {
-        lumpData = extractThings(isExtended, lumpDataReader);
+        lumpData = extractThings(lumpDataReader, isExtended);
         break;
       }
       default: {
@@ -693,9 +707,9 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
           wadinfo,
           lumpName,
           animatedFlatStartNames,
-          animatedFlatEndNames,
-          lumpData
+          animatedFlatEndNames
         );
+        wadinfo.flats[lumpName] = lumpData;
         break;
       }
       case LoadMode.map: {
