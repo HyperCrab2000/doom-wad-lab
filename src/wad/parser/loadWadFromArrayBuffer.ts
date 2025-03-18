@@ -523,6 +523,179 @@ function generateAnimatedTextureNames() {
   return { animatedTextureStartNames, animatedTextureEndNames };
 }
 
+function isMapName(lumpName: string) {
+  return lumpName.match(/^E[0-9]M[0-9]$/) || lumpName.match(/^MAP[0-9][0-9]$/);
+}
+
+function extractMap(lumpName: string, mapName: string, wadinfo: Wad, mode: LoadMode) {
+  let newMapName = mapName;
+  let newMode = mode;
+  let wasMap = false;
+  if (isMapName(lumpName)) {
+    newMapName = lumpName;
+    wadinfo.maps[newMapName] = {
+      THINGS: [],
+      VERTEXES: [],
+      LINEDEFS: [],
+      SIDEDEFS: [],
+      SECTORS: [],
+    };
+    newMode = LoadMode.map;
+    wasMap = true;
+  }
+  return { newMapName, newMode, wasMap };
+}
+
+function handleLumpType(params: {
+  lumpName: string;
+  wadinfo: Wad;
+  lumpDataReader: ByteReader;
+  lumpData: any;
+  animatedTextureKey: string | undefined;
+  animatedTextureStartNames: string[];
+  animatedTextureEndNames: string[];
+  isExtended: boolean;
+}) {
+  let {
+    lumpName,
+    wadinfo,
+    lumpDataReader,
+    lumpData,
+    animatedTextureKey,
+    animatedTextureStartNames,
+    animatedTextureEndNames,
+    isExtended,
+  } = params;
+  switch (lumpName) {
+    //handle some special lumps like textures, audio, intro, demos, help, outro
+    case LumpName.PLAYPAL: {
+      wadinfo.playpal = extractPlaypal(lumpDataReader);
+      break;
+    }
+    case LumpName.COLORMAP:
+      wadinfo.colormap = lumpData;
+      break;
+    case LumpName.ENDDOOM: {
+      wadinfo.enddoom = lumpData;
+      break;
+    }
+    case LumpName.PNAMES: {
+      wadinfo.pnames = extractPatchNames(lumpDataReader);
+      break;
+    }
+    case LumpName.TEXTURES:
+    case LumpName.TEXTURE1:
+    case LumpName.TEXTURE2: {
+      extractTextures(
+        lumpDataReader,
+        animatedTextureKey,
+        animatedTextureStartNames,
+        wadinfo,
+        animatedTextureEndNames
+      );
+      break;
+    }
+    case LumpName.GENMIDI:
+      wadinfo.genmidi = lumpData;
+      break;
+    case LumpName.DMXGUS:
+      wadinfo.dmxgus = lumpData;
+      break;
+    case LumpName.DEMO1:
+      wadinfo.demo1 = lumpData;
+      break;
+    case LumpName.DEMO2:
+      wadinfo.demo2 = lumpData;
+      break;
+    case LumpName.DEMO3: {
+      wadinfo.demo3 = lumpData;
+      break;
+    }
+    case LumpName.BLOCKMAP: {
+      lumpData = extractBlockmap(lumpDataReader);
+      break;
+    }
+    case LumpName.VERTEXES: {
+      lumpData = extractVertexes(lumpDataReader);
+      break;
+    }
+    case LumpName.SECTORS: {
+      lumpData = extractSectors(lumpDataReader);
+      break;
+    }
+    case LumpName.SIDEDEFS: {
+      lumpData = extractSidedefs(lumpDataReader);
+      break;
+    }
+    case LumpName.LINEDEFS: {
+      lumpData = extractLinedefs(lumpDataReader, isExtended);
+      break;
+    }
+    case LumpName.SSECTORS: {
+      lumpData = extractSSectors(lumpDataReader);
+      break;
+    }
+    case LumpName.NODES: {
+      lumpData = extractNodes(lumpDataReader);
+      break;
+    }
+    case LumpName.SEGS: {
+      lumpData = extractSegments(lumpDataReader);
+      break;
+    }
+    case LumpName.REJECT: {
+      break;
+    }
+    case LumpName.THINGS: {
+      lumpData = extractThings(lumpDataReader, isExtended);
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+  return lumpData;
+}
+
+function determineModeBasedOnLumpName(lumpName: string, mode: LoadMode) {
+  let doReturn = false;
+  let newModeBasedOnLumpName = mode;
+  switch (lumpName) {
+    case LumpName.FF_START:
+    case LumpName.F_START:
+    case LumpName.F1_START:
+    case LumpName.F2_START:
+    case LumpName.F3_START:
+      newModeBasedOnLumpName = LoadMode.flat;
+      doReturn = true;
+      break;
+    case LumpName.SS_START:
+    case LumpName.S_START:
+      newModeBasedOnLumpName = LoadMode.sprites;
+      doReturn = true;
+      break;
+    case LumpName.P_START:
+    case LumpName.P1_START:
+    case LumpName.P2_START:
+    case LumpName.P3_START:
+    case LumpName.FF_END:
+    case LumpName.F_END:
+    case LumpName.F1_END:
+    case LumpName.F2_END:
+    case LumpName.F3_END:
+    case LumpName.SS_END:
+    case LumpName.S_END:
+    case LumpName.P_END:
+    case LumpName.P1_END:
+    case LumpName.P2_END:
+    case LumpName.P3_END:
+      newModeBasedOnLumpName = LoadMode.normal;
+      doReturn = true;
+      break;
+  }
+  return { doReturn, newModeBasedOnLumpName };
+}
+
 export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
   const byteReader = new ByteReader(arrayBuffer);
   const wadinfo = initializeWadObject();
@@ -551,48 +724,19 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
     lumpData = lump.data;
 
     //based on the current mode and the lump name decide what to do with the data
-    switch (lumpName) {
-      case LumpName.FF_START:
-      case LumpName.F_START:
-      case LumpName.F1_START:
-      case LumpName.F2_START:
-      case LumpName.F3_START:
-        mode = LoadMode.flat;
-        return;
-      case LumpName.SS_START:
-      case LumpName.S_START:
-        mode = LoadMode.sprites;
-        return;
-      case LumpName.P_START:
-      case LumpName.P1_START:
-      case LumpName.P2_START:
-      case LumpName.P3_START:
-      case LumpName.FF_END:
-      case LumpName.F_END:
-      case LumpName.F1_END:
-      case LumpName.F2_END:
-      case LumpName.F3_END:
-      case LumpName.SS_END:
-      case LumpName.S_END:
-      case LumpName.P_END:
-      case LumpName.P1_END:
-      case LumpName.P2_END:
-      case LumpName.P3_END:
-        mode = LoadMode.normal;
-        return;
+    const { doReturn, newModeBasedOnLumpName } = determineModeBasedOnLumpName(lumpName, mode);
+
+    if (doReturn) {
+      mode = newModeBasedOnLumpName;
+      return;
     }
 
     //handle maps too
-    if (lumpName.match(/^E[0-9]M[0-9]$/) || lumpName.match(/^MAP[0-9][0-9]$/)) {
-      mapName = lumpName;
-      wadinfo.maps[mapName] = {
-        THINGS: [],
-        VERTEXES: [],
-        LINEDEFS: [],
-        SIDEDEFS: [],
-        SECTORS: [],
-      };
-      mode = LoadMode.map;
+    const { newMapName, newMode, wasMap } = extractMap(lumpName, mapName, wadinfo, mode);
+
+    if (wasMap) {
+      mapName = newMapName;
+      mode = newMode;
       return;
     }
 
@@ -602,95 +746,16 @@ export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
 
     //parse all of the data in the lumps and load them into object structures that are useful
     const lumpDataReader = new ByteReader(lumpData);
-
-    switch (lumpName) {
-      //handle some special lumps like textures, audio, intro, demos, help, outro
-      case LumpName.PLAYPAL: {
-        wadinfo.playpal = extractPlaypal(lumpDataReader);
-        break;
-      }
-      case LumpName.COLORMAP:
-        wadinfo.colormap = lumpData;
-        break;
-      case LumpName.ENDDOOM: {
-        wadinfo.enddoom = lumpData;
-        break;
-      }
-      case LumpName.PNAMES: {
-        wadinfo.pnames = extractPatchNames(lumpDataReader);
-        break;
-      }
-      case LumpName.TEXTURES:
-      case LumpName.TEXTURE1:
-      case LumpName.TEXTURE2: {
-        extractTextures(
-          lumpDataReader,
-          animatedTextureKey,
-          animatedTextureStartNames,
-          wadinfo,
-          animatedTextureEndNames
-        );
-        break;
-      }
-      case LumpName.GENMIDI:
-        wadinfo.genmidi = lumpData;
-        break;
-      case LumpName.DMXGUS:
-        wadinfo.dmxgus = lumpData;
-        break;
-      case LumpName.DEMO1:
-        wadinfo.demo1 = lumpData;
-        break;
-      case LumpName.DEMO2:
-        wadinfo.demo2 = lumpData;
-        break;
-      case LumpName.DEMO3: {
-        wadinfo.demo3 = lumpData;
-        break;
-      }
-      case LumpName.BLOCKMAP: {
-        lumpData = extractBlockmap(lumpDataReader);
-        break;
-      }
-      case LumpName.VERTEXES: {
-        lumpData = extractVertexes(lumpDataReader);
-        break;
-      }
-      case LumpName.SECTORS: {
-        lumpData = extractSectors(lumpDataReader);
-        break;
-      }
-      case LumpName.SIDEDEFS: {
-        lumpData = extractSidedefs(lumpDataReader);
-        break;
-      }
-      case LumpName.LINEDEFS: {
-        lumpData = extractLinedefs(lumpDataReader, isExtended);
-        break;
-      }
-      case LumpName.SSECTORS: {
-        lumpData = extractSSectors(lumpDataReader);
-        break;
-      }
-      case LumpName.NODES: {
-        lumpData = extractNodes(lumpDataReader);
-        break;
-      }
-      case LumpName.SEGS: {
-        lumpData = extractSegments(lumpDataReader);
-        break;
-      }
-      case LumpName.REJECT: {
-        break;
-      }
-      case LumpName.THINGS: {
-        lumpData = extractThings(lumpDataReader, isExtended);
-        break;
-      }
-      default: {
-        break;
-      }
-    }
+    lumpData = handleLumpType({
+      lumpName,
+      wadinfo,
+      lumpDataReader,
+      lumpData,
+      animatedTextureKey,
+      animatedTextureStartNames,
+      animatedTextureEndNames,
+      isExtended,
+    });
 
     switch (mode) {
       case LoadMode.normal: {
