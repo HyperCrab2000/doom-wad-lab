@@ -1,7 +1,7 @@
 import { ColourPalette } from '@/wad/interfaces/ColourPalette';
 
 import { flatSize } from '@/wad/constants/WadInfo';
-import { ByteReader } from '@/parser/classes/ByteReader';
+import { ByteReader } from '@/wad/ByteReader/ByteReader';
 
 export const drawFlat = (
   data: ArrayBuffer,

@@ -1,7 +1,7 @@
 import { animatedFlatMap, animatedTextureMap } from '@/wad/constants/WadInfo';
 import { difficulty } from '@/wad/constants/WadInfo';
 
-import { ByteReader } from '@/parser/classes/ByteReader';
+import { ByteReader } from '@/wad/ByteReader/ByteReader';
 import { Lump, LumpName } from '@/wad/interfaces/Lump';
 import { Wad } from '@/wad/interfaces/Wad';
 import { Patch } from '@/wad/interfaces/Patch';
@@ -35,11 +35,6 @@ const mapLumps = [
   LumpName.BLOCKMAP,
   LumpName.BEHAVIOR,
 ];
-
-export const loadWadFromUrl = async (url: string): Promise<Wad> => {
-  const result = await fetch(url);
-  return loadWadFromBlob(await result.arrayBuffer());
-};
 
 function extractTexture(
   lumpDataReader: ByteReader,
@@ -487,11 +482,9 @@ function lumpifyWad(
   return { isExtended };
 }
 
-export const loadWadFromBlob = (arrayBuffer: ArrayBuffer): Wad => {
-  //now parse the wad file like any other file type
+export const loadWadFromArrayBuffer = (arrayBuffer: ArrayBuffer): Wad => {
   const byteReader = new ByteReader(arrayBuffer);
 
-  //read the header of the wad file
   const wadinfo: Wad = {
     indentification: '',
     lumpInfo: [],
