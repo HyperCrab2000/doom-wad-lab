@@ -1,37 +1,68 @@
-import { ColourPalette } from '@/wad/interfaces/ColourPalette';
-import { ByteReader } from '@/wad/ByteReader/ByteReader';
+import { createBuffer, createElementBuffer, ShaderProgram } from 'apl-easy-gl';
 
-export const drawSkyBox = (
-  data: ArrayBuffer,
-  colourPalette: ColourPalette,
-  width: number = 256,
-  height: number = 128
-): CanvasRenderingContext2D => {
-  const skyCanvas = document.createElement('canvas');
-  const skyContext = skyCanvas.getContext('2d');
+export const createSkyboxBuffers = (gl: WebGLRenderingContext) => {
+  const positions = new Float32Array([
+    -1,
+    -1,
+    0, // bottom left
+    1,
+    -1,
+    0, // bottom right
+    -1,
+    1,
+    0, // top left
+    1,
+    1,
+    0, // top right
+  ]);
 
-  if (!skyContext) {
-    throw new Error('Could not create 2d canvas');
-  }
+  const uvs = new Float32Array([
+    0,
+    0, // bottom left
+    1,
+    0, // bottom right
+    0,
+    1, // top left
+    1,
+    1, // top right
+  ]);
 
-  skyCanvas.width = width;
-  skyCanvas.height = height;
+  const indices = new Uint16Array([0, 1, 2, 2, 1, 3]);
 
-  const skyData = new ByteReader(data);
-  const size = width * height;
-  const imgData = skyContext.getImageData(0, 0, width, height);
-  const pixels = imgData.data;
+  return {
+    position: createBuffer(gl, positions, 3),
+    uv: createBuffer(gl, uvs, 2),
+    indices: createElementBuffer(gl, indices, 1),
+  };
+};
 
-  for (let i = 0, pix = 0; i < size; i++) {
-    const pixData = skyData.readUint8();
-    const rgb = colourPalette[pixData];
+export const drawSkybox = (
+  gl: WebGLRenderingContext,
+  shader: ShaderProgram,
+  buffers: ReturnType<typeof createSkyboxBuffers>,
+  texture: WebGLTexture,
+  yaw: number // just pass yaw directly now!
+) => {
+  gl.depthMask(false);
+  gl.disable(gl.DEPTH_TEST);
 
-    pixels[pix++] = rgb[0];
-    pixels[pix++] = rgb[1];
-    pixels[pix++] = rgb[2];
-    pixels[pix++] = 255;
-  }
+  gl.useProgram(shader.program);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
 
-  skyContext.putImageData(imgData, 0, 0);
-  return skyContext;
+  shader.setUniforms({
+    tex: texture,
+    yaw,
+  });
+
+  shader.setAttributes({
+    aPosition: buffers.position,
+    aUv: buffers.uv,
+  });
+
+  buffers.indices.draw();
+
+  // Restore depth state
+  gl.depthMask(true);
+  gl.enable(gl.DEPTH_TEST);
 };

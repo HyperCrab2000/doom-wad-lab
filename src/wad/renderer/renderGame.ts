@@ -24,6 +24,8 @@ import flatVert from '@/wad/renderer/shaders/flat.vert';
 import flatFrag from '@/wad/renderer/shaders/flat.frag';
 import skyVert from '@/wad/renderer/shaders/sky.vert';
 import skyFrag from '@/wad/renderer/shaders/sky.frag';
+import skyboxVert from '@/wad/renderer/shaders/skyBox.vert';
+import skyboxFrag from '@/wad/renderer/shaders/skyBox.frag';
 import thingsVert from '@/wad/renderer/shaders/things.vert';
 import thingsFrag from '@/wad/renderer/shaders/things.frag';
 import { Sector } from '@/wad/interfaces/Sector';
@@ -36,6 +38,8 @@ import { AabbPointType } from '@/wad/interfaces/TriangleCache';
 import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
 import { ThingKind } from '@/wad/constants/ThingTypes';
 import { hasValidFlags } from '@/wad/renderer/utils/hasValidFlags';
+import { createSkyboxBuffers, drawSkybox } from '@/wad/renderer/drawAssets/drawSkybox';
+import { selectSkyTexture } from '@/wad/renderer/utils/selectSkyTexture';
 
 interface TriangleHashObject {
   triangle: Triangle;
@@ -71,7 +75,8 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   const shaders = {
     walls: createProgram(gl, wallsVert, wallsFrag),
     flats: createProgram(gl, flatVert, flatFrag),
-    sky: createProgram(gl, skyVert, skyFrag),
+    sky: createProgram(gl, skyVert, skyFrag), // keep sector sky if needed
+    skybox: createProgram(gl, skyboxVert, skyboxFrag), // new fullscreen shader
     things: createProgram(gl, thingsVert, thingsFrag),
   };
 
@@ -89,11 +94,13 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     things: Record<string, WebGLTexture>;
     sky: Record<string, WebGLTexture>;
   };
+  let skyboxBuffers: ReturnType<typeof createSkyboxBuffers>;
   let sectorsByThing: Map<Thing, Sector>;
   let time = 0;
   let wadAssets: WadAssets;
+  let currentSky: string;
 
-  const loadWad = (newWad: Wad, newMap: WadMap) => {
+  const loadWad = (newWad: Wad, newMap: WadMap, mapName: string) => {
     wad = newWad;
     wadAssets = drawWadAssets(wad);
 
@@ -179,22 +186,28 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       sky: {},
     };
 
-    if (wadAssets.texturesByName['SKY1']) {
-      const skyCanvas = wadAssets.texturesByName['SKY1'].graphics.canvas;
-      textures.sky['SKY1'] = canvasToTexture(gl, skyCanvas, {
-        minFilter: gl.LINEAR,
-        magFilter: gl.LINEAR,
-        wrapS: gl.REPEAT, // allows horizontal scrolling!
-        wrapT: gl.CLAMP_TO_EDGE,
-      });
-      console.log(textures.sky['SKY1']);
-    }
+    ['SKY1', 'SKY2', 'SKY3'].forEach((skyName) => {
+      const asset = wadAssets.texturesByName[skyName];
+      if (asset) {
+        const canvas = asset.graphics.canvas;
+        textures.sky[skyName] = canvasToTexture(gl, canvas, {
+          minFilter: gl.LINEAR,
+          magFilter: gl.LINEAR,
+          wrapS: gl.REPEAT,
+          wrapT: gl.CLAMP_TO_EDGE,
+        });
+      }
+    });
 
-    loadMap(newMap);
+    loadMap(newMap, mapName);
   };
 
-  const loadMap = (newMap: WadMap) => {
+  const loadMap = (newMap: WadMap, mapName: string) => {
     map = newMap;
+    console.log('MapName', mapName);
+
+    currentSky = selectSkyTexture(mapName);
+    console.log(currentSky);
 
     //unload the previous map
     unbindControls?.();
@@ -304,13 +317,20 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   const drawScene = () => {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    //TODO: draw only what is visible in the scene to the player
     let shader: ShaderProgram;
+
+    const dx = camera.lookAt[0] - camera.pos[0];
+    const dy = camera.lookAt[2] - camera.pos[2];
+    const yaw = Math.atan2(dx, dy);
+
+    // Doom-style skybox pass before anything else
+    drawSkybox(gl, shaders.skybox, skyboxBuffers, textures.sky[currentSky], yaw);
 
     //things
     shader = shaders.things;
 
     gl.useProgram(shader.program);
+    gl.activeTexture(gl.TEXTURE0);
 
     shader.setAttributes({
       aPosition: buffers.thing.position,
@@ -456,25 +476,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
       wall.indices.draw();
     });
-
-    //skys
-    shader = shaders.sky;
-    gl.useProgram(shader.program);
-
-    // Pass the texture to the sky shader here!
-    shader.setUniforms({
-      modelViewProj: modelViewProjMatrix,
-      tex: textures.sky['SKY1'], // BIND SKY TEXTURE HERE
-    });
-
-    buffers.skys.forEach((sky) => {
-      shader.setAttributes({
-        aPosition: sky.position,
-        aUv: sky.uv,
-      });
-
-      sky.indices.draw();
-    });
   };
 
   const renderer = createRenderer(
@@ -486,6 +487,9 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
       //camera transform
       mat4.lookAt(viewMatrix, camera.pos, camera.lookAt, camera.up);
+
+      // Skybox
+      skyboxBuffers = createSkyboxBuffers(gl);
 
       //allow the user to navigate the scene by using first person controls
       unbindControls = freenavControls(viewMatrix, canvas);
