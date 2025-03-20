@@ -104,47 +104,48 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     wad = newWad;
     wadAssets = drawWadAssets(wad);
 
-    //update the things and set their directions and frames using the sprite assets
     const framesByThingName: FramesByThingNameMap = {};
 
+    // Phase 1: organize sprites into thingName -> dir -> frame
     Object.keys(wad.sprites).forEach((spriteName) => {
-      const thingName = spriteName.slice(0, 4);
       const sprite = wadAssets.spritesByName[spriteName];
-      const frameChar = spriteName[4].charCodeAt(0);
-      const direction = parseInt(spriteName[5], 10);
-      const frames = framesByThingName[thingName] || {};
+      const thingName = spriteName.slice(0, 4); // e.g., SPOS
+      const frameChar = spriteName[4].charCodeAt(0); // 'A' = 65
+      const dir1 = parseInt(spriteName[5], 10) || 0;
 
-      framesByThingName[thingName] = frames;
+      framesByThingName[thingName] = framesByThingName[thingName] || {};
+      const frames = framesByThingName[thingName];
 
-      frames[direction] = frames[direction] || {};
-      frames[direction][frameChar] = { sprite };
+      frames[dir1] = frames[dir1] || {};
+      frames[dir1][frameChar] = { sprite };
 
-      //re-used for another
+      // Handle possible mirrored frame
       if (spriteName.length > 6) {
         const frameChar2 = spriteName[6].charCodeAt(0);
-        const direction2 = parseInt(spriteName[7], 10);
+        const dir2 = parseInt(spriteName[7], 10) || 0;
 
-        frames[direction2] = frames[direction2] || {};
-        frames[direction2][frameChar2] = { sprite, mirror: true };
+        frames[dir2] = frames[dir2] || {};
+        frames[dir2][frameChar2] = { sprite, mirror: true };
       }
     });
 
+    // Phase 2: normalize into sortedFramesByThingName
     sortedFramesByThingName = Object.keys(framesByThingName).reduce<FramesByThingNameMap>(
       (acc, thingName) => {
         const frames = framesByThingName[thingName];
 
         acc[thingName] = Object.keys(frames)
-          .map(parseFloat)
-          .reduce<Record<number, Array<ThingSprite>>>((acc2, directionNum) => {
-            const directionFrames = frames[directionNum];
+          .map((d) => parseInt(d, 10))
+          .reduce<Record<number, Record<number, ThingSprite>>>((acc2, dir) => {
+            const dirFrames = frames[dir];
+            acc2[dir] = {};
 
-            acc2[directionNum] = Object.keys(directionFrames)
-              .map(parseFloat)
-              .sort()
-              .reduce<Array<ThingSprite>>((acc3, frameKey) => {
-                acc3.push(directionFrames[frameKey]);
-                return acc3;
-              }, []);
+            Object.keys(dirFrames)
+              .map((f) => parseInt(f, 10))
+              .forEach((frameKey) => {
+                acc2[dir][frameKey] = dirFrames[frameKey];
+              });
+
             return acc2;
           }, {});
         return acc;
@@ -152,6 +153,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       {}
     );
 
+    // Textures (same as you had)
     textures = {
       flats: wadAssets.flats.reduce<Record<string, WebGLTexture>>((acc, flat) => {
         acc[flat.name] = canvasToTexture(gl, flat.graphics.canvas, {
@@ -160,7 +162,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           wrapS: gl.REPEAT,
           wrapT: gl.REPEAT,
         });
-
         return acc;
       }, {}),
       walls: wadAssets.textures.reduce<Record<string, WebGLTexture>>((acc, texture) => {
@@ -170,7 +171,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           wrapS: gl.REPEAT,
           wrapT: gl.REPEAT,
         });
-
         return acc;
       }, {}),
       things: wadAssets.sprites.reduce<Record<string, WebGLTexture>>((acc, sprite) => {
@@ -180,12 +180,12 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           wrapS: gl.CLAMP_TO_EDGE,
           wrapT: gl.CLAMP_TO_EDGE,
         });
-
         return acc;
       }, {}),
       sky: {},
     };
 
+    // Skies (unchanged)
     ['SKY1', 'SKY2', 'SKY3'].forEach((skyName) => {
       const asset = wadAssets.texturesByName[skyName];
       if (asset) {
@@ -338,25 +338,38 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     });
 
     map.THINGS.forEach((thingObj: Thing, thingIndex: number) => {
+      // We need to try this with 2038 in a unit test
       const thingType = DOOM_THING_MAP_BY_ID[Number(thingObj.type)];
       if (!thingType) {
-        console.log(thingObj.type);
+        console.log("this thing didn't exist", thingObj.type);
         return;
       }
+
+      if ([1, 2, 3, 4].includes(thingObj.type)) {
+        // Only show player 1 start, ignore player 2-4 starts
+        return;
+      }
+
+
+      // if (thingType.sprite === 'SPOS') {
+      //   console.log(`SPOS thing at (${thingObj.x}, ${thingObj.y})`);
+      //   // console.log('Available dirs:', Object.keys(spriteObj));
+      //   // console.log('Requested dirIndex:', dirIndex);
+      // }
 
       if (!hasValidFlags(thingObj)) return;
 
       const allowableThingTypes: String[] = [
-        ThingKind.Artifact,
+        // ThingKind.Artifact,
         ThingKind.Monster,
-        ThingKind.Boss,
-        ThingKind.Key,
-        ThingKind.Barrel,
-        ThingKind.Decoration,
-        ThingKind.Hazard,
-        ThingKind.Pickup,
-        ThingKind.Weapon,
-        ThingKind.Powerup,
+        // ThingKind.Boss,
+        // ThingKind.Key,
+        // ThingKind.Barrel,
+        // ThingKind.Decoration,
+        // ThingKind.Hazard,
+        // ThingKind.Pickup,
+        // ThingKind.Weapon,
+        // ThingKind.Powerup,
       ];
       const thingKind = thingType?.kind as string;
 
@@ -380,7 +393,17 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       if (spriteDirAngle < 0) spriteDirAngle += Math.PI * 2;
       const dirIndex = Math.floor(spriteDirAngle / (Math.PI / 4)) + 1; // Doom uses directions 1-8
       const spriteObj = sortedFramesByThingName[thingType.sprite];
-      const spriteFrames = spriteObj[dirIndex] || spriteObj[0]; // fallback to front-facing
+      let spriteFrames = spriteObj[dirIndex];
+
+// Fallback to any available direction instead of spriteObj[0]
+      if (!spriteFrames) {
+        const fallbackDir = Object.keys(spriteObj).map(Number)[0];
+        spriteFrames = spriteObj[fallbackDir];
+      }
+
+
+
+
       const frameIds = Object.keys(spriteFrames).map(Number).sort();
       const frameId = frameIds[(animateSpriteIndex + thingIndex) % frameIds.length];
       const thingSprite = spriteFrames[frameId];

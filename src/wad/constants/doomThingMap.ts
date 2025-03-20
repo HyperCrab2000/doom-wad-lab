@@ -137,7 +137,7 @@ export const DOOM_THING_MAP: Record<string, ThingType> = {
   DEAD_SERGEANT: {
     id: 19,
     radius: 20,
-    sprite: 'SPOS',
+    sprite: 'SPOSA',
     sequence: 'L',
     description: 'Dead former sergeant',
     kind: ThingKind.Decoration,
