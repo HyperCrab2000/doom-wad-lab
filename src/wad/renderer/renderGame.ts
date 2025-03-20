@@ -8,7 +8,6 @@ import {
 import { mat4, vec3 } from 'gl-matrix';
 
 import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/wad/constants/WadInfo';
-import { thingTypesById, ThingKind } from '@/wad/constants/ThingTypes';
 import { playerHeight } from '@/wad/constants/GameInfo';
 
 import { angle } from '@/wad/utils/math';
@@ -34,6 +33,9 @@ import { WadMap } from '@/wad/interfaces/WadMap';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Triangle } from '@/wad/interfaces/Triangle';
 import { AabbPointType } from '@/wad/interfaces/TriangleCache';
+import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
+import { ThingKind } from '@/wad/constants/ThingTypes';
+import { hasValidFlags } from '@/wad/renderer/utils/hasValidFlags';
 
 interface TriangleHashObject {
   triangle: Triangle;
@@ -85,6 +87,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     flats: Record<string, WebGLTexture>;
     walls: Record<string, WebGLTexture>;
     things: Record<string, WebGLTexture>;
+    sky: Record<string, WebGLTexture>;
   };
   let sectorsByThing: Map<Thing, Sector>;
   let time = 0;
@@ -173,7 +176,19 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
         return acc;
       }, {}),
+      sky: {},
     };
+
+    if (wadAssets.texturesByName['SKY1']) {
+      const skyCanvas = wadAssets.texturesByName['SKY1'].graphics.canvas;
+      textures.sky['SKY1'] = canvasToTexture(gl, skyCanvas, {
+        minFilter: gl.LINEAR,
+        magFilter: gl.LINEAR,
+        wrapS: gl.REPEAT, // allows horizontal scrolling!
+        wrapT: gl.CLAMP_TO_EDGE,
+      });
+      console.log(textures.sky['SKY1']);
+    }
 
     loadMap(newMap);
   };
@@ -303,32 +318,52 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     });
 
     map.THINGS.forEach((thingObj: Thing, thingIndex: number) => {
-      const thingType = thingTypesById[thingObj.type];
+      const thingType = DOOM_THING_MAP_BY_ID[Number(thingObj.type)];
+      if (!thingType) {
+        console.log(thingObj.type);
+        return;
+      }
+
+      if (!hasValidFlags(thingObj)) return;
+
+      const allowableThingTypes: String[] = [
+        ThingKind.Artifact,
+        ThingKind.Monster,
+        ThingKind.Boss,
+        ThingKind.Key,
+        ThingKind.Barrel,
+        ThingKind.Decoration,
+        ThingKind.Hazard,
+        ThingKind.Pickup,
+        ThingKind.Weapon,
+        ThingKind.Powerup,
+      ];
+      const thingKind = thingType?.kind as string;
 
       if (
         !thingType ||
         !thingType.sprite ||
-        thingType.kind == undefined ||
-        thingType.kind === ThingKind.monster
+        !allowableThingTypes.map((k) => k.toLowerCase()).includes(thingKind.toLowerCase())
       ) {
         return;
       }
-
-      const spriteObj = sortedFramesByThingName[thingType.sprite];
 
       const thingAngle = angle({ x: thingObj.x - camera.pos[0], y: -thingObj.y - camera.pos[2] });
 
       const thingSector = sectorsByThing.get(thingObj);
 
-      if (!spriteObj || !thingSector) {
-        return;
-      }
+      if (!thingSector) return;
 
-      //TODO: use the direction to determine what sprite to show (only applicable for sprites with direction - monsters)
-      const spriteFrames = spriteObj[0];
-
-      const thingSprite =
-        spriteFrames[(animateSpriteIndex + thingIndex) % Object.keys(spriteFrames).length]; //step through the frames, change the start offset for each so they appear more random
+      const dx = thingObj.x - camera.pos[0];
+      const dy = -thingObj.y - camera.pos[2];
+      let spriteDirAngle = Math.atan2(dy, dx) + Math.PI / 8; // offset by 22.5 degrees
+      if (spriteDirAngle < 0) spriteDirAngle += Math.PI * 2;
+      const dirIndex = Math.floor(spriteDirAngle / (Math.PI / 4)) + 1; // Doom uses directions 1-8
+      const spriteObj = sortedFramesByThingName[thingType.sprite];
+      const spriteFrames = spriteObj[dirIndex] || spriteObj[0]; // fallback to front-facing
+      const frameIds = Object.keys(spriteFrames).map(Number).sort();
+      const frameId = frameIds[(animateSpriteIndex + thingIndex) % frameIds.length];
+      const thingSprite = spriteFrames[frameId];
 
       const thingYPos = thingType.isFloater
         ? thingSector.ceilingheight - thingSprite.sprite.height / 2
@@ -423,15 +458,19 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     });
 
     //skys
-    (shader = shaders.sky), gl.useProgram(shader.program);
+    shader = shaders.sky;
+    gl.useProgram(shader.program);
 
+    // Pass the texture to the sky shader here!
     shader.setUniforms({
       modelViewProj: modelViewProjMatrix,
+      tex: textures.sky['SKY1'], // BIND SKY TEXTURE HERE
     });
 
     buffers.skys.forEach((sky) => {
       shader.setAttributes({
         aPosition: sky.position,
+        aUv: sky.uv,
       });
 
       sky.indices.draw();

@@ -20,6 +20,7 @@ const createSkyFlat = (
 ): SkyBuffer => {
   const skyPositions = new Array<number>();
   const skyIndices = new Array<number>();
+  const skyUVs = new Array<number>();
 
   let posIndex = 0;
 
@@ -28,24 +29,22 @@ const createSkyFlat = (
       p2 = triangle[1],
       p3 = triangle[2];
 
-    skyPositions.splice(
-      skyPositions.length,
+    skyPositions.push(p1.x, height, -p1.y, p2.x, height, -p2.y, p3.x, height, -p3.y);
+
+    // Generate basic planar UVs for the flat (ceiling/floor)
+    skyUVs.push(
       0,
-      p1.x,
-      height,
-      -p1.y,
-      p2.x,
-      height,
-      -p2.y,
-      p3.x,
-      height,
-      -p3.y
+      0, // p1
+      1,
+      0, // p2
+      0.5,
+      1 // p3 (could adjust depending on desired mapping)
     );
 
     if (reverseOrientation) {
-      skyIndices.splice(skyIndices.length, 0, posIndex + 2, posIndex + 1, posIndex);
+      skyIndices.push(posIndex + 2, posIndex + 1, posIndex);
     } else {
-      skyIndices.splice(skyIndices.length, 0, posIndex, posIndex + 1, posIndex + 2);
+      skyIndices.push(posIndex, posIndex + 1, posIndex + 2);
     }
 
     posIndex += 3;
@@ -53,6 +52,7 @@ const createSkyFlat = (
 
   return {
     position: createBuffer(gl, new Float32Array(skyPositions), 3),
+    uv: createBuffer(gl, new Float32Array(skyUVs), 2),
     indices: createElementBuffer(gl, new Uint16Array(skyIndices), 1),
   };
 };
@@ -65,35 +65,35 @@ const createSkyWall = (
   topPos: number,
   backface: boolean
 ): SkyBuffer => {
-  //render the inverse with a sky to negate it
   const position = [
     v1.x,
     bottomPos,
-    -v1.y, //bottom left
+    -v1.y,
     v2.x,
     bottomPos,
-    -v2.y, //bottom right
+    -v2.y,
     v1.x,
     topPos,
-    -v1.y, //top left
+    -v1.y,
     v2.x,
     topPos,
-    -v2.y, //top right
+    -v2.y,
   ];
 
-  let indices = new Array<number>();
+  const uv = [0, 0, 1, 0, 0, 1, 1, 1];
 
-  let posIndex = 0;
+  let indices: number[] = [];
 
   if (backface) {
-    indices = [posIndex + 2, posIndex + 1, posIndex, posIndex + 3, posIndex + 1, posIndex + 2];
+    indices = [2, 1, 0, 3, 1, 2];
   } else {
-    indices = [posIndex, posIndex + 1, posIndex + 2, posIndex + 2, posIndex + 1, posIndex + 3];
+    indices = [0, 1, 2, 2, 1, 3];
   }
 
   return {
     indices: createElementBuffer(gl, new Uint16Array(indices), 1),
     position: createBuffer(gl, new Float32Array(position), 3),
+    uv: createBuffer(gl, new Float32Array(uv), 2),
   };
 };
 
