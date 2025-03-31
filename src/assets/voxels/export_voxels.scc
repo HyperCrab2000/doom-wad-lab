@@ -1,0 +1,14 @@
+// export_voxels.scc
+
+for (int i = 0; i < lump_count(); i++) {
+    string lump_name = lump_get_name(i);
+    string lump_type = lump_get_type(i);
+
+    // You can refine this filter based on your voxel lump names
+    if (lump_type == "Voxel" || lump_name =~ ".*[A-Z]{4}.*") {
+        console_print("Exporting " + lump_name);
+        string outpath = "output_voxels/" + lump_name + ".bin";
+        lump_export(i, outpath);
+    }
+}
+console_print("Batch export complete.");

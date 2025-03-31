@@ -16,5 +16,5 @@ export default defineConfig({
       { find: '@/shaders', replacement: path.resolve(__dirname, 'src/shaders') }
     ]
   },
-  assetsInclude: ['**/*.wad']
+  assetsInclude: ['**/*.wad','**/*.kvx', '**/*.kvx?arrayBuffer']
 });

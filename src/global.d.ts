@@ -12,3 +12,8 @@ declare module '*.frag' {
   const content: string;
   export default content;
 }
+
+// global.d.ts
+interface Window {
+  renderVoxelMesh: () => Promise<{ success: boolean; error?: string }>;
+}

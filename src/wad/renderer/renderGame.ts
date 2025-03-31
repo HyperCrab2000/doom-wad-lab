@@ -40,6 +40,8 @@ import { ThingKind } from '@/wad/constants/ThingTypes';
 import { hasValidFlags } from '@/wad/renderer/utils/hasValidFlags';
 import { createSkyboxBuffers, drawSkybox } from '@/wad/renderer/drawAssets/drawSkybox';
 import { selectSkyTexture } from '@/wad/renderer/utils/selectSkyTexture';
+import { loadKvxModel } from '@/wad/parser/kvxLoader';
+import { voxelRenderer } from '@/wad/renderer/voxelRenderer';
 
 interface TriangleHashObject {
   triangle: Triangle;
@@ -51,10 +53,69 @@ interface ThingSprite {
   mirror?: boolean;
 }
 
+interface VoxelFrameSet {
+  [frame: string]: string;
+}
+
+const voxelFiles = import.meta.glob('/src/assets/voxels/*.kvx', { eager: true });
+console.log(voxelFiles);
+
+const voxelAnimations: Record<string, VoxelFrameSet> = {};
+
+for (const [path, mod] of Object.entries(voxelFiles)) {
+  const url = (mod as { default: string }).default;
+
+  const fileName = path.split('/').pop()!.replace('.kvx', '');
+  const baseName = fileName.slice(0, 4);
+  const frame = fileName[4];
+
+  voxelAnimations[baseName] = voxelAnimations[baseName] || {};
+  voxelAnimations[baseName][frame] = url;
+}
+
+// 🔵 Put this part immediately after voxelAnimations is populated:
+for (const [baseName, frames] of Object.entries(voxelAnimations)) {
+  for (const [frame, url] of Object.entries(frames)) {
+    const res = await fetch(url);
+    const buffer = await res.arrayBuffer();
+    const dv = new DataView(buffer);
+
+    let offset = 0;
+
+    // Correct KVX header parsing
+    // const xOffsetTableOffset = dv.getInt32(offset, true);
+    offset += 4;
+
+    const xSize = dv.getInt32(offset, true);
+    offset += 4;
+    const ySize = dv.getInt32(offset, true);
+    offset += 4;
+    const zSize = dv.getInt32(offset, true);
+    offset += 4;
+
+    const maxDimension = 16384; // Doom voxel assets might be chunky but reasonable
+    if (
+      xSize <= 0 || xSize > maxDimension ||
+      ySize <= 0 || ySize > maxDimension ||
+      zSize <= 0 || zSize > maxDimension
+    ) {
+      console.warn(`Skipping invalid KVX file ${baseName}${frame} — invalid dimensions ${xSize}x${ySize}x${zSize}`);
+      delete voxelAnimations[baseName][frame];
+      continue;
+    }
+  }
+}
+
+
 type FramesByThingNameMap = Record<string, Record<number, Record<number, ThingSprite>>>;
 
 export const renderGame = (canvas: HTMLCanvasElement) => {
-  const gl = createContext(canvas, {}, ['EXT_frag_depth']);
+  const gl = canvas.getContext('webgl2', { antialias: true }) as WebGL2RenderingContext;
+  if (!gl) {
+    throw new Error('WebGL2 not supported!');
+  }
+
+  voxelRenderer.init(gl);
 
   const projectionMatrix = mat4.create();
   const modelMatrix = mat4.create();
@@ -254,28 +315,129 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
     sectorsByThing = new Map<Thing, Sector>();
 
-    map.THINGS.forEach((thingObj: Thing) => {
-      const thingTriangles = findTrianglesAtPosition<TriangleHashObject>(mapTriangleHash, {
-        x: thingObj.x,
-        y: thingObj.y,
-      });
+    console.log(voxelAnimations);
 
-      let thingSector: Sector | undefined;
+    map.THINGS.forEach((thingObj, thingIndex) => {
+      const thingType = DOOM_THING_MAP_BY_ID[Number(thingObj.type)];
+      if (!thingType || !hasValidFlags(thingObj)) return;
 
-      thingTriangles.items.some((item) => {
-        if (pointInTriangle(thingObj, item.triangle)) {
-          thingSector = item.sector;
-          return true;
-        }
-      });
+      const spriteName = thingType.sprite;
+      if (!spriteName) return;
 
+      const baseName = spriteName.slice(0, 4);
+      const frames = voxelAnimations[baseName];
+
+      let thingSector = sectorsByThing.get(thingObj);
       if (!thingSector) {
-        //oh no, no sector for this thing :P - must be an error in the map design
-        console.error(thingObj);
-        throw new Error('Could not find sector for thing');
+        const thingTriangles = findTrianglesAtPosition<TriangleHashObject>(mapTriangleHash, {
+          x: thingObj.x,
+          y: thingObj.y,
+        });
+        thingTriangles.items.some((item) => {
+          if (pointInTriangle(thingObj, item.triangle)) {
+            thingSector = item.sector;
+            sectorsByThing.set(thingObj, thingSector);
+            return true;
+          }
+          return false;
+        });
+
+        if (!thingSector) {
+          console.error('Could not find sector for thing', thingObj);
+          return;
+        }
       }
 
-      sectorsByThing.set(thingObj, thingSector);
+
+      if (frames) {
+        console.log(frames);
+        const frameKeys = Object.keys(frames).sort();
+        const frameLetter = frameKeys[animateSpriteIndex % frameKeys.length];
+
+        let voxelUrl = frames[frameLetter];
+        if (!voxelUrl) {
+          voxelUrl = frames['A']; // fallback to frame A
+          console.warn(`Fallback to ${baseName}A`);
+        } else {
+          console.info(`Valid voxel${baseName}A`);
+        }
+
+        if (voxelUrl) {
+          fetch(voxelUrl)
+            .then((res) => res.arrayBuffer())
+            .then((arrayBuffer) => {
+              const kvxMesh = loadKvxModel(`${baseName}${frameLetter}`);
+              if (!kvxMesh) {
+                console.warn(`❌ Skipped voxel ${baseName}${frameLetter} due to bad mesh`);
+                return;
+              }
+
+              voxelRenderer.render(gl, {
+                mesh: kvxMesh,
+                position: [thingObj.x, thingSector!.floorheight, -thingObj.y],
+                rotation: thingObj.angle,
+                viewMatrix,
+                projectionMatrix,
+                cameraPos: camera.pos,
+                lightIntensity: thingSector!.lightIntensity,
+              });
+            })
+            .catch((err) => {
+              console.error(`Failed to load voxel ${voxelUrl}`, err);
+            });
+
+          return;
+        }
+
+      }
+
+
+      // ❌ Fallback: classic sprite rendering pipeline
+      const dx = thingObj.x - camera.pos[0];
+      const dy = -thingObj.y - camera.pos[2];
+      const spriteDirAngle = Math.atan2(dy, dx) + Math.PI / 8;
+      const dirIndex =
+        Math.floor(
+          (spriteDirAngle < 0 ? spriteDirAngle + Math.PI * 2 : spriteDirAngle) / (Math.PI / 4)
+        ) + 1;
+      const spriteObj = sortedFramesByThingName[spriteName];
+      let spriteFrames = spriteObj?.[dirIndex];
+
+      // fallback if specific direction frame doesn't exist
+      if (!spriteFrames) {
+        const fallbackDir = Object.keys(spriteObj || {}).map(Number)[0];
+        spriteFrames = spriteObj?.[fallbackDir];
+      }
+      if (!spriteFrames) return;
+
+      const frameIds = Object.keys(spriteFrames).map(Number).sort();
+      const frameId = frameIds[(animateSpriteIndex + thingIndex) % frameIds.length];
+      const thingSprite = spriteFrames[frameId];
+
+      const thingYPos = thingType.isFloater
+        ? thingSector.ceilingheight - thingSprite.sprite.height / 2
+        : thingSector.floorheight + thingSprite.sprite.height / 2;
+
+      mat4.identity(modelMatrix);
+      mat4.translate(modelMatrix, modelMatrix, [thingObj.x, thingYPos, -thingObj.y]);
+      mat4.rotateY(modelMatrix, modelMatrix, -angle({ x: dx, y: dy }));
+      mat4.scale(modelMatrix, modelMatrix, [
+        1.0,
+        thingSprite.sprite.height,
+        thingSprite.sprite.width,
+      ]);
+
+      mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
+      mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
+
+      shaders.things.setUniforms({
+        shouldMirror: thingSprite.mirror,
+        modelViewProj: modelViewProjMatrix,
+        tex: textures.things[thingSprite.sprite.name],
+        lightIntensity: thingSector.lightIntensity,
+      });
+
+      buffers.thing.indices.draw();
     });
 
     const sectorTriangles = findTrianglesAtPosition<TriangleHashObject>(
@@ -350,7 +512,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         return;
       }
 
-
       // if (thingType.sprite === 'SPOS') {
       //   console.log(`SPOS thing at (${thingObj.x}, ${thingObj.y})`);
       //   // console.log('Available dirs:', Object.keys(spriteObj));
@@ -360,16 +521,16 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       if (!hasValidFlags(thingObj)) return;
 
       const allowableThingTypes: String[] = [
-        // ThingKind.Artifact,
+        ThingKind.Artifact,
         ThingKind.Monster,
-        // ThingKind.Boss,
-        // ThingKind.Key,
-        // ThingKind.Barrel,
-        // ThingKind.Decoration,
-        // ThingKind.Hazard,
-        // ThingKind.Pickup,
-        // ThingKind.Weapon,
-        // ThingKind.Powerup,
+        ThingKind.Boss,
+        ThingKind.Key,
+        ThingKind.Barrel,
+        ThingKind.Decoration,
+        ThingKind.Hazard,
+        ThingKind.Pickup,
+        ThingKind.Weapon,
+        ThingKind.Powerup,
       ];
       const thingKind = thingType?.kind as string;
 
@@ -395,14 +556,11 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       const spriteObj = sortedFramesByThingName[thingType.sprite];
       let spriteFrames = spriteObj[dirIndex];
 
-// Fallback to any available direction instead of spriteObj[0]
+      // Fallback to any available direction instead of spriteObj[0]
       if (!spriteFrames) {
         const fallbackDir = Object.keys(spriteObj).map(Number)[0];
         spriteFrames = spriteObj[fallbackDir];
       }
-
-
-
 
       const frameIds = Object.keys(spriteFrames).map(Number).sort();
       const frameId = frameIds[(animateSpriteIndex + thingIndex) % frameIds.length];
