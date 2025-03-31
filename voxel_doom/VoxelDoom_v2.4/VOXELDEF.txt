@@ -1,0 +1,593 @@
+//===========================================================================
+//
+// WEAPONS AND AMMO
+//
+//===========================================================================
+
+// Chainsaw
+CSAWA = "CSAWA" {}
+
+// Pistol
+PISTA = "PISTA" {}
+
+// Shotgun
+SHOTA = "SHOTA" {}
+
+// Chaingun
+MGUNA = "MGUNA" {}
+
+// Rocket Launcher
+LAUNA = "LAUNA" {}
+
+// Plasma Rifle
+PLASA = "PLASA" {}
+
+// BFG9000
+BFUGA = "BFUGA" {}
+
+// Bullet (clip)
+CLIPA = "CLIPA" { AngleOffset = 270 }
+
+// Bullets (box)
+AMMOA = "AMMOA" { AngleOffset = 270 }
+
+// Shells
+SHELA = "SHELA" {}
+
+// Shells (box)
+SBOXA = "SBOXA" {}
+
+// Rocket ammo
+ROCKA = "ROCKA" {}
+
+// Rocket ammo (box)
+BROKA = "BROKA" { AngleOffset = 270 }
+
+// Cell (small)
+CELLA = "CELLA" {}
+
+// Cell (big)
+CELPA = "CELPA" {}
+
+// Rocket projectile
+MISLA = "MISLA" { UseActorPitch }
+
+/*
+// Plasma projectile
+PLSSA = "PLSSA" { UseActorPitch }
+PLSSB = "PLSSB" { UseActorPitch }
+
+// BFG9000 projectile
+BFS1A = "BFS1A" {}
+BFS1B = "BFS1B" {}
+*/
+
+//===========================================================================
+//
+// POWERUPS
+//
+//===========================================================================
+
+// Berserk
+PSTRA = "PSTRA" {}
+
+// Light Amp Goggles
+PVISA = "PVISA" {}
+PVISB = "PVISB" {}
+
+// Computer Area Map
+PMAPA = "PMAPA" {}
+PMAPB = "PMAPB" {}
+PMAPC = "PMAPC" {}
+PMAPD = "PMAPD" {}
+
+// Radiation Suit
+SUITA = "SUITA" {}
+
+// For the spheres, same case with the rocket explosion - we use different sprites so that they may be toggle-able
+
+// Invulnerability Sphere
+VINVA = "VINVA" { UseActorPitch }
+VINVB = "VINVB" { UseActorPitch }
+VINVC = "VINVC" { UseActorPitch }
+VINVD = "VINVD" { UseActorPitch }
+
+// Soul Sphere
+VOULA = "VOULA" { UseActorPitch }
+VOULB = "VOULB" { UseActorPitch }
+VOULC = "VOULC" { UseActorPitch }
+VOULD = "VOULD" { UseActorPitch }
+
+// Invisibility Sphere
+VINSA = "VINSA" { UseActorPitch }
+VINSB = "VINSB" { UseActorPitch }
+VINSC = "VINSC" { UseActorPitch }
+VINSD = "VINSD" { UseActorPitch }
+
+//===========================================================================
+//
+// ITEMS
+//
+//===========================================================================
+
+// Stimpack
+STIMA = "STIMA" { AngleOffset = 270 }
+
+// Medikit
+MEDIA = "MEDIA" { AngleOffset = 270 }
+
+// Green Armor
+ARM1A = "ARM1A" {}
+ARM1B = "ARM1B" {}
+
+// Blue Armor
+ARM2A = "ARM2A" {}
+ARM2B = "ARM2B" {}
+
+// Health Bonus
+BON1A = "BON1A" {}
+BON1B = "BON1B" {}
+BON1C = "BON1C" {}
+BON1D = "BON1D" {}
+
+// Armor Bonus
+BON2A = "BON2A" {}
+BON2B = "BON2B" {}
+BON2C = "BON2C" {}
+BON2D = "BON2D" {}
+
+// Blue Keycard
+BKEYA = "BKEYA" {}
+BKEYB = "BKEYB" {}
+
+// Red Keycard
+RKEYA = "RKEYA" {}
+RKEYB = "RKEYB" {}
+
+// Yellow Keycard
+YKEYA = "YKEYA" {}
+YKEYB = "YKEYB" {}
+
+// Blue Skull Key
+BSKUA = "BSKUA" {}
+BSKUB = "BSKUB" {}
+
+// Red Skull Key
+RSKUA = "RSKUA" {}
+RSKUB = "RSKUB" {}
+
+// Yellow Skull Key
+YSKUA = "YSKUA" {}
+YSKUB = "YSKUB" {}
+
+// Backpack
+BPAKA = "BPAKA" {}
+
+//===========================================================================
+//
+// MONSTERS
+//
+//===========================================================================
+
+// Zombie Man
+POSSA = "POSSA" {}
+POSSB = "POSSB" {}
+POSSC = "POSSC" {}
+POSSD = "POSSD" {}
+POSSE = "POSSE" {}
+POSSF = "POSSF" {}
+POSSG = "POSSG" {}
+POSSH = "POSSH" { UseActorPitch UseActorRoll }
+POSSI = "POSSI" { UseActorPitch UseActorRoll }
+POSSJ = "POSSJ" { UseActorPitch UseActorRoll }
+POSSK = "POSSK" { UseActorPitch UseActorRoll }
+POSSL = "POSSL" { UseActorPitch UseActorRoll }
+POSSM = "POSSM" { UseActorPitch UseActorRoll }
+POSSN = "POSSN" { UseActorPitch UseActorRoll }
+POSSO = "POSSO" { UseActorPitch UseActorRoll }
+POSSP = "POSSP" { UseActorPitch UseActorRoll }
+POSSQ = "POSSQ" { UseActorPitch UseActorRoll }
+POSSR = "POSSR" { UseActorPitch UseActorRoll }
+POSSS = "POSSS" { UseActorPitch UseActorRoll }
+POSST = "POSST" { UseActorPitch UseActorRoll }
+POSSU = "POSSU" { UseActorPitch UseActorRoll }
+
+// Shotgun Guy
+SPOSA = "SPOSA" {}
+SPOSB = "SPOSB" {}
+SPOSC = "SPOSC" {}
+SPOSD = "SPOSD" {}
+SPOSE = "SPOSE" {}
+SPOSF = "SPOSF" {}
+SPOSG = "SPOSG" {}
+SPOSH = "SPOSH" { UseActorPitch UseActorRoll }
+SPOSI = "SPOSI" { UseActorPitch UseActorRoll }
+SPOSJ = "SPOSJ" { UseActorPitch UseActorRoll }
+SPOSK = "SPOSK" { UseActorPitch UseActorRoll }
+SPOSL = "SPOSL" { UseActorPitch UseActorRoll }
+SPOSM = "SPOSM" { UseActorPitch UseActorRoll }
+SPOSN = "SPOSN" { UseActorPitch UseActorRoll }
+SPOSO = "SPOSO" { UseActorPitch UseActorRoll }
+SPOSP = "SPOSP" { UseActorPitch UseActorRoll }
+SPOSQ = "SPOSQ" { UseActorPitch UseActorRoll }
+SPOSR = "SPOSR" { UseActorPitch UseActorRoll }
+SPOSS = "SPOSS" { UseActorPitch UseActorRoll }
+SPOST = "SPOST" { UseActorPitch UseActorRoll }
+SPOSU = "SPOSU" { UseActorPitch UseActorRoll }
+
+// Imp
+TROOA = "TROOA" {}
+TROOB = "TROOB" {}
+TROOC = "TROOC" {}
+TROOD = "TROOD" {}
+TROOE = "TROOE" {}
+TROOF = "TROOF" {}
+TROOG = "TROOG" {}
+TROOH = "TROOH" {}
+TROOI = "TROOI" { UseActorPitch UseActorRoll }
+TROOJ = "TROOJ" { UseActorPitch UseActorRoll }
+TROOK = "TROOK" { UseActorPitch UseActorRoll }
+TROOL = "TROOL" { UseActorPitch UseActorRoll }
+TROOM = "TROOM" { UseActorPitch UseActorRoll }
+TROON = "TROON" { UseActorPitch UseActorRoll }
+TROOO = "TROOO" { UseActorPitch UseActorRoll }
+TROOP = "TROOP" { UseActorPitch UseActorRoll }
+TROOQ = "TROOQ" { UseActorPitch UseActorRoll }
+TROOR = "TROOR" { UseActorPitch UseActorRoll }
+TROOS = "TROOS" { UseActorPitch UseActorRoll }
+TROOT = "TROOT" { UseActorPitch UseActorRoll }
+TROOU = "TROOU" { UseActorPitch UseActorRoll }
+
+/*
+// Imp fireball
+BAL1A = "BAL1A" { UseActorPitch }
+BAL1B = "BAL1B" { UseActorPitch }
+BAL1C = "BAL1C" { UseActorPitch }
+BAL1D = "BAL1D" { UseActorPitch }
+BAL1E = "BAL1E" { UseActorPitch }
+*/
+
+// Pinky
+SARGA = "SARGA" {}
+SARGB = "SARGB" {}
+SARGC = "SARGC" {}
+SARGD = "SARGD" {}
+SARGE = "SARGE" {}
+SARGF = "SARGF" {}
+SARGH = "SARGH" {}
+SARGI = "SARGI" { UseActorPitch UseActorRoll }
+SARGJ = "SARGJ" { UseActorPitch UseActorRoll }
+SARGK = "SARGK" { UseActorPitch UseActorRoll }
+SARGL = "SARGL" { UseActorPitch UseActorRoll }
+SARGM = "SARGM" { UseActorPitch UseActorRoll }
+SARGN = "SARGN" { UseActorPitch UseActorRoll }
+
+// Cacodemon
+HEADA = "HEADA" { UseActorPitch }
+HEADB = "HEADB" { UseActorPitch }
+HEADC = "HEADC" { UseActorPitch }
+HEADD = "HEADD" { UseActorPitch }
+HEADE = "HEADE" { UseActorPitch }
+HEADF = "HEADF" { UseActorPitch }
+HEADG = "HEADG" { UseActorPitch UseActorRoll }
+HEADH = "HEADH" { UseActorPitch UseActorRoll }
+HEADI = "HEADI" { UseActorPitch UseActorRoll }
+HEADJ = "HEADJ" { UseActorPitch UseActorRoll }
+HEADK = "HEADK" { UseActorPitch UseActorRoll }
+HEADL = "HEADL" { UseActorPitch UseActorRoll }
+
+/*
+// Cacodemon fireball
+BAL2A = "BAL2A" { UseActorPitch }
+BAL2B = "BAL2B" { UseActorPitch }
+BAL2C = "BAL2C" { UseActorPitch }
+BAL2D = "BAL2D" { UseActorPitch }
+BAL2E = "BAL2E" { UseActorPitch }
+*/
+
+// Lost Soul
+SKULA = "SKULA" { UseActorPitch }
+SKULB = "SKULB" { UseActorPitch }
+SKULC = "SKULC" { UseActorPitch }
+SKULD = "SKULD" { UseActorPitch }
+SKULE = "SKULE" { UseActorPitch }
+SKULF = "SKULF" { UseActorPitch UseActorRoll }
+SKULG = "SKULG" { UseActorPitch UseActorRoll }
+SKULH = "SKULH" { UseActorPitch UseActorRoll }
+SKULI = "SKULI" { UseActorPitch UseActorRoll }
+SKULJ = "SKULJ" { UseActorPitch UseActorRoll }
+SKULK = "SKULK" { UseActorPitch UseActorRoll }
+
+// Baron of Hell
+BOSSA = "BOSSA" {}
+BOSSB = "BOSSB" {}
+BOSSC = "BOSSC" {}
+BOSSD = "BOSSD" {}
+BOSSE = "BOSSE" {}
+BOSSF = "BOSSF" {}
+BOSSG = "BOSSG" {}
+BOSSH = "BOSSH" {}
+BOSSI = "BOSSI" { UseActorPitch UseActorRoll }
+BOSSJ = "BOSSJ" { UseActorPitch UseActorRoll }
+BOSSK = "BOSSK" { UseActorPitch UseActorRoll }
+BOSSL = "BOSSL" { UseActorPitch UseActorRoll }
+BOSSM = "BOSSM" { UseActorPitch UseActorRoll }
+BOSSN = "BOSSN" { UseActorPitch UseActorRoll }
+BOSSO = "BOSSO" { UseActorPitch UseActorRoll }
+
+/*
+// Baron fireball
+BAL7A = "BAL7A" { UseActorPitch }
+BAL7B = "BAL7B" { UseActorPitch }
+BAL7C = "BAL7C" { UseActorPitch }
+BAL7D = "BAL7D" { UseActorPitch }
+BAL7E = "BAL7E" { UseActorPitch }
+*/
+
+// Cyberdemon
+CYBRA = "CYBRA" {}
+CYBRB = "CYBRB" {}
+CYBRC = "CYBRC" {}
+CYBRD = "CYBRD" {}
+CYBRE = "CYBRE" {}
+CYBRF = "CYBRF" {}
+CYBRG = "CYBRG" {}
+CYBRH = "CYBRH" { UseActorPitch UseActorRoll }
+CYBRI = "CYBRI" { UseActorPitch UseActorRoll }
+CYBRJ = "CYBRJ" { UseActorPitch UseActorRoll }
+CYBRK = "CYBRK" { UseActorPitch UseActorRoll }
+CYBRL = "CYBRL" { UseActorPitch UseActorRoll }
+CYBRM = "CYBRM" { UseActorPitch UseActorRoll }
+CYBRN = "CYBRN" { UseActorPitch UseActorRoll }
+CYBRO = "CYBRO" { UseActorPitch UseActorRoll }
+CYBRP = "CYBRP" { UseActorPitch UseActorRoll }
+
+// Spider Mastermind
+SPIDA = "SPIDA" {}
+SPIDB = "SPIDB" {}
+SPIDC = "SPIDC" {}
+SPIDD = "SPIDD" {}
+SPIDE = "SPIDE" {}
+SPIDF = "SPIDF" {}
+SPIDG = "SPIDG" {}
+SPIDH = "SPIDH" {}
+SPIDI = "SPIDI" {}
+SPIDJ = "SPIDJ" { UseActorPitch UseActorRoll }
+SPIDK = "SPIDK" { UseActorPitch UseActorRoll }
+SPIDL = "SPIDL" { UseActorPitch UseActorRoll }
+SPIDM = "SPIDM" { UseActorPitch UseActorRoll }
+SPIDN = "SPIDN" { UseActorPitch UseActorRoll }
+SPIDO = "SPIDO" { UseActorPitch UseActorRoll }
+SPIDP = "SPIDP" { UseActorPitch UseActorRoll }
+SPIDQ = "SPIDQ" { UseActorPitch UseActorRoll }
+SPIDR = "SPIDR" { UseActorPitch UseActorRoll }
+SPIDS = "SPIDS" { UseActorPitch UseActorRoll }
+
+// Doomguy
+PLAYA = "PLAYA" {}
+PLAYB = "PLAYB" {}
+PLAYC = "PLAYC" {}
+PLAYD = "PLAYD" {}
+PLAYE = "PLAYE" {}
+PLAYF = "PLAYF" {}
+PLAYG = "PLAYG" {}
+PLAYH = "PLAYH" { UseActorPitch UseActorRoll }
+PLAYI = "PLAYI" { UseActorPitch UseActorRoll }
+PLAYJ = "PLAYJ" { UseActorPitch UseActorRoll }
+PLAYK = "PLAYK" { UseActorPitch UseActorRoll }
+PLAYL = "PLAYL" { UseActorPitch UseActorRoll }
+PLAYM = "PLAYM" { UseActorPitch UseActorRoll }
+PLAYN = "PLAYN" { UseActorPitch UseActorRoll }
+PLAYO = "PLAYO" { UseActorPitch UseActorRoll }
+PLAYP = "PLAYP" { UseActorPitch UseActorRoll }
+PLAYQ = "PLAYQ" { UseActorPitch UseActorRoll }
+PLAYR = "PLAYR" { UseActorPitch UseActorRoll }
+PLAYS = "PLAYS" { UseActorPitch UseActorRoll }
+PLAYT = "PLAYT" { UseActorPitch UseActorRoll }
+PLAYU = "PLAYU" { UseActorPitch UseActorRoll }
+PLAYV = "PLAYV" { UseActorPitch UseActorRoll }
+PLAYW = "PLAYW" { UseActorPitch UseActorRoll }
+
+//===========================================================================
+//
+// DECORATION
+//
+//===========================================================================
+
+// Explosive barrel
+BAR1A = "BAR1A" { AngleOffset = 270 }
+BAR1B = "BAR1B" { AngleOffset = 270 }
+BEXPA = "BEXPA" { AngleOffset = 270 }
+BEXPB = "BEXPB" { AngleOffset = 270 }
+BEXPC = "BEXPC" { AngleOffset = 270 }
+BEXPD = "BEXPD" { AngleOffset = 270 }
+BEXPE = "BEXPE" { AngleOffset = 270 }
+
+// Tall green column
+COL1A = "COL1A" {}
+
+// Short green column
+COL2A = "COL2A" {}
+
+// Tall red column
+COL3A = "COL3A" {}
+
+// Short red column
+COL4A = "COL4A" {}
+
+// Heart column
+COL5A = "COL5A" {}
+COL5B = "COL5B" {}
+
+// Skull column
+COL6A = "COL6A" {}
+
+// Candle
+CANDA = "CANDA" {}
+
+// Big tree
+TRE2A = "TRE2A" {}
+
+// Column
+COLUA = "COLUA" {}
+
+// Tech pillar
+ELECA = "ELECA" {}
+
+// Bloody twitch
+GOR1A = "GOR1A" {}
+GOR1B = "GOR1B" {}
+GOR1C = "GOR1C" {}
+
+// Meat 2
+GOR2A = "GOR2A" {}
+
+// Meat 3
+GOR3A = "GOR3A" {}
+
+// Meat 4
+GOR4A = "GOR4A" {}
+
+// Meat 5
+GOR5A = "GOR5A" {}
+
+// Stalagtite
+SMITA = "SMITA" {}
+
+// Gibs (crushed)
+POL5A = "POL5A" {}
+
+// Dead on a stick
+POL1A = "POL1A" {}
+
+// Heads (plural!) on a stick
+POL2A = "POL2A" {}
+
+// Evil eye
+CEYEA = "CEYEA" {}
+CEYEB = "CEYEB" {}
+CEYEC = "CEYEC" {}
+
+// Candelabra
+CBRAA = "CBRAA" {}
+
+// Floating skulls
+FSKUA = "FSKUA" {}
+FSKUB = "FSKUB" {}
+FSKUC = "FSKUC" {}
+
+// Torch tree
+TRE1A = "TRE1A" {}
+
+// Head candles
+POL3A = "POL3A" {}
+POL3B = "POL3B" {}
+
+// Head on a stick
+POL4A = "POL4A" {}
+
+// Short red torch
+SMRTA = "SMRTA" {}
+SMRTB = "SMRTB" {}
+SMRTC = "SMRTC" {}
+SMRTD = "SMRTD" {}
+
+// Short blue torch
+SMBTA = "SMBTA" {}
+SMBTB = "SMBTB" {}
+SMBTC = "SMBTC" {}
+SMBTD = "SMBTD" {}
+
+// Short green torch
+SMGTA = "SMGTA" {}
+SMGTB = "SMGTB" {}
+SMGTC = "SMGTC" {}
+SMGTD = "SMGTD" {}
+
+// Still alive on a stick
+POL6A = "POL6A" {}
+POL6B = "POL6B" {}
+
+// Green torch
+TGRNA = "TGRNA" {}
+TGRNB = "TGRNB" {}
+TGRNC = "TGRNC" {}
+TGRND = "TGRND" {}
+
+// Blue torch
+TBLUA = "TBLUA" {}
+TBLUB = "TBLUB" {}
+TBLUC = "TBLUC" {}
+TBLUD = "TBLUD" {}
+
+// Red torch
+TREDA = "TREDA" {}
+TREDB = "TREDB" {}
+TREDC = "TREDC" {}
+TREDD = "TREDD" {}
+
+// Grey stalagmite (unused Doom sprite)
+SMT2A = "SMT2A" {}
+
+//===========================================================================
+//
+// EFFECTS
+//
+//===========================================================================
+
+// Bullet puff
+PUFFA = "PUFFA" {}
+PUFFB = "PUFFB" {}
+PUFFC = "PUFFC" {}
+PUFFD = "PUFFD" {}
+
+// Blood
+BLUDA = "BLUDA" {}
+BLUDB = "BLUDB" {}
+BLUDC = "BLUDC" {}
+
+// Rocket explosion
+// (We're intentionally using a different sprite - VISL - for the voxelized explosion)
+// (This is necessary to allow the voxelized explosion to be optional)
+VISLB = "VISLB" { AngleOffset = 270 }
+VISLC = "VISLC" {}
+VISLD = "VISLD" {}
+
+/*
+// Plasma explosion
+//PLSEA = "PLSEA" { UseActorPitch }
+PLSEB = "PLSEB" { UseActorPitch }
+PLSEC = "PLSEC" { UseActorPitch }
+PLSED = "PLSED" { UseActorPitch }
+PLSEE = "PLSEE" { UseActorPitch }
+
+// BFG explosion
+BFE1A = "BFE1A" {}
+BFE1B = "BFE1B" {}
+BFE1C = "BFE1C" {}
+BFE1D = "BFE1D" {}
+BFE1E = "BFE1E" {}
+BFE1F = "BFE1F" {}
+BFE2A = "BFE2A" {}
+BFE2B = "BFE2B" {}
+BFE2C = "BFE2C" {}
+
+// Teleport fog
+TFOGA = "TFOGA"
+TFOGB = "TFOGB"
+TFOGC = "TFOGC"
+TFOGD = "TFOGD"
+TFOGE = "TFOGE"
+TFOGF = "TFOGF"
+TFOGG = "TFOGG"
+TFOGH = "TFOGH"
+TFOGI = "TFOGI"
+TFOGJ = "TFOGJ"
+
+// Item respawn fog
+IFOGA = "IFOGA"
+IFOGB = "IFOGB"
+IFOGC = "IFOGC"
+IFOGD = "IFOGD"
+IFOGE = "IFOGE"
+*/

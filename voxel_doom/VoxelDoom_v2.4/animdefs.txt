@@ -1,0 +1,1 @@
+CanvasTexture "CanvasTextures/fParallaxEnabled.canvastexture" 4 4

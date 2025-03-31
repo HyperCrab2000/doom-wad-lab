@@ -1,0 +1,336 @@
+//===========================================================================
+//
+// WEAPONS AND AMMO
+//
+//===========================================================================
+
+// Super Shotgun
+SGN2A = "SGN2A" {}
+
+//===========================================================================
+//
+// POWERUPS
+//
+//===========================================================================
+
+// Megasphere
+VEGAA = "VEGAA" { UseActorPitch }
+VEGAB = "VEGAB" { UseActorPitch }
+VEGAC = "VEGAC" { UseActorPitch }
+VEGAD = "VEGAD" { UseActorPitch }
+
+//===========================================================================
+//
+// MONSTERS
+//
+//===========================================================================
+
+// Arachnotron
+BSPIA = "BSPIA" {}
+BSPIB = "BSPIB" {}
+BSPIC = "BSPIC" {}
+BSPID = "BSPID" {}
+BSPIE = "BSPIE" {}
+BSPIF = "BSPIF" {}
+BSPIG = "BSPIG" {}
+BSPIH = "BSPIH" {}
+BSPII = "BSPII" {}
+BSPIJ = "BSPIJ" { UseActorPitch UseActorRoll }
+BSPIK = "BSPIK" { UseActorPitch UseActorRoll }
+BSPIL = "BSPIL" { UseActorPitch UseActorRoll }
+BSPIM = "BSPIM" { UseActorPitch UseActorRoll }
+BSPIN = "BSPIN" { UseActorPitch UseActorRoll }
+BSPIO = "BSPIO" { UseActorPitch UseActorRoll }
+BSPIP = "BSPIP" { UseActorPitch UseActorRoll }
+
+/*
+// Arachnotron plasma
+APLSA = "APLSA" { UseActorPitch }
+APLSB = "APLSB" { UseActorPitch }
+APBXA = "APBXA" { UseActorPitch }
+APBXB = "APBXB" { UseActorPitch }
+APBXC = "APBXC" { UseActorPitch }
+APBXD = "APBXD" { UseActorPitch }
+APBXE = "APBXE" { UseActorPitch }
+*/
+
+// Arch Vile
+VILEA = "VILEA" {}
+VILEB = "VILEB" {}
+VILEC = "VILEC" {}
+VILED = "VILED" {}
+VILEE = "VILEE" {}
+VILEF = "VILEF" {}
+VILEG = "VILEG" {}
+VILEH = "VILEH" {}
+VILEI = "VILEI" {}
+VILEJ = "VILEJ" {}
+VILEK = "VILEK" {}
+VILEL = "VILEL" {}
+VILEM = "VILEM" {}
+VILEN = "VILEN" {}
+VILEO = "VILEO" {}
+VILEP = "VILEP" {}
+VILEQ = "VILEQ" { UseActorPitch UseActorRoll }
+VILER = "VILER" { UseActorPitch UseActorRoll }
+VILES = "VILES" { UseActorPitch UseActorRoll }
+VILET = "VILET" { UseActorPitch UseActorRoll }
+VILEU = "VILEU" { UseActorPitch UseActorRoll }
+VILEV = "VILEV" { UseActorPitch UseActorRoll }
+VILEW = "VILEW" { UseActorPitch UseActorRoll }
+VILEX = "VILEX" { UseActorPitch UseActorRoll }
+VILEY = "VILEY" { UseActorPitch UseActorRoll }
+VILEZ = "VILEZ" { UseActorPitch UseActorRoll }
+VILE[ = "VILE[" {}
+//VILE^ = "VILE^" {}
+VIL2A = "VIL2A" {} // temporary hack!!!
+VILE] = "VILE]" {}
+
+/*
+// Arch Vile fire
+FIREA = "FIREA" {}
+FIREB = "FIREB" {}
+FIREC = "FIREC" {}
+FIRED = "FIRED" {}
+FIREE = "FIREE" {}
+FIREF = "FIREF" {}
+FIREG = "FIREG" {}
+FIREH = "FIREH" {}
+*/
+
+// Chaingunner
+CPOSA = "CPOSA" {}
+CPOSB = "CPOSB" {}
+CPOSC = "CPOSC" {}
+CPOSD = "CPOSD" {}
+CPOSE = "CPOSE" {}
+CPOSF = "CPOSF" {}
+CPOSG = "CPOSG" {}
+CPOSH = "CPOSH" { UseActorPitch UseActorRoll }
+CPOSI = "CPOSI" { UseActorPitch UseActorRoll }
+CPOSJ = "CPOSJ" { UseActorPitch UseActorRoll }
+CPOSK = "CPOSK" { UseActorPitch UseActorRoll }
+CPOSL = "CPOSL" { UseActorPitch UseActorRoll }
+CPOSM = "CPOSM" { UseActorPitch UseActorRoll }
+CPOSN = "CPOSN" { UseActorPitch UseActorRoll }
+
+// Hell Knight
+BOS2A = "BOS2A" {}
+BOS2B = "BOS2B" {}
+BOS2C = "BOS2C" {}
+BOS2D = "BOS2D" {}
+BOS2E = "BOS2E" {}
+BOS2F = "BOS2F" {}
+BOS2G = "BOS2G" {}
+BOS2H = "BOS2H" {}
+BOS2I = "BOS2I" { UseActorPitch UseActorRoll }
+BOS2J = "BOS2J" { UseActorPitch UseActorRoll }
+BOS2K = "BOS2K" { UseActorPitch UseActorRoll }
+BOS2L = "BOS2L" { UseActorPitch UseActorRoll }
+BOS2M = "BOS2M" { UseActorPitch UseActorRoll }
+BOS2N = "BOS2N" { UseActorPitch UseActorRoll }
+BOS2O = "BOS2O" { UseActorPitch UseActorRoll }
+
+// Mancubus
+FATTA = "FATTA" {}
+FATTB = "FATTB" {}
+FATTC = "FATTC" {}
+FATTD = "FATTD" {}
+FATTE = "FATTE" {}
+FATTF = "FATTF" {}
+FATTG = "FATTG" {}
+FATTH = "FATTH" {}
+FATTI = "FATTI" {}
+FATTJ = "FATTJ" {}
+FATTK = "FATTK" { UseActorPitch UseActorRoll }
+FATTL = "FATTL" { UseActorPitch UseActorRoll }
+FATTM = "FATTM" { UseActorPitch UseActorRoll }
+FATTN = "FATTN" { UseActorPitch UseActorRoll }
+FATTO = "FATTO" { UseActorPitch UseActorRoll }
+FATTP = "FATTP" { UseActorPitch UseActorRoll }
+FATTQ = "FATTQ" { UseActorPitch UseActorRoll }
+FATTR = "FATTR" { UseActorPitch UseActorRoll }
+FATTS = "FATTS" { UseActorPitch UseActorRoll }
+FATTT = "FATTT" { UseActorPitch UseActorRoll }
+
+/*
+// Mancubus flames
+MANFA = "MANFA" { UseActorPitch }
+MANFB = "MANFB" { UseActorPitch }
+*/
+
+// Pain Elemental
+PAINA = "PAINA" { UseActorPitch }
+PAINB = "PAINB" { UseActorPitch }
+PAINC = "PAINC" { UseActorPitch }
+PAIND = "PAIND" { UseActorPitch }
+PAINE = "PAINE" { UseActorPitch }
+PAINF = "PAINF" { UseActorPitch }
+PAING = "PAING" { UseActorPitch }
+PAINH = "PAINH" { UseActorPitch UseActorRoll }
+PAINI = "PAINI" { UseActorPitch UseActorRoll }
+PAINJ = "PAINJ" { UseActorPitch UseActorRoll }
+PAINK = "PAINK" { UseActorPitch UseActorRoll }
+PAINL = "PAINL" { UseActorPitch UseActorRoll }
+PAINM = "PAINM" { UseActorPitch UseActorRoll }
+
+// Revenant
+SKELA = "SKELA" {}
+SKELB = "SKELB" {}
+SKELC = "SKELC" {}
+SKELD = "SKELD" {}
+SKELE = "SKELE" {}
+SKELF = "SKELF" {}
+SKELG = "SKELG" {}
+SKELH = "SKELH" {}
+SKELI = "SKELI" {}
+SKELJ = "SKELJ" {}
+SKELK = "SKELK" {}
+SKELL = "SKELL" { UseActorPitch UseActorRoll }
+SKELM = "SKELM" { UseActorPitch UseActorRoll }
+SKELN = "SKELN" { UseActorPitch UseActorRoll }
+SKELO = "SKELO" { UseActorPitch UseActorRoll }
+SKELP = "SKELP" { UseActorPitch UseActorRoll }
+SKELQ = "SKELQ" { UseActorPitch UseActorRoll }
+
+/*
+// Revenant missile
+FATBA = "FATBA" { UseActorPitch }
+FATBB = "FATBB" { UseActorPitch }
+FBXPA = "FBXPA" { UseActorPitch }
+FBXPB = "FBXPB" { UseActorPitch }
+FBXPC = "FBXPC" { UseActorPitch }
+*/
+
+// Cube
+BOSFA = "BOSFA" {}
+BOSFB = "BOSFB" {}
+BOSFC = "BOSFC" {}
+BOSFD = "BOSFD" {}
+
+// Romero
+BBRNA = "BBRNA" {}
+BBRNB = "BBRNB" {}
+
+// SS Soldier
+SSWVA = "SSWVA" {}
+SSWVB = "SSWVB" {}
+SSWVC = "SSWVC" {}
+SSWVD = "SSWVD" {}
+SSWVE = "SSWVE" {}
+SSWVF = "SSWVF" {}
+SSWVG = "SSWVG" {}
+SSWVH = "SSWVH" {}
+SSWVI = "SSWVI" { UseActorPitch UseActorRoll }
+SSWVJ = "SSWVJ" { UseActorPitch UseActorRoll }
+SSWVK = "SSWVK" { UseActorPitch UseActorRoll }
+SSWVL = "SSWVL" { UseActorPitch UseActorRoll }
+SSWVM = "SSWVM" { UseActorPitch UseActorRoll }
+SSWVN = "SSWVN" { UseActorPitch UseActorRoll }
+SSWVO = "SSWVO" { UseActorPitch UseActorRoll }
+SSWVP = "SSWVP" { UseActorPitch UseActorRoll }
+SSWVQ = "SSWVQ" { UseActorPitch UseActorRoll }
+SSWVR = "SSWVR" { UseActorPitch UseActorRoll }
+SSWVS = "SSWVS" { UseActorPitch UseActorRoll }
+SSWVT = "SSWVT" { UseActorPitch UseActorRoll }
+SSWVU = "SSWVU" { UseActorPitch UseActorRoll }
+SSWVV = "SSWVV" { UseActorPitch UseActorRoll }
+
+// Keen
+KEENA = "KEENA" {}
+KEENB = "KEENB" {}
+KEENC = "KEENC" {}
+KEEND = "KEEND" {}
+KEENE = "KEENE" {}
+KEENF = "KEENF" {}
+KEENG = "KEENG" {}
+KEENH = "KEENH" {}
+KEENI = "KEENI" {}
+KEENJ = "KEENJ" {}
+KEENK = "KEENK" {}
+KEENL = "KEENL" {}
+KEENM = "KEENM" {}
+
+//===========================================================================
+//
+// ICON OF SIN
+//
+//===========================================================================
+
+// ICON OF SIN!
+ZFA1A = "ZZZFACE1" {}
+ZFA2A = "ZZZFACE2" {}
+ZFA3A = "ZZZFACE3" {}
+ZFA4A = "ZZZFACE4" {}
+ZFA5A = "ZZZFACE5" {}
+ZFA6A = "ZZZFACE6" {}
+ZFA7A = "ZZZFACE7" {}
+ZFA8A = "ZZZFACE8" {}
+ZFA9A = "ZZZFACE9" {}
+
+ZFA1B = "ZZZFAC1B" {}
+ZFA2B = "ZZZFAC2B" {}
+//ZFA3B = "ZZZFAC3B" {}
+//ZFA4B = "ZZZFAC4B" {}
+ZFA5B = "ZZZFAC5B" {}
+ZFA6B = "ZZZFAC6B" {}
+ZFA7B = "ZZZFAC7B" {}
+ZFA8B = "ZZZFAC8B" {}
+ZFA9B = "ZZZFAC9B" {}
+
+// Dark backgrounds to cover the wall texture behind the model.
+ZF10A = "ZZZFAC10" {}
+ZF11A = "ZZZFAC11" {}
+
+//===========================================================================
+//
+// DECORATION
+//
+//===========================================================================
+
+// Colon gibs
+POB1A = "POB1A" {}
+
+// Blood puddle
+POB2A = "POB2A" {}
+
+// Brain and spine
+BRS1A = "BRS1A" {}
+
+// Small pool o' blood
+POB2A = "POB2A" {}
+
+// Hanging with no guts
+HDB1A = "HDB1A" {}
+
+// Hanging from bottom with no brain
+HDB2A = "HDB2A" {}
+
+// Hanging from top, looking down
+HDB3A = "HDB3A" {}
+
+// Hanging from top, skully
+HDB4A = "HDB4A" {}
+
+// Hanging from top, looking up
+HDB5A = "HDB5A" {}
+
+// Hanging from top without a brain
+HDB6A = "HDB6A" {}
+
+// Tech lamp large
+TLMPA = "TLMPA" {}
+TLMPB = "TLMPB" {}
+TLMPC = "TLMPC" {}
+TLMPD = "TLMPD" {}
+
+// Tech lamp small
+TLP2A = "TLP2A" {}
+TLP2B = "TLP2B" {}
+TLP2C = "TLP2C" {}
+TLP2D = "TLP2D" {}
+
+// Burning barrel
+FCANA = "FCANA" {}
+FCANB = "FCANB" {}
+FCANC = "FCANC" {}
