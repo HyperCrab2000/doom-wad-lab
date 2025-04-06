@@ -97,15 +97,17 @@
 
   // Build a simple 3D preview with naive "cube per voxel"
   function create3DPreview(kvx) {
+    // Destructure all necessary metadata from the loader.
     const {
       xsiz, ysiz, zsiz,
-      minX, maxX, minY, maxY, minZ, maxZ,         // bounding box corners
-      centerMassX, centerMassY, centerMassZ,      // center of mass
+      minX, maxX, minY, maxY, minZ, maxZ,
+      boxCenterX, boxCenterY, boxCenterZ,
+      centerMassX, centerMassY, centerMassZ,
       voxdata,
       getColor
     } = kvx;
 
-    // 1) Setup a Three.js renderer using #webglView
+    // Setup Three.js renderer
     const renderer = new THREE.WebGLRenderer({
       canvas: document.getElementById('webglView'),
       antialias: true,
@@ -113,71 +115,83 @@
     renderer.setSize(512, 512);
     renderer.setClearColor(0x222222, 1);
 
-    // 2) Create a scene & camera
+    // Create scene and camera
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
     camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
-    camera.lookAt(new THREE.Vector3(0,0,0));
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // 3) Optional light
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(1,1,2).normalize();
-    scene.add(light);
+    // Create a parent group for yaw (left/right) rotation only.
+    const yawGroup = new THREE.Group();
+    scene.add(yawGroup);
 
-    // 4) Create a group for voxel cubes
-    const group = new THREE.Group();
-    scene.add(group);
+    // Create a model group that contains the voxel meshes.
+    const modelGroup = new THREE.Group();
+    yawGroup.add(modelGroup);
 
-    // Shift so we rotate around the center of mass
-    group.position.set(-centerMassX, -centerMassY, -centerMassZ);
+    // Option 1: Use bounding-box center for horizontal pivot and keep vertical offset from center of mass.
+    // (You can adjust these as needed)
+    modelGroup.position.set(-boxCenterX, -boxCenterY, -centerMassZ);
+    // Option 2: To use the center-of-mass for all axes, uncomment the following:
+    // modelGroup.position.set(-centerMassX, -centerMassY, -centerMassZ);
 
-    // 5) Build a cube per voxel
-    const boxGeom = new THREE.BoxGeometry(1,1,1);
+    // Create a cube per voxel; note that we place each cube so that its center is at (x+0.5, y+0.5, z+0.5).
+    const boxGeom = new THREE.BoxGeometry(1, 1, 1);
     for (let v of voxdata) {
       const colStr = getColor(v.col);
       const m = colStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
       if (!m) continue;
-      const r = parseInt(m[1], 10)/255;
-      const g = parseInt(m[2], 10)/255;
-      const b = parseInt(m[3], 10)/255;
-
-      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r,g,b) });
+      const r = parseInt(m[1], 10) / 255;
+      const g = parseInt(m[2], 10) / 255;
+      const b = parseInt(m[3], 10) / 255;
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
       const mesh = new THREE.Mesh(boxGeom, mat);
-      mesh.position.set(v.x, v.y, v.z);
-      group.add(mesh);
+      mesh.position.set(v.x + 0.5, v.y + 0.5, v.z + 0.5);
+      modelGroup.add(mesh);
     }
 
-    // 6) Add bounding box around the voxel model
+    // Add a bounding box helper using the same coordinate system.
     {
-      // The box extends from [minX..maxX+1] etc. We'll shift it by the same center-of-mass offset
+      // The voxel data covers from [minX, minY, minZ] to [maxX+1, maxY+1, maxZ+1]
       const bbox = new THREE.Box3(
         new THREE.Vector3(minX, minY, minZ),
-        new THREE.Vector3(maxX+1, maxY+1, maxZ+1)
+        new THREE.Vector3(maxX + 1, maxY + 1, maxZ + 1)
       );
-      // Now shift the box by the same offset
-      bbox.translate( new THREE.Vector3(-centerMassX, -centerMassY, -centerMassZ) );
+      // If you want the bounding box to be computed on voxel centers,
+      // you could also add 0.5 to each component:
+      // new THREE.Vector3(minX + 0.5, minY + 0.5, minZ + 0.5) to
+      // new THREE.Vector3(maxX + 1.5, maxY + 1.5, maxZ + 1.5)
+      // For now, we assume the box in voxel coordinates is fine.
 
-      // Create a Box3Helper in a bright color
+      // Shift the bounding box by the same offset as the model:
+      bbox.translate(new THREE.Vector3(-modelGroup.position.x, -modelGroup.position.y, -modelGroup.position.z));
+
       const bboxHelper = new THREE.Box3Helper(bbox, 0xff00ff);
-      // Add to the same group so it rotates with the model
-      group.add(bboxHelper);
+      modelGroup.add(bboxHelper);
     }
 
-    // 7) Animate
+    // Animate only the yawGroup for pure left/right rotation.
     function animate() {
       requestAnimationFrame(animate);
-      group.rotation.y += 0.01;
-      group.rotation.x += 0.005;
+      yawGroup.rotation.y += 0.01;
       renderer.render(scene, camera);
     }
     animate();
+
+    // Debug: Log the world position of the voxel (0,0,0) center.
+    const voxelOriginWorld = new THREE.Vector3(0.5, 0.5, 0.5)
+      .applyMatrix4(modelGroup.matrixWorld);
+    console.log("Voxel (0,0,0) center world position:", voxelOriginWorld);
   }
+
+
 
   // Load the KVX file and display
   fetch('HEADA.kvx')
     .then(r => r.arrayBuffer())
     .then(loadKvxSlab6Full)
     .then(kvx => {
+      console.log(kvx);
       // 2D orthographic views
       drawView("topView",    kvx, 'x', 'y', 'z', false);
       drawView("bottomView", kvx, 'x', 'y', 'z', true);
@@ -187,6 +201,30 @@
 
       // 3D preview
       create3DPreview(kvx);
+
+
+      // For the voxel with file coordinates (0,0,0):
+      const voxelOrigin = { x: 0, y: 0, z: 0 };
+      const localCenter = {
+        x: voxelOrigin.x + 0.5,
+        y: voxelOrigin.y + 0.5,
+        z: voxelOrigin.z + 0.5,
+      };
+// If using pivot offset:
+      const worldCenterPivot = {
+        x: localCenter.x - kvx.xpiv,
+        y: localCenter.y - kvx.ypiv,
+        z: localCenter.z - kvx.zpiv,
+      };
+      console.log("Using pivot offset, voxel (0,0,0) drawn at:", worldCenterPivot);
+
+// Or, if using center-of-mass offset:
+      const worldCenterMass = {
+        x: localCenter.x - kvx.centerMassX,
+        y: localCenter.y - kvx.centerMassY,
+        z: localCenter.z - kvx.centerMassZ,
+      };
+      console.log("Using center-of-mass, voxel (0,0,0) drawn at:", worldCenterMass);
     })
     .catch(err => {
       console.error("Error loading KVX:", err);
