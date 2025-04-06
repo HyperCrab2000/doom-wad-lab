@@ -417,8 +417,12 @@ function initclosestcolorfast(dapal: Uint8Array): void {
 
 /* --------------- THE MAIN LOADER FUNCTION --------------- */
 
+/**
+ * Slab6-like KVX loader with 3-pass marking, flood fill, and face visibility.
+ * [All your existing code above... unchanged...]
+ */
+
 export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
-  // Clear global arrays for a fresh load:
   vbit.fill(0);
   voxdata = [];
   xlen.fill(0);
@@ -432,7 +436,7 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
   function skip(n:number){ ptr+=n; }
 
   // 1) Read header
-  let numbytes = readUint32(); // (unused)
+  let numbytes = readUint32();
   let xsiz = readUint32();
   let ysiz = readUint32();
   let zsiz = readUint32();
@@ -469,11 +473,10 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
     let palBytes = new Uint8Array(buffer, palPos, 768);
     fipalette.set(palBytes);
   }
-  // check pal
   checkpalimito64(fipalette);
   initclosestcolorfast(fipalette);
 
-  // ============= PASS 1: Mark surface slabs with setzrange1 ==================
+  // ============= PASS 1: Mark surface slabs ==============
   ptr = fidatpos;
   for (let x=0; x<xsiz; x++) {
     for (let y=0; y<ysiz; y++) {
@@ -481,15 +484,12 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
       if (!count) continue;
       let xy = (x*ysiz + y)*BUFZSIZ;
       while (count>0) {
-        let z1 = readByte();   // header[0]
-        let k  = readByte();   // header[1]
-        let vis= readByte();   // header[2], we skip
+        let z1 = readByte();
+        let k  = readByte();
+        let vis= readByte();
         count -= (k + 3);
         let z2 = z1 + k;
-        // skip color bytes
         skip(k);
-
-        // setzrange1
         setzrange1(xy, z1, z2);
       }
     }
@@ -515,7 +515,7 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
     }
   }
 
-  // ============= PASS 2: Clear slabs with setzrange0 ==================
+  // ============= PASS 2: Clear slabs ==============
   ptr = fidatpos;
   for (let x=0; x<xsiz; x++) {
     for (let y=0; y<ysiz; y++) {
@@ -529,16 +529,24 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
         count -= (k + 3);
         let z2 = z1 + k;
         skip(k);
-
         setzrange0(xy, z1, z2);
       }
     }
   }
 
-  // ============= PASS 3: Actually read color bytes, store in voxdata[] ==================
+  // ============= PASS 3: Actual color reading + bounding box + center of mass ==============
   voxdata = [];
   let numvoxs = 0;
   ptr = fidatpos;
+
+  // (ADDED) bounding box trackers
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  // (ADDED) center of mass accumulators
+  let sumX = 0, sumY = 0, sumZ = 0;
+
   for (let x=0; x<xsiz; x++){
     xlen[x] = 0;
     for (let y=0; y<ysiz; y++){
@@ -550,29 +558,66 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
       while (count>0) {
         let z1 = readByte();
         let k  = readByte();
-        let visByte = readByte();  // not used here
+        let visByte = readByte();
         count -= (k + 3);
         let z2 = z1 + k;
+
         for (let z=z1; z<z2; z++){
           let col = readByte();
           let vis = getvis(x,y,z, xsiz, ysiz, zsiz);
+
           voxdata.push({ x, y, z, col, vis });
           ylen[x][y]++;
           numvoxs++;
+
+          // (ADDED) update bounding box
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          if (z < minZ) minZ = z;
+          if (z > maxZ) maxZ = z;
+
+          // (ADDED) accumulate center-of-mass
+          sumX += (x + 0.5);
+          sumY += (y + 0.5);
+          sumZ += (z + 0.5);
         }
       }
       xlen[x] += ylen[x][y];
     }
   }
 
-  // We are done. Return metadata + a color getter
+  // (ADDED) now compute final bounding box center (boxCenterX/Y/Z)
+  // each voxel extends from (x) to (x+1), so we do (maxX+1)
+  const boxCenterX = (minX + (maxX + 1)) * 0.5;
+  const boxCenterY = (minY + (maxY + 1)) * 0.5;
+  const boxCenterZ = (minZ + (maxZ + 1)) * 0.5;
+
+  // (ADDED) compute center of mass (centerMassX/Y/Z)
+  // note: if no voxels, we might want to check numvoxs>0
+  let centerMassX = 0, centerMassY = 0, centerMassZ = 0;
+  if (numvoxs > 0) {
+    centerMassX = sumX / numvoxs;
+    centerMassY = sumY / numvoxs;
+    centerMassZ = sumZ / numvoxs;
+  }
+
+  // Return final data
   return {
     xsiz, ysiz, zsiz,
     xpiv, ypiv, zpiv,
-    palette: fipalette.slice(), // copy if you want
+    palette: fipalette.slice(),
     voxdata,
+
+    // (ADDED) bounding box
+    minX, maxX, minY, maxY, minZ, maxZ,
+    boxCenterX, boxCenterY, boxCenterZ,
+
+    // (ADDED) center of mass
+    centerMassX, centerMassY, centerMassZ,
+
     getColor: (cIndex: number) => {
-      // Slab6 uses the possibly shifted palette
       let r = fipalette[cIndex*3+0] * 4;
       let g = fipalette[cIndex*3+1] * 4;
       let b = fipalette[cIndex*3+2] * 4;

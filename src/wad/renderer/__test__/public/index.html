@@ -25,9 +25,11 @@
 <canvas id="backView" width="512" height="512"></canvas>
 <canvas id="frontView" width="512" height="512"></canvas>
 <canvas id="sideView" width="512" height="512"></canvas>
+<canvas id="webglView"></canvas>
 
 <script type="module">
-  import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader';
+  import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.js';
+  import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
 
   // A helper to draw a 2D "view" from the voxel data
   // We'll create a small function that:
@@ -42,97 +44,149 @@
     const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
 
     // We'll figure out numeric sizes:
-    let sizeH = (axisH==='x') ? xsiz : (axisH==='y'? ysiz : zsiz);
-    let sizeV = (axisV==='x') ? xsiz : (axisV==='y'? ysiz : zsiz);
+    let sizeH = (axisH === 'x') ? xsiz : (axisH === 'y' ? ysiz : zsiz);
+    let sizeV = (axisV === 'x') ? xsiz : (axisV === 'y' ? ysiz : zsiz);
 
     // We'll store the voxel color index for the "front-most" voxel
     // or "top-most" voxel (depending on reverseDepth) in each cell.
-    // We'll do a pass of the voxel list to find the visible one.
-    // This is a naive approach (O(n) per pixel), but simpler than a map approach.
-    // For real usage, you might build a map or something.
     const pixelColorIndex = new Array(sizeH * sizeV).fill(-1);
 
-    // For scanning logic, define a function to get axis value from (x,y,z)
-    function getAxisVal(axis, vx) {
-      switch(axis){
-        case 'x': return vx.x;
-        case 'y': return vx.y;
-        case 'z': return vx.z;
-      }
+    function getAxisVal(axis, v) {
+      if (axis === 'x') return v.x;
+      if (axis === 'y') return v.y;
+      return v.z; // 'z'
     }
 
-    // We'll define the "depth" iteration:
-    // if reverseDepth=true, we want to prioritize bigger axisD first
-    const depthOrder = reverseDepth
-      ? (a,b) => b - a
-      : (a,b) => a - b;
-
-    // Let's group the voxels by (axisH, axisV).
-    // Then within each group, pick the top-most (or front-most) by sorting on axisD.
-    // This is still big, but simpler to illustrate.
-    // We'll do it in a single pass:
+    // For each voxel, we pick whichever is "on top" or "in front"
     for (let v of voxdata) {
-      const h = getAxisVal(axisH, v);
-      const v2= getAxisVal(axisV, v);
-      if (h<0 || v2<0) continue; // out of range
-      if (h>=sizeH || v2>=sizeV) continue;
+      const hVal = getAxisVal(axisH, v);
+      const vVal = getAxisVal(axisV, v);
+      if (hVal < 0 || vVal < 0) continue;
+      if (hVal >= sizeH || vVal >= sizeV) continue;
 
-      // Compare depth with existing
-      const d = getAxisVal(axisD, v);
-      let idx = (v2*sizeH + h);
-      if (pixelColorIndex[idx]===-1) {
-        // we haven't chosen a voxel for this cell yet
-        pixelColorIndex[idx] = v.col | (d<<16);
-        // store color in lower bits, store depth in upper bits
+      const dVal = getAxisVal(axisD, v);
+      let idx = vVal * sizeH + hVal;
+      if (pixelColorIndex[idx] === -1) {
+        // first voxel in this cell
+        pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
       } else {
-        // compare depths
-        let oldVal = pixelColorIndex[idx];
-        let oldDepth = oldVal>>>16;
-        if ( (reverseDepth && d>oldDepth) || (!reverseDepth && d<oldDepth) ) {
-          // we replace with the new voxel
-          pixelColorIndex[idx] = (v.col & 0xffff) | (d<<16);
+        let old = pixelColorIndex[idx];
+        let oldDepth = old >>> 16;
+        if ((reverseDepth && dVal > oldDepth) || (!reverseDepth && dVal < oldDepth)) {
+          pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
         }
       }
     }
 
-    // Now we paint
-    const cellSize = Math.floor(Math.min(cvs.width/sizeH, cvs.height/sizeV));
-    const offx = (cvs.width - cellSize*sizeH)/2;
-    const offy = (cvs.height- cellSize*sizeV)/2;
+    // Draw the final 2D image
+    const cellSize = Math.floor(Math.min(cvs.width / sizeH, cvs.height / sizeV));
+    const offx = (cvs.width - cellSize * sizeH) / 2;
+    const offy = (cvs.height - cellSize * sizeV) / 2;
 
-    // We'll flip vertical so 0 is at bottom:
-    for (let vv=0; vv<sizeV; vv++) {
-      for (let hh=0; hh<sizeH; hh++) {
-        let colorDepth = pixelColorIndex[vv*sizeH + hh];
-        if (colorDepth===-1) continue;
-        let cIndex = colorDepth & 0xffff;
+    // We'll flip vertical so 0 is at bottom by using vv directly
+    for (let vv = 0; vv < sizeV; vv++) {
+      for (let hh = 0; hh < sizeH; hh++) {
+        let cd = pixelColorIndex[vv * sizeH + hh];
+        if (cd === -1) continue;
+        let cIndex = cd & 0xffff;
         ctx.fillStyle = getColor(cIndex);
-        let drawY = vv;
-        ctx.fillRect(offx + hh*cellSize, offy + drawY*cellSize, cellSize, cellSize);
+        ctx.fillRect(offx + hh * cellSize, offy + vv * cellSize, cellSize, cellSize);
       }
     }
   }
 
-  // Now load some KVX file (edit the filename if needed)
+  // Build a simple 3D preview with naive "cube per voxel"
+  function create3DPreview(kvx) {
+    const {
+      xsiz, ysiz, zsiz,
+      minX, maxX, minY, maxY, minZ, maxZ,         // bounding box corners
+      centerMassX, centerMassY, centerMassZ,      // center of mass
+      voxdata,
+      getColor
+    } = kvx;
+
+    // 1) Setup a Three.js renderer using #webglView
+    const renderer = new THREE.WebGLRenderer({
+      canvas: document.getElementById('webglView'),
+      antialias: true,
+    });
+    renderer.setSize(512, 512);
+    renderer.setClearColor(0x222222, 1);
+
+    // 2) Create a scene & camera
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
+    camera.lookAt(new THREE.Vector3(0,0,0));
+
+    // 3) Optional light
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(1,1,2).normalize();
+    scene.add(light);
+
+    // 4) Create a group for voxel cubes
+    const group = new THREE.Group();
+    scene.add(group);
+
+    // Shift so we rotate around the center of mass
+    group.position.set(-centerMassX, -centerMassY, -centerMassZ);
+
+    // 5) Build a cube per voxel
+    const boxGeom = new THREE.BoxGeometry(1,1,1);
+    for (let v of voxdata) {
+      const colStr = getColor(v.col);
+      const m = colStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+      if (!m) continue;
+      const r = parseInt(m[1], 10)/255;
+      const g = parseInt(m[2], 10)/255;
+      const b = parseInt(m[3], 10)/255;
+
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r,g,b) });
+      const mesh = new THREE.Mesh(boxGeom, mat);
+      mesh.position.set(v.x, v.y, v.z);
+      group.add(mesh);
+    }
+
+    // 6) Add bounding box around the voxel model
+    {
+      // The box extends from [minX..maxX+1] etc. We'll shift it by the same center-of-mass offset
+      const bbox = new THREE.Box3(
+        new THREE.Vector3(minX, minY, minZ),
+        new THREE.Vector3(maxX+1, maxY+1, maxZ+1)
+      );
+      // Now shift the box by the same offset
+      bbox.translate( new THREE.Vector3(-centerMassX, -centerMassY, -centerMassZ) );
+
+      // Create a Box3Helper in a bright color
+      const bboxHelper = new THREE.Box3Helper(bbox, 0xff00ff);
+      // Add to the same group so it rotates with the model
+      group.add(bboxHelper);
+    }
+
+    // 7) Animate
+    function animate() {
+      requestAnimationFrame(animate);
+      group.rotation.y += 0.01;
+      group.rotation.x += 0.005;
+      renderer.render(scene, camera);
+    }
+    animate();
+  }
+
+  // Load the KVX file and display
   fetch('HEADA.kvx')
     .then(r => r.arrayBuffer())
-    .then(buffer => {
-      return loadKvxSlab6Full(buffer);
-    })
+    .then(loadKvxSlab6Full)
     .then(kvx => {
-      // Once loaded, draw top, front, side.
+      // 2D orthographic views
+      drawView("topView",    kvx, 'x', 'y', 'z', false);
+      drawView("bottomView", kvx, 'x', 'y', 'z', true);
+      drawView("backView",   kvx, 'x', 'z', 'y', false);
+      drawView("frontView",  kvx, 'x', 'z', 'y', true);
+      drawView("sideView",   kvx, 'y', 'z', 'x', true);
 
-      drawView("topView",    kvx, 'x','y','z', false);
-      // Top = x vs y, scanning z from high to low => reverseDepth=true
-      drawView("bottomView", kvx, 'x','y','z', true);
-
-      // Front = x vs z, scanning y from high to low => "front"
-      drawView("backView", kvx, "x", "z", "y", false);
-
-      drawView("frontView", kvx, 'x','z','y', true);
-
-      // NEW (side right-side up)
-      drawView("sideView", kvx, "y", "z", "x", true);
+      // 3D preview
+      create3DPreview(kvx);
     })
     .catch(err => {
       console.error("Error loading KVX:", err);
