@@ -1,91 +1,136 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>KVX Viewer</title>
+  <title>Slab6 KVX Viewer</title>
   <style>
       body {
-          font-family: monospace;
           background: #111;
-          color: white;
-          padding: 20px;
+          color: #eee;
+          font-family: sans-serif;
+          margin: 20px;
       }
       canvas {
           border: 1px solid #444;
-          margin: 10px;
-          background: #000;
+          background: black;
+          margin: 5px;
       }
   </style>
 </head>
 <body>
-<h1>KVX Viewer</h1>
+<h1>Slab6-Style KVX Viewer</h1>
 <p>Top | Front | Side</p>
 <canvas id="topView" width="512" height="512"></canvas>
 <canvas id="frontView" width="512" height="512"></canvas>
 <canvas id="sideView" width="512" height="512"></canvas>
 
 <script type="module">
-  import { loadKvxBuffer } from '@/src/wad/parser/kvxLoader';
+  import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader';
 
-  function drawView(canvasId, voxelMap, meta, getColor, axes, depthKey, reverse = false) {
-    const canvas = document.getElementById(canvasId);
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // A helper to draw a 2D "view" from the voxel data
+  // We'll create a small function that:
+  //  - picks which axes are horizontal/vertical on the canvas
+  //  - picks the "depth" axis to figure out which voxel is visible
+  //    (like scanning from top down or front to back)
+  function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth=false) {
+    const cvs = document.getElementById(canvasId);
+    const ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-    const [ax1, ax2] = axes;
-    const size1 = meta[`${ax1}Size`];
-    const size2 = meta[`${ax2}Size`];
-    const sizeD = meta[`${depthKey}Size`];
+    const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
 
-    const cellSize = Math.floor(Math.min(canvas.width / size1, canvas.height / size2));
-    const offsetX = (canvas.width - size1 * cellSize) / 2;
-    const offsetY = (canvas.height - size2 * cellSize) / 2;
+    // We'll figure out numeric sizes:
+    let sizeH = (axisH==='x') ? xsiz : (axisH==='y'? ysiz : zsiz);
+    let sizeV = (axisV==='x') ? xsiz : (axisV==='y'? ysiz : zsiz);
 
-    for (let a2 = 0; a2 < size2; a2++) {
-      for (let a1 = 0; a1 < size1; a1++) {
-        let colorIndex = null;
+    // We'll store the voxel color index for the "front-most" voxel
+    // or "top-most" voxel (depending on reverseDepth) in each cell.
+    // We'll do a pass of the voxel list to find the visible one.
+    // This is a naive approach (O(n) per pixel), but simpler than a map approach.
+    // For real usage, you might build a map or something.
+    const pixelColorIndex = new Array(sizeH * sizeV).fill(-1);
 
-        const scan = reverse
-          ? [...Array(sizeD).keys()].reverse()
-          : [...Array(sizeD).keys()];
+    // For scanning logic, define a function to get axis value from (x,y,z)
+    function getAxisVal(axis, vx) {
+      switch(axis){
+        case 'x': return vx.x;
+        case 'y': return vx.y;
+        case 'z': return vx.z;
+      }
+    }
 
-        for (let d of scan) {
-          const coord = { x: 0, y: 0, z: 0 };
-          coord[ax1] = a1;
-          coord[ax2] = a2;
-          coord[depthKey] = d;
-          const key = `${coord.x},${coord.y},${coord.z}`;
+    // We'll define the "depth" iteration:
+    // if reverseDepth=true, we want to prioritize bigger axisD first
+    const depthOrder = reverseDepth
+      ? (a,b) => b - a
+      : (a,b) => a - b;
 
-          if (voxelMap.has(key)) {
-            colorIndex = voxelMap.get(key);
-            break;
-          }
+    // Let's group the voxels by (axisH, axisV).
+    // Then within each group, pick the top-most (or front-most) by sorting on axisD.
+    // This is still big, but simpler to illustrate.
+    // We'll do it in a single pass:
+    for (let v of voxdata) {
+      const h = getAxisVal(axisH, v);
+      const v2= getAxisVal(axisV, v);
+      if (h<0 || v2<0) continue; // out of range
+      if (h>=sizeH || v2>=sizeV) continue;
+
+      // Compare depth with existing
+      const d = getAxisVal(axisD, v);
+      let idx = (v2*sizeH + h);
+      if (pixelColorIndex[idx]===-1) {
+        // we haven't chosen a voxel for this cell yet
+        pixelColorIndex[idx] = v.col | (d<<16);
+        // store color in lower bits, store depth in upper bits
+      } else {
+        // compare depths
+        let oldVal = pixelColorIndex[idx];
+        let oldDepth = oldVal>>>16;
+        if ( (reverseDepth && d>oldDepth) || (!reverseDepth && d<oldDepth) ) {
+          // we replace with the new voxel
+          pixelColorIndex[idx] = (v.col & 0xffff) | (d<<16);
         }
+      }
+    }
 
-        if (colorIndex !== null) {
-          ctx.fillStyle = getColor(colorIndex);
-          ctx.fillRect(
-            offsetX + a1 * cellSize,
-            offsetY + (size2 - a2 - 1) * cellSize,
-            cellSize,
-            cellSize
-          );
-        }
+    // Now we paint
+    const cellSize = Math.floor(Math.min(cvs.width/sizeH, cvs.height/sizeV));
+    const offx = (cvs.width - cellSize*sizeH)/2;
+    const offy = (cvs.height- cellSize*sizeV)/2;
+
+    // We'll flip vertical so 0 is at bottom:
+    for (let vv=0; vv<sizeV; vv++) {
+      for (let hh=0; hh<sizeH; hh++) {
+        let colorDepth = pixelColorIndex[vv*sizeH + hh];
+        if (colorDepth===-1) continue;
+        let cIndex = colorDepth & 0xffff;
+        ctx.fillStyle = getColor(cIndex);
+        let drawY = (sizeV-1 - vv);
+        ctx.fillRect(offx + hh*cellSize, offy + drawY*cellSize, cellSize, cellSize);
       }
     }
   }
 
-
+  // Now load some KVX file (edit the filename if needed)
   fetch('SARGA.kvx')
     .then(r => r.arrayBuffer())
     .then(buffer => {
-      const { voxelMap, meta, getColor } = loadKvxBuffer(buffer);
+      return loadKvxSlab6Full(buffer);
+    })
+    .then(kvx => {
+      // Once loaded, draw top, front, side.
+      // Top = x vs y, scanning z from high to low => reverseDepth=true
+      drawView("topView", kvx, 'x','y','z', true);
 
-      drawView('topView', voxelMap, meta, getColor, ['x', 'y'], 'z', true);
-      drawView('frontView', voxelMap, meta, getColor, ['x', 'z'], 'y');
-      drawView('sideView', voxelMap, meta, getColor, ['z', 'y'], 'x');
+      // Front = x vs z, scanning y from high to low => "front"
+      drawView("frontView", kvx, 'x','z','y', true);
 
-
+      // Side = y vs z, scanning x => if you want a left-side or right-side
+      // Let's do scanning x from left to right => reverseDepth=false
+      drawView("sideView", kvx, 'y','z','x', false);
+    })
+    .catch(err => {
+      console.error("Error loading KVX:", err);
     });
 </script>
 </body>
