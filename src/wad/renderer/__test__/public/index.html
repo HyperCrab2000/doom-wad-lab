@@ -1,476 +1,92 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Voxel Renderer Test</title>
+  <title>KVX Viewer</title>
   <style>
       body {
-          margin: 0;
-          background-color: black;
+          font-family: monospace;
+          background: #111;
+          color: white;
+          padding: 20px;
       }
       canvas {
-          display: block;
-          margin: 50px auto;
-          border: 1px solid #333;
-      }
-      #info {
-          position: absolute;
-          top: 10px;
-          left: 10px;
-          background: rgba(0, 0, 0, 0.7);
-          color: #fff;
-          padding: 8px;
-          font-family: monospace;
-          z-index: 100;
+          border: 1px solid #444;
+          margin: 10px;
+          background: #000;
       }
   </style>
 </head>
 <body>
+<h1>KVX Viewer</h1>
+<p>Top | Front | Side</p>
+<canvas id="topView" width="512" height="512"></canvas>
+<canvas id="frontView" width="512" height="512"></canvas>
+<canvas id="sideView" width="512" height="512"></canvas>
 
-<!-- 🎯 Info Panel for Debugging -->
-<div id="info">
-  <strong>Voxel Renderer Debug Info</strong><br />
-  <div id="status">🔍 Loading...</div>
-  <div id="details"></div>
-</div>
-<canvas id="topViewCanvas" width="600" height="600"></canvas>
-<canvas id="frontViewCanvas" width="600" height="600"></canvas>
-<canvas id="sideViewCanvas" width="600" height="600"></canvas>
-<canvas id="voxelCanvas" width="1024" height="1024"></canvas>
-
-<!-- ✅ Correct paths using Vite aliases -->
 <script type="module">
   import { loadKvxBuffer } from '@/src/wad/parser/kvxLoader';
-  import { voxelRenderer } from '@/src/wad/renderer/voxelRenderer';
-  import { mat4, vec3 } from 'gl-matrix';
 
-  console.log('🔍 Starting voxel rendering test...');
-
-  function createTestCube() {
-    const vertices = new Float32Array([
-      -1, -1, -1,
-      1, -1, -1,
-      1, 1, -1,
-      -1, 1, -1,
-      -1, -1, 1,
-      1, -1, 1,
-      1, 1, 1,
-      -1, 1, 1,
-    ]);
-
-    const indices = new Uint16Array([
-      0, 1, 2, 0, 2, 3, // Front face
-      4, 5, 6, 4, 6, 7, // Back face
-      0, 3, 7, 0, 7, 4, // Left face
-      1, 5, 6, 1, 6, 2, // Right face
-      3, 2, 6, 3, 6, 7, // Top face
-      0, 1, 5, 0, 5, 4, // Bottom face
-    ]);
-
-    return { vertices, indices };
-  }
-
-  function normalizeVertices(vertices, size = 10.0) {
-    let minX = Infinity,
-      minY = Infinity,
-      minZ = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity,
-      maxZ = -Infinity;
-
-    for (let i = 0; i < vertices.length; i += 3) {
-      const x = vertices[i];
-      const y = vertices[i + 1];
-      const z = vertices[i + 2];
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      minZ = Math.min(minZ, z);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-      maxZ = Math.max(maxZ, z);
-    }
-
-    // Calculate scale factor
-    const scaleX = size / (maxX - minX);
-    const scaleY = size / (maxY - minY);
-    const scaleZ = size / (maxZ - minZ);
-    const scale = Math.min(scaleX, scaleY, scaleZ); // Uniform scaling
-
-    // Normalize vertices
-    const normalizedVertices = new Float32Array(vertices.length);
-    for (let i = 0; i < vertices.length; i += 3) {
-      normalizedVertices[i] = (vertices[i] - minX) * scale - size / 2;
-      normalizedVertices[i + 1] = (vertices[i + 1] - minY) * scale - size / 2;
-      normalizedVertices[i + 2] = (vertices[i + 2] - minZ) * scale - size / 2;
-    }
-
-    console.log('✅ Vertices normalized successfully!');
-    return normalizedVertices;
-  }
-
-
-  function drawTopView(voxelMap, meta) {
-    const canvas = document.getElementById('topViewCanvas');
+  function drawView(canvasId, voxelMap, meta, getColor, axes, depthKey, reverse = false) {
+    const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const cellSize = Math.min(canvas.width / meta.xSize, canvas.height / meta.ySize);
-    drawGrid(ctx, meta.xSize, meta.ySize, cellSize);
+    const [ax1, ax2] = axes;
+    const size1 = meta[`${ax1}Size`];
+    const size2 = meta[`${ax2}Size`];
+    const sizeD = meta[`${depthKey}Size`];
 
-    voxelMap.forEach((colorIndex, key) => {
-      const [x, y, z] = key.split(',').map(Number);
+    const cellSize = Math.floor(Math.min(canvas.width / size1, canvas.height / size2));
+    const offsetX = (canvas.width - size1 * cellSize) / 2;
+    const offsetY = (canvas.height - size2 * cellSize) / 2;
 
-      // ✅ Corrected top view orientation (x, y)
-      const drawX = x + meta.pivotX;
-      const drawY = y + meta.pivotY;
+    for (let a2 = 0; a2 < size2; a2++) {
+      for (let a1 = 0; a1 < size1; a1++) {
+        let colorIndex = null;
 
-      // ✅ Convert palette color to RGB
-      const color = getVoxelColor(colorIndex);
-      ctx.fillStyle = color;
-      ctx.fillRect(drawX * cellSize, (meta.ySize - 1 - drawY) * cellSize, cellSize, cellSize);
-    });
+        const scan = reverse
+          ? [...Array(sizeD).keys()].reverse()
+          : [...Array(sizeD).keys()];
 
-    console.log('✅ Top View rendered with colors.');
-  }
+        for (let d of scan) {
+          const coord = { x: 0, y: 0, z: 0 };
+          coord[ax1] = a1;
+          coord[ax2] = a2;
+          coord[depthKey] = d;
+          const key = `${coord.x},${coord.y},${coord.z}`;
 
-  function drawFrontView(voxelMap, meta) {
-    const canvas = document.getElementById('frontViewCanvas');
-    const ctx = canvas.getContext('2d');
+          if (voxelMap.has(key)) {
+            colorIndex = voxelMap.get(key);
+            break;
+          }
+        }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const cellSize = Math.min(canvas.width / meta.xSize, canvas.height / meta.zSize);
-    drawGrid(ctx, meta.xSize, meta.zSize, cellSize);
-
-    voxelMap.forEach((colorIndex, key) => {
-      const [x, y, z] = key.split(',').map(Number);
-
-      // ✅ Corrected front view orientation (x, z)
-      const drawX = x + meta.pivotX;
-      const drawZ = z + meta.pivotZ;
-
-      const color = getVoxelColor(colorIndex);
-      ctx.fillStyle = color;
-      ctx.fillRect(drawX * cellSize, (meta.zSize - 1 - drawZ) * cellSize, cellSize, cellSize);
-    });
-
-    console.log('✅ Front View rendered with colors.');
-  }
-
-  function drawSideView(voxelMap, meta) {
-    const canvas = document.getElementById('sideViewCanvas');
-    const ctx = canvas.getContext('2d');
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const cellSize = Math.min(canvas.width / meta.ySize, canvas.height / meta.zSize);
-    drawGrid(ctx, meta.ySize, meta.zSize, cellSize);
-
-    voxelMap.forEach((colorIndex, key) => {
-      const [x, y, z] = key.split(',').map(Number);
-
-      // ✅ Corrected side view orientation (y, z)
-      const drawY = y + meta.pivotY;
-      const drawZ = z + meta.pivotZ;
-
-      const color = getVoxelColor(colorIndex);
-      ctx.fillStyle = color;
-      ctx.fillRect(drawY * cellSize, (meta.zSize - 1 - drawZ) * cellSize, cellSize, cellSize);
-    });
-
-    console.log('✅ Side View rendered with colors.');
-  }
-
-
-
-  function drawGrid(ctx, cols, rows, cellSize) {
-    ctx.strokeStyle = '#444'; // Light gray for grid
-    ctx.lineWidth = 0.5;
-
-    // Draw vertical lines
-    for (let x = 0; x <= cols; x++) {
-      ctx.beginPath();
-      ctx.moveTo(x * cellSize, 0);
-      ctx.lineTo(x * cellSize, rows * cellSize);
-      ctx.stroke();
-    }
-
-    // Draw horizontal lines
-    for (let y = 0; y <= rows; y++) {
-      ctx.beginPath();
-      ctx.moveTo(0, y * cellSize);
-      ctx.lineTo(cols * cellSize, y * cellSize);
-      ctx.stroke();
-    }
-  }
-
-
-  function getVoxelColor(colorIndex) {
-    // 🎨 Basic KVX Palette - You can replace this with actual Doom Palette if needed
-    const palette = [
-      '#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFFFFF',
-      '#880000', '#008800', '#000088', '#888800', '#880088', '#008888', '#444444', '#BBBBBB',
-      '#FF8800', '#88FF00', '#0088FF', '#FF0088', '#88FF88', '#8888FF', '#FF8888', '#FFFF88',
-    ];
-
-    // ✅ Safety check to avoid out-of-bounds color
-    if (colorIndex >= 0 && colorIndex < palette.length) {
-      return palette[colorIndex];
-    }
-
-    // ❗ Default to magenta for unknown colors
-    return '#FF00FF'; // Magenta to detect uncolored voxels
-  }
-
-
-  async function loadAndRenderVoxel() {
-    const statusEl = document.getElementById('status');
-    const detailsEl = document.getElementById('details');
-
-    try {
-      statusEl.innerText = '📡 Loading SARGC.kvx...';
-      console.log('📡 Loading SARGA.kvx...');
-      const response = await fetch('/SARGC.kvx');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch SARGC.kvx: ${response.statusText}`);
+        if (colorIndex !== null) {
+          ctx.fillStyle = getColor(colorIndex);
+          ctx.fillRect(
+            offsetX + a1 * cellSize,
+            offsetY + (size2 - a2 - 1) * cellSize,
+            cellSize,
+            cellSize
+          );
+        }
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      console.log(`✅ Loaded SARGC.kvx with ${arrayBuffer.byteLength} bytes`);
-      statusEl.innerText = `✅ Loaded KVX - ${arrayBuffer.byteLength} bytes`;
-
-      const { mesh, meta, voxelMap } = loadKvxBuffer(arrayBuffer);
-      const { slabData } = meta;
-      console.log('✅ KVX parsed successfully. Initializing renderer...');
-      console.log('📏 Voxel metadata:', meta);
-      console.log('🧊 Mesh vertices length:', mesh.vertices.length);
-      console.log('📡 Mesh indices length:', mesh.indices.length);
-
-      drawTopView(voxelMap, meta);
-      drawSideView(voxelMap, meta);
-      drawFrontView(voxelMap, meta);
-
-      // Normalize voxel vertices before rendering
-      mesh.vertices = normalizeVertices(mesh.vertices, 20.0);
-
-      detailsEl.innerHTML = `
-        <strong>Mesh Info:</strong><br />
-        Vertices: ${mesh.vertices.length} <br />
-        Indices: ${mesh.indices.length} <br />
-        Dimensions: ${meta.xSize} x ${meta.ySize} x ${meta.zSize} <br />
-      `;
-
-      // 🎯 Calculate bounding box and center
-      const boundingBox = calculateBoundingBox(mesh.vertices);
-      const center = calculateCenter(boundingBox);
-      console.log('📦 Bounding Box:', boundingBox);
-      console.log('🎯 Mesh center:', center);
-
-      const canvas = document.getElementById('voxelCanvas');
-      const gl = canvas.getContext('webgl2');
-      if (!gl) {
-        console.error('❌ WebGL2 not supported. Falling back to WebGL.');
-        statusEl.innerText = '❌ WebGL2 not supported.';
-        return;
-      }
-
-      // ✅ Initialize voxelRenderer using your shaders
-      voxelRenderer.init(gl);
-
-      gl.disable(gl.CULL_FACE); // Disable face culling for testing
-      gl.disable(gl.DEPTH_TEST); // Disable depth test to make sure nothing is culled
-      gl.clearColor(0.5, 0.5, 0.3, 1.0); // Bright red background for better visibility
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-
-      console.log('✅ voxelRenderer initialized successfully!');
-      statusEl.innerText = '✅ voxelRenderer initialized!';
-
-      // Dynamically calculate camera distance based on bounding box size
-      const maxDimension = Math.max(
-        boundingBox[3] - boundingBox[0],
-        boundingBox[4] - boundingBox[1],
-        boundingBox[5] - boundingBox[2]
-      );
-      const distance = maxDimension * 2.5; // Move the camera closer
-
-      console.log('📸 Camera distance:', distance);
-
-      // 🎥 Setup View and Projection Matrices
-      const viewMatrix = mat4.create();
-      mat4.lookAt(
-        viewMatrix,
-        [center[0], center[1] + maxDimension, center[2] + distance], // Position camera dynamically
-        center, // Look at the center of the voxel
-        [0, 1, 0]
-      );
-
-      const projectionMatrix = mat4.create();
-      mat4.perspective(
-        projectionMatrix,
-        (1 * Math.PI) / 20,
-        canvas.width / canvas.height,
-        0.5,
-        maxDimension * 5
-      );
-
-      console.log('🔭 View matrix:', viewMatrix);
-      console.log('🎥 Projection matrix:', projectionMatrix);
-      //
-      // // 🔍 Add a wireframe pass for debugging
-      voxelRenderer.renderWireframe(gl, mesh, viewMatrix, projectionMatrix, center);
-
-      // 🕹️ Render the voxel with test parameters
-      voxelRenderer.render(gl, {
-        mesh,
-        position: [0, 0, 0],
-        rotation: 4,
-        viewMatrix,
-        projectionMatrix,
-        cameraPos: [center[0], center[1] + maxDimension, center[2] + distance],
-        lightIntensity: 1.0,
-      });
-
-      voxelRenderer.render(gl, {
-        mesh: {
-          vertices,
-          indices,
-        },
-        position: [0, 0, 0],
-        rotation: 45,
-        viewMatrix,
-        projectionMatrix,
-        cameraPos: [center[0], center[1] + maxDimension, center[2] + distance],
-        lightIntensity: 1.0,
-      });
-
-
-      console.log('✅ Voxel mesh rendered successfully!');
-      statusEl.innerText = '✅ Voxel rendered!';
-    } catch (error) {
-      console.error('❌ Voxel rendering failed:', error);
-      statusEl.innerText = `❌ Voxel rendering failed: ${error.message}`;
     }
   }
 
-  // 📏 Helper: Calculate Bounding Box of Voxel Mesh
-  function calculateBoundingBox(vertices) {
-    let minX = Infinity,
-      minY = Infinity,
-      minZ = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity,
-      maxZ = -Infinity;
 
-    for (let i = 0; i < vertices.length; i += 3) {
-      const x = vertices[i];
-      const y = vertices[i + 1];
-      const z = vertices[i + 2];
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      minZ = Math.min(minZ, z);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-      maxZ = Math.max(maxZ, z);
-    }
-    return [minX, minY, minZ, maxX, maxY, maxZ];
-  }
+  fetch('SARGA.kvx')
+    .then(r => r.arrayBuffer())
+    .then(buffer => {
+      const { voxelMap, meta, getColor } = loadKvxBuffer(buffer);
 
-  // 🎯 Helper: Calculate Center from Bounding Box
-  function calculateCenter(boundingBox) {
-    const centerX = (boundingBox[0] + boundingBox[3]) / 2;
-    const centerY = (boundingBox[1] + boundingBox[4]) / 2;
-    const centerZ = (boundingBox[2] + boundingBox[5]) / 2;
-    return [centerX, centerY, centerZ];
-  }
-
-  // 🕸️ Debugging: Render wireframe for easy visibility
-  // 🕸️ Debugging: Render wireframe for easy visibility
-  function renderWireframe(gl, mesh, viewMatrix, projectionMatrix, center) {
-    console.log('🕸️ Attempting to render wireframe for debugging...');
-
-    // Check if VAO is initialized
-    if (!mesh.vao) {
-      mesh.vao = gl.createVertexArray();
-      mesh.vbo = gl.createBuffer();
-      mesh.ibo = gl.createBuffer();
-
-      gl.bindVertexArray(mesh.vao);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
-      gl.bufferData(gl.ARRAY_BUFFER, mesh.vertices, gl.STATIC_DRAW);
-
-      if (!this.voxelShader || !this.voxelShader.program) {
-        console.error('❌ voxelShader not initialized properly!');
-        return;
-      }
-
-      const posLoc = gl.getAttribLocation(this.voxelShader.program, 'aPosition');
-      if (posLoc === -1) {
-        console.error('❌ Attribute aPosition not found in shader!');
-        return;
-      }
-      gl.enableVertexAttribArray(posLoc);
-      gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
-
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
-
-      gl.bindVertexArray(null);
-
-      console.log('✅ VAO initialized successfully!');
-    }
+      drawView('topView', voxelMap, meta, getColor, ['x', 'y'], 'z', true);
+      drawView('frontView', voxelMap, meta, getColor, ['x', 'z'], 'y');
+      drawView('sideView', voxelMap, meta, getColor, ['z', 'y'], 'x');
 
 
-
-    gl.useProgram(voxelRenderer.voxelShader.program);
-    gl.bindVertexArray(mesh.vao);
-
-    const modelMatrix = mat4.create();
-    mat4.translate(modelMatrix, modelMatrix, center);
-    mat4.rotateY(modelMatrix, modelMatrix, 0);
-
-    const modelViewMatrix = mat4.create();
-    mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
-
-    const modelViewProjMatrix = mat4.create();
-    mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
-
-    console.log('📡 Checking camera and object positions...');
-    console.log(`🎥 Camera Position: [${center[0]}, ${center[1] + maxDimension}, ${center[2] + distance}]`);
-    console.log('🎯 Model Matrix Center:', center);
-    console.log('📡 View Matrix:', viewMatrix);
-    console.log('🎥 Projection Matrix:', projectionMatrix);
-
-    // 🔥 Setup wireframe mode by drawing as LINES
-// 🕹️ Render the voxel mesh with solid fill
-    voxelRenderer.render(gl, {
-      mesh,
-      position: [0, 0, 0],
-      rotation: 45, // Rotate for perspective
-      viewMatrix,
-      projectionMatrix,
-      cameraPos: [center[0], center[1] + maxDimension, center[2] + distance],
-      lightIntensity: 1.0,
     });
-
-    // 🕸️ Render wireframe for debugging visibility
-    voxelRenderer.renderWireframe(gl, mesh, viewMatrix, projectionMatrix);
-
-    console.log('✅ Wireframe shader set. Drawing wireframe...');
-
-    // 🕸️ Draw wireframe with GL.LINES (instead of GL.TRIANGLES)
-    gl.drawElements(gl.LINES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
-
-    // Clean up
-    gl.bindVertexArray(null);
-    console.log('✅ Wireframe rendered successfully!');
-  }
-
-  // 🚀 Load and render voxel on page load
-  loadAndRenderVoxel();
 </script>
 </body>
 </html>
