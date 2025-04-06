@@ -97,12 +97,11 @@
 
   // Build a simple 3D preview with naive "cube per voxel"
   function create3DPreview(kvx) {
-    // Destructure all necessary metadata from the loader.
     const {
       xsiz, ysiz, zsiz,
-      minX, maxX, minY, maxY, minZ, maxZ,
+      minX, maxX, minY, maxY, minZ, maxZ,         // bounding box corners from file
+      centerMassX, centerMassY, centerMassZ,      // computed center of mass (from voxel centers)
       boxCenterX, boxCenterY, boxCenterZ,
-      centerMassX, centerMassY, centerMassZ,
       voxdata,
       getColor
     } = kvx;
@@ -115,27 +114,27 @@
     renderer.setSize(512, 512);
     renderer.setClearColor(0x222222, 1);
 
-    // Create scene and camera
+    // Create scene & camera
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
     camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
     camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-    // Create a parent group for yaw (left/right) rotation only.
+    // Create a parent group for yaw rotation (left/right)
     const yawGroup = new THREE.Group();
     scene.add(yawGroup);
 
-    // Create a model group that contains the voxel meshes.
+    // Create a subgroup for the model (voxel cubes)
     const modelGroup = new THREE.Group();
     yawGroup.add(modelGroup);
 
-    // Option 1: Use bounding-box center for horizontal pivot and keep vertical offset from center of mass.
-    // (You can adjust these as needed)
+    // Offset the modelGroup so that its pivot in X and Y comes from our desired center.
+    // For pure yaw rotation, you might use the bounding-box center for X/Y and keep vertical as center-of-mass.
     modelGroup.position.set(-boxCenterX, -boxCenterY, -centerMassZ);
-    // Option 2: To use the center-of-mass for all axes, uncomment the following:
+    // Alternatively, if you want to use center-of-mass for all axes, use:
     // modelGroup.position.set(-centerMassX, -centerMassY, -centerMassZ);
 
-    // Create a cube per voxel; note that we place each cube so that its center is at (x+0.5, y+0.5, z+0.5).
+    // Create voxel cubes; place each cube so its center is at (x+0.5, y+0.5, z+0.5)
     const boxGeom = new THREE.BoxGeometry(1, 1, 1);
     for (let v of voxdata) {
       const colStr = getColor(v.col);
@@ -150,27 +149,22 @@
       modelGroup.add(mesh);
     }
 
-    // Add a bounding box helper using the same coordinate system.
-    {
-      // The voxel data covers from [minX, minY, minZ] to [maxX+1, maxY+1, maxZ+1]
-      const bbox = new THREE.Box3(
-        new THREE.Vector3(minX, minY, minZ),
-        new THREE.Vector3(maxX + 1, maxY + 1, maxZ + 1)
-      );
-      // If you want the bounding box to be computed on voxel centers,
-      // you could also add 0.5 to each component:
-      // new THREE.Vector3(minX + 0.5, minY + 0.5, minZ + 0.5) to
-      // new THREE.Vector3(maxX + 1.5, maxY + 1.5, maxZ + 1.5)
-      // For now, we assume the box in voxel coordinates is fine.
-
-      // Shift the bounding box by the same offset as the model:
-      bbox.translate(new THREE.Vector3(-modelGroup.position.x, -modelGroup.position.y, -modelGroup.position.z));
-
-      const bboxHelper = new THREE.Box3Helper(bbox, 0xff00ff);
-      modelGroup.add(bboxHelper);
+    // Compute bounding box from final voxel world positions.
+    let tMin = new THREE.Vector3(Infinity, Infinity, Infinity);
+    let tMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    const offset = new THREE.Vector3(-modelGroup.position.x, -modelGroup.position.y, -modelGroup.position.z);
+    for (let v of voxdata) {
+      let pos = new THREE.Vector3(v.x + 0.5, v.y + 0.5, v.z + 0.5);
+      pos.add(offset);
+      tMin.min(pos);
+      tMax.max(pos);
     }
+    const bbox = new THREE.Box3(tMin, tMax);
+    const bboxHelper = new THREE.Box3Helper(bbox, 0xff00ff);
+    // Add bounding box helper to the modelGroup (not to an undefined variable)
+    modelGroup.add(bboxHelper);
 
-    // Animate only the yawGroup for pure left/right rotation.
+    // Animate only the yawGroup (pure left/right rotation)
     function animate() {
       requestAnimationFrame(animate);
       yawGroup.rotation.y += 0.01;
@@ -178,7 +172,7 @@
     }
     animate();
 
-    // Debug: Log the world position of the voxel (0,0,0) center.
+    // Debug: Log where voxel (0,0,0)'s center ends up in world coordinates.
     const voxelOriginWorld = new THREE.Vector3(0.5, 0.5, 0.5)
       .applyMatrix4(modelGroup.matrixWorld);
     console.log("Voxel (0,0,0) center world position:", voxelOriginWorld);
