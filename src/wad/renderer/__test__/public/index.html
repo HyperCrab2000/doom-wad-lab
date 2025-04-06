@@ -19,8 +19,10 @@
 </head>
 <body>
 <h1>Slab6-Style KVX Viewer</h1>
-<p>Top | Front | Side</p>
+<p>Top | Bottom | Back | Front | Side</p>
 <canvas id="topView" width="512" height="512"></canvas>
+<canvas id="bottomView" width="512" height="512"></canvas>
+<canvas id="backView" width="512" height="512"></canvas>
 <canvas id="frontView" width="512" height="512"></canvas>
 <canvas id="sideView" width="512" height="512"></canvas>
 
@@ -105,29 +107,32 @@
         if (colorDepth===-1) continue;
         let cIndex = colorDepth & 0xffff;
         ctx.fillStyle = getColor(cIndex);
-        let drawY = (sizeV-1 - vv);
+        let drawY = vv;
         ctx.fillRect(offx + hh*cellSize, offy + drawY*cellSize, cellSize, cellSize);
       }
     }
   }
 
   // Now load some KVX file (edit the filename if needed)
-  fetch('SARGA.kvx')
+  fetch('HEADA.kvx')
     .then(r => r.arrayBuffer())
     .then(buffer => {
       return loadKvxSlab6Full(buffer);
     })
     .then(kvx => {
       // Once loaded, draw top, front, side.
+
+      drawView("topView",    kvx, 'x','y','z', false);
       // Top = x vs y, scanning z from high to low => reverseDepth=true
-      drawView("topView", kvx, 'x','y','z', true);
+      drawView("bottomView", kvx, 'x','y','z', true);
 
       // Front = x vs z, scanning y from high to low => "front"
+      drawView("backView", kvx, "x", "z", "y", false);
+
       drawView("frontView", kvx, 'x','z','y', true);
 
-      // Side = y vs z, scanning x => if you want a left-side or right-side
-      // Let's do scanning x from left to right => reverseDepth=false
-      drawView("sideView", kvx, 'y','z','x', false);
+      // NEW (side right-side up)
+      drawView("sideView", kvx, "y", "z", "x", true);
     })
     .catch(err => {
       console.error("Error loading KVX:", err);
