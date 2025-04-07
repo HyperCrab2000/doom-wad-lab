@@ -1,259 +1,208 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Slab6 KVX Viewer</title>
-  <style>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Slab6 KVX Viewer</title>
+    <style>
       body {
-          background: #111;
-          color: #eee;
-          font-family: sans-serif;
-          margin: 20px;
+        background: #111;
+        color: #eee;
+        font-family: sans-serif;
+        margin: 20px;
       }
       canvas {
-          border: 1px solid #444;
-          background: black;
-          margin: 5px;
+        border: 1px solid #444;
+        background: black;
+        margin: 5px;
       }
-  </style>
-</head>
-<body>
-<h1>Slab6-Style KVX Viewer</h1>
-<p>Top | Bottom | Back | Front | Side</p>
-<canvas id="topView" width="512" height="512"></canvas>
-<canvas id="bottomView" width="512" height="512"></canvas>
-<canvas id="backView" width="512" height="512"></canvas>
-<canvas id="frontView" width="512" height="512"></canvas>
-<canvas id="sideView" width="512" height="512"></canvas>
-<canvas id="webglView"></canvas>
+    </style>
+  </head>
+  <body>
+    <h1>Slab6-Style KVX Viewer</h1>
+    <p>Top | Bottom | Back | Front | Side</p>
+    <canvas id="topView" width="512" height="512"></canvas>
+    <canvas id="bottomView" width="512" height="512"></canvas>
+    <canvas id="backView" width="512" height="512"></canvas>
+    <canvas id="frontView" width="512" height="512"></canvas>
+    <canvas id="sideView" width="512" height="512"></canvas>
+    <canvas id="webglView"></canvas>
 
-<script type="module">
-  import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.js';
-  import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    <script type="module">
+      import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.js';
+      import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
 
-  // A helper to draw a 2D "view" from the voxel data
-  // We'll create a small function that:
-  //  - picks which axes are horizontal/vertical on the canvas
-  //  - picks the "depth" axis to figure out which voxel is visible
-  //    (like scanning from top down or front to back)
-  function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth=false) {
-    const cvs = document.getElementById(canvasId);
-    const ctx = cvs.getContext('2d');
-    ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-    const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
-
-    // We'll figure out numeric sizes:
-    let sizeH = (axisH === 'x') ? xsiz : (axisH === 'y' ? ysiz : zsiz);
-    let sizeV = (axisV === 'x') ? xsiz : (axisV === 'y' ? ysiz : zsiz);
-
-    // We'll store the voxel color index for the "front-most" voxel
-    // or "top-most" voxel (depending on reverseDepth) in each cell.
-    const pixelColorIndex = new Array(sizeH * sizeV).fill(-1);
-
-    function getAxisVal(axis, v) {
-      if (axis === 'x') return v.x;
-      if (axis === 'y') return v.y;
-      return v.z; // 'z'
-    }
-
-    // For each voxel, we pick whichever is "on top" or "in front"
-    for (let v of voxdata) {
-      const hVal = getAxisVal(axisH, v);
-      const vVal = getAxisVal(axisV, v);
-      if (hVal < 0 || vVal < 0) continue;
-      if (hVal >= sizeH || vVal >= sizeV) continue;
-
-      const dVal = getAxisVal(axisD, v);
-      let idx = vVal * sizeH + hVal;
-      if (pixelColorIndex[idx] === -1) {
-        // first voxel in this cell
-        pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
-      } else {
-        let old = pixelColorIndex[idx];
-        let oldDepth = old >>> 16;
-        if ((reverseDepth && dVal > oldDepth) || (!reverseDepth && dVal < oldDepth)) {
-          pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
+      // A helper for 2D views (unchanged)
+      function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth = false) {
+        const cvs = document.getElementById(canvasId);
+        const ctx = cvs.getContext('2d');
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
+        let sizeH = axisH === 'x' ? xsiz : axisH === 'y' ? ysiz : zsiz;
+        let sizeV = axisV === 'x' ? xsiz : axisV === 'y' ? ysiz : zsiz;
+        const pixelColorIndex = new Array(sizeH * sizeV).fill(-1);
+        function getAxisVal(axis, v) {
+          if (axis === 'x') return v.x;
+          if (axis === 'y') return v.y;
+          return v.z;
         }
-      }
-    }
-
-    // Draw the final 2D image
-    const cellSize = Math.floor(Math.min(cvs.width / sizeH, cvs.height / sizeV));
-    const offx = (cvs.width - cellSize * sizeH) / 2;
-    const offy = (cvs.height - cellSize * sizeV) / 2;
-
-    // We'll flip vertical so 0 is at bottom by using vv directly
-    for (let vv = 0; vv < sizeV; vv++) {
-      for (let hh = 0; hh < sizeH; hh++) {
-        let cd = pixelColorIndex[vv * sizeH + hh];
-        if (cd === -1) continue;
-        let cIndex = cd & 0xffff;
-        ctx.fillStyle = getColor(cIndex);
-        ctx.fillRect(offx + hh * cellSize, offy + vv * cellSize, cellSize, cellSize);
-      }
-    }
-  }
-
-  // Build a simple 3D preview with naive "cube per voxel"
-  function create3DPreview(kvx) {
-    const {
-      xsiz, ysiz, zsiz,
-      minX, maxX, minY, maxY, minZ, maxZ,         // bounding box corners from file
-      centerMassX, centerMassY, centerMassZ,      // center of mass (from voxel centers)
-      boxCenterX, boxCenterY, boxCenterZ,         // bounding box center (if computed)
-      voxdata,
-      getColor
-    } = kvx;
-
-    // Setup Three.js renderer
-    const renderer = new THREE.WebGLRenderer({
-      canvas: document.getElementById('webglView'),
-      antialias: true,
-    });
-    renderer.setSize(512, 512);
-    renderer.setClearColor(0x222222, 1);
-
-    // Create scene & camera
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
-    camera.lookAt(new THREE.Vector3(0, 0, 0));
-
-    // Create a parent group for yaw (left/right) rotation
-    const yawGroup = new THREE.Group();
-    scene.add(yawGroup);
-
-    // Create a subgroup for the model (voxel cubes)
-    const modelGroup = new THREE.Group();
-    yawGroup.add(modelGroup);
-
-    // Here we choose a pivot. For instance, to rotate around the horizontal center, we use:
-    modelGroup.position.set(-boxCenterX, -boxCenterY, -centerMassZ);
-    // Alternatively, you could use center-of-mass for all axes:
-    // modelGroup.position.set(-centerMassX, -centerMassY, -centerMassZ);
-
-    // Create voxel cubes; place each cube so its center is at (x+0.5, y+0.5, z+0.5)
-    const boxGeom = new THREE.BoxGeometry(1, 1, 1);
-    for (let v of voxdata) {
-      const colStr = getColor(v.col);
-      const m = colStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
-      if (!m) continue;
-      const r = parseInt(m[1], 10) / 255;
-      const g = parseInt(m[2], 10) / 255;
-      const b = parseInt(m[3], 10) / 255;
-      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
-      const mesh = new THREE.Mesh(boxGeom, mat);
-      mesh.position.set(v.x + 0.5, v.y + 0.5, v.z + 0.5);
-      modelGroup.add(mesh);
-    }
-
-    // Add a bounding box helper computed from the actual drawn voxel positions.
-    let tMin = new THREE.Vector3(Infinity, Infinity, Infinity);
-    let tMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-    // Here, each voxel is drawn at (v.x+0.5, v.y+0.5, v.z+0.5) and then modelGroup is offset.
-    // So, we compute the final world position for each voxel center:
-    for (let v of voxdata) {
-      let pos = new THREE.Vector3(v.x + 0.5, v.y + 0.5, v.z + 0.5);
-      pos.add(modelGroup.position); // same offset as applied to all voxels
-      tMin.min(pos);
-      tMax.max(pos);
-    }
-    const bbox = new THREE.Box3(tMin, tMax);
-    const bboxHelper = new THREE.Box3Helper(bbox, 0xff00ff);
-    modelGroup.add(bboxHelper);
-
-    {
-      // We'll use the bounding box values computed from the file:
-      // (Assuming minX, maxX, minY, maxY, minZ, maxZ are already defined)
-      const gridSphereGeom = new THREE.SphereGeometry(0.2, 8, 8); // standard marker
-      const gridSphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false });
-      const highlightSphereGeom = new THREE.SphereGeometry(0.3, 8, 8); // larger marker for first voxel
-      const highlightSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
-
-      // Loop through the bounding box at intervals of 10.
-      // Use minX, minY, minZ from the loader data.
-      for (let x = minX; x <= maxX; x += 10) {
-        for (let y = minY; y <= maxY; y += 10) {
-          for (let z = minZ; z <= maxZ; z += 10) {
-            // Determine sphere material and geometry:
-            let sphere;
-            if (x === minX && y === minY && z === minZ) {
-              // This is the first voxel marker – highlight it.
-              sphere = new THREE.Mesh(highlightSphereGeom, highlightSphereMat);
-            } else {
-              sphere = new THREE.Mesh(gridSphereGeom, gridSphereMat);
-            }
-            // Place sphere at the voxel's drawn center:
-            // (Each voxel is drawn with its center at (x+0.5, y+0.5, z+0.5))
-            sphere.position.set(x + 0.5, y + 0.5, z + 0.5);
-            // The modelGroup is already shifted by (-pivot) so these positions are in model space.
-            modelGroup.add(sphere);
+        for (let v of voxdata) {
+          const hVal = getAxisVal(axisH, v);
+          const vVal = getAxisVal(axisV, v);
+          if (hVal < 0 || vVal < 0) continue;
+          if (hVal >= sizeH || vVal >= sizeV) continue;
+          const dVal = getAxisVal(axisD, v);
+          let idx = vVal * sizeH + hVal;
+          if (pixelColorIndex[idx] === -1) pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
+          else {
+            let old = pixelColorIndex[idx];
+            let oldDepth = old >>> 16;
+            if ((reverseDepth && dVal > oldDepth) || (!reverseDepth && dVal < oldDepth))
+              pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
+          }
+        }
+        const cellSize = Math.floor(Math.min(cvs.width / sizeH, cvs.height / sizeV));
+        const offx = (cvs.width - cellSize * sizeH) / 2;
+        const offy = (cvs.height - cellSize * sizeV) / 2;
+        for (let vv = 0; vv < sizeV; vv++) {
+          for (let hh = 0; hh < sizeH; hh++) {
+            let cd = pixelColorIndex[vv * sizeH + hh];
+            if (cd === -1) continue;
+            let cIndex = cd & 0xffff;
+            ctx.fillStyle = getColor(cIndex);
+            ctx.fillRect(offx + hh * cellSize, offy + vv * cellSize, cellSize, cellSize);
           }
         }
       }
-    }
 
+      // 3D preview: We assume file voxel coordinates are the centers of 1x1x1 cubes.
+      function create3DPreview(kvx) {
+        const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
 
-    // Animate only the yawGroup (pure left/right rotation)
-    function animate() {
-      requestAnimationFrame(animate);
-      yawGroup.rotation.y += 0.01;
-      renderer.render(scene, camera);
-    }
-    animate();
+        // STEP 1: Build voxel meshes (each cube centered at (v.x, v.y, v.z))
+        const boxGeom = new THREE.BoxGeometry(1, 1, 1);
+        const modelGroup = new THREE.Group();
+        for (let v of voxdata) {
+          const colStr = getColor(v.col);
+          const m = colStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+          if (!m) continue;
+          const r = parseInt(m[1], 10) / 255;
+          const g = parseInt(m[2], 10) / 255;
+          const b = parseInt(m[3], 10) / 255;
+          const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
+          const mesh = new THREE.Mesh(boxGeom, mat);
+          // Place the cube so its center is at (v.x, v.y, v.z)
+          mesh.position.set(v.x, v.y, v.z);
+          modelGroup.add(mesh);
+        }
 
-    // Debug: Log where voxel (0,0,0)'s center is drawn in world coordinates.
-    const voxelOriginWorld = new THREE.Vector3(0.5, 0.5, 0.5)
-      .add(modelGroup.position);
-    console.log("Voxel (0,0,0) center world position:", voxelOriginWorld);
-  }
+        // STEP 2: Compute the bounding box from the modelGroup's children.
+        modelGroup.updateMatrixWorld(true);
+        const computedBox = new THREE.Box3().setFromObject(modelGroup);
+        // Now computedBox is in world space relative to modelGroup's current (0,0,0)
+        // Its center is:
+        const computedCenter = new THREE.Vector3();
+        computedBox.getCenter(computedCenter);
+        console.log('Computed bounding box center:', computedCenter);
 
+        // STEP 3: Offset modelGroup so that computedCenter becomes (0,0,0)
+        modelGroup.position.set(-computedCenter.x, -computedCenter.y, -computedCenter.z);
 
+        // STEP 4: Create a helper from the computed bounding box (which is now relative to world)
+        modelGroup.updateMatrixWorld(true);
+        const finalBox = new THREE.Box3().setFromObject(modelGroup);
+        const bboxHelper = new THREE.Box3Helper(finalBox, 0xff00ff);
+        // Add the bounding box helper to the scene (so it doesn’t inherit further transforms)
+        // Or add it as a child of a parent that is not offset further.
 
-  // Load the KVX file and display
-  fetch('HEADA.kvx')
-    .then(r => r.arrayBuffer())
-    .then(loadKvxSlab6Full)
-    .then(kvx => {
-      console.log(kvx);
-      // 2D orthographic views
-      drawView("topView",    kvx, 'x', 'y', 'z', false);
-      drawView("bottomView", kvx, 'x', 'y', 'z', true);
-      drawView("backView",   kvx, 'x', 'z', 'y', false);
-      drawView("frontView",  kvx, 'x', 'z', 'y', true);
-      drawView("sideView",   kvx, 'y', 'z', 'x', true);
+        // Setup scene, camera, and a parent yaw group.
+        const scene = new THREE.Scene();
+        const yawGroup = new THREE.Group();
+        scene.add(yawGroup);
+        yawGroup.add(modelGroup);
 
-      // 3D preview
-      create3DPreview(kvx);
+        const renderer = new THREE.WebGLRenderer({
+          canvas: document.getElementById('webglView'),
+          antialias: true,
+        });
+        renderer.setSize(512, 512);
+        renderer.setClearColor(0x222222, 1);
 
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        // Position the camera so the model is well in view.
+        camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
 
-      // For the voxel with file coordinates (0,0,0):
-      const voxelOrigin = { x: 0, y: 0, z: 0 };
-      const localCenter = {
-        x: voxelOrigin.x + 0.5,
-        y: voxelOrigin.y + 0.5,
-        z: voxelOrigin.z + 0.5,
-      };
-// If using pivot offset:
-      const worldCenterPivot = {
-        x: localCenter.x - kvx.xpiv,
-        y: localCenter.y - kvx.ypiv,
-        z: localCenter.z - kvx.zpiv,
-      };
-      console.log("Using pivot offset, voxel (0,0,0) drawn at:", worldCenterPivot);
+        // Add the bounding box helper to the scene (or yawGroup) so it rotates together.
+        yawGroup.add(bboxHelper);
 
-// Or, if using center-of-mass offset:
-      const worldCenterMass = {
-        x: localCenter.x - kvx.centerMassX,
-        y: localCenter.y - kvx.centerMassY,
-        z: localCenter.z - kvx.centerMassZ,
-      };
-      console.log("Using center-of-mass, voxel (0,0,0) drawn at:", worldCenterMass);
-    })
-    .catch(err => {
-      console.error("Error loading KVX:", err);
-    });
-</script>
-</body>
+        // (Optional) Add grid markers: for every 10th coordinate along x, y, and z,
+        // using the computed voxel centers.
+        {
+          const gridSphereGeom = new THREE.SphereGeometry(0.2, 8, 8);
+          const gridSphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false });
+          const highlightSphereGeom = new THREE.SphereGeometry(0.3, 8, 8);
+          const highlightSphereMat = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            depthTest: false,
+          });
+          // We iterate from computedBox.min.x to computedBox.max.x at intervals of 10.
+          for (let x = computedBox.min.x; x <= computedBox.max.x; x += 10) {
+            for (let y = computedBox.min.y; y <= computedBox.max.y; y += 10) {
+              for (let z = computedBox.min.z; z <= computedBox.max.z; z += 10) {
+                let sphere;
+                if (x === computedBox.min.x && y === computedBox.min.y && z === computedBox.min.z)
+                  sphere = new THREE.Mesh(highlightSphereGeom, highlightSphereMat);
+                else sphere = new THREE.Mesh(gridSphereGeom, gridSphereMat);
+                sphere.position.set(x, y, z);
+                modelGroup.add(sphere);
+              }
+            }
+          }
+        }
+
+        // Animate only the yawGroup (pure left/right rotation)
+        function animate() {
+          requestAnimationFrame(animate);
+          yawGroup.rotation.y += 0.01;
+          yawGroup.rotation.x += 0.01;
+          renderer.render(scene, camera);
+        }
+        animate();
+
+        // Debug: Log where the voxel (0,0,0)'s center is drawn in world coordinates.
+        // If file coordinate (0,0,0) is drawn at its center, then after offset it becomes:
+        const voxelOriginWorld = new THREE.Vector3(0, 0, 0).applyMatrix4(modelGroup.matrixWorld);
+        console.log('Voxel (0,0,0) center world position:', voxelOriginWorld);
+      }
+
+      // Load the KVX file and display
+      fetch('HEADA.kvx')
+        .then((r) => r.arrayBuffer())
+        .then(loadKvxSlab6Full)
+        .then((kvx) => {
+          console.log(kvx);
+          // 2D orthographic views
+          drawView('topView', kvx, 'x', 'y', 'z', false);
+          drawView('bottomView', kvx, 'x', 'y', 'z', true);
+          drawView('backView', kvx, 'x', 'z', 'y', false);
+          drawView('frontView', kvx, 'x', 'z', 'y', true);
+          drawView('sideView', kvx, 'y', 'z', 'x', true);
+
+          // 3D preview
+          create3DPreview(kvx);
+
+          // For the voxel with file coordinates (0,0,0):
+          const voxelOrigin = { x: 0, y: 0, z: 0 };
+          const localCenter = {
+            x: voxelOrigin.x,
+            y: voxelOrigin.y,
+            z: voxelOrigin.z,
+          };
+          console.log('File voxel (0,0,0) intended center:', localCenter);
+        })
+        .catch((err) => {
+          console.error('Error loading KVX:', err);
+        });
+    </script>
+  </body>
 </html>
