@@ -34,7 +34,8 @@ export const voxelRenderer = {
   },
 
   render(gl: WebGL2RenderingContext, props: any) {
-    const { mesh, position, rotation, viewMatrix, projectionMatrix, cameraPos, lightIntensity } = props;
+    const { mesh, position, rotation, viewMatrix, projectionMatrix, cameraPos, lightIntensity } =
+      props;
 
     // Robust mesh sanity check:
     if (!mesh || !mesh.vertices || !mesh.indices) {
@@ -71,7 +72,6 @@ export const voxelRenderer = {
       gl.bindVertexArray(null);
     }
 
-
     gl.useProgram(this.voxelShader!.program);
     gl.bindVertexArray(mesh.vao);
 
@@ -91,7 +91,7 @@ export const voxelRenderer = {
       modelViewProj: modelViewProjMatrix,
       uCameraPos: cameraPos,
       uLightDir: lightDir,
-      lightIntensity: lightIntensity ?? 1.0
+      lightIntensity: lightIntensity ?? 1.0,
     });
 
     gl.drawElements(gl.TRIANGLES, mesh.indices.length, gl.UNSIGNED_SHORT, 0);
@@ -131,7 +131,6 @@ export const voxelRenderer = {
       if (error !== gl.NO_ERROR) {
         console.error(`❌ WebGL error after VAO initialization: ${error}`);
       }
-
     }
 
     // ✅ Use voxelShader if initialized correctly
@@ -165,6 +164,5 @@ export const voxelRenderer = {
     // Unbind after rendering
     gl.bindVertexArray(null);
     console.log('✅ Wireframe rendered successfully!');
-  }
-
+  },
 };

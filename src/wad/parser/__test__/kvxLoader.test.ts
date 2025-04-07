@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildVoxelMesh, loadKvxModel } from '@/wad/parser/kvxLoader';
 
 function createValidTestKvx(): ArrayBuffer {
-  const headerSize = 4 + 2 + 2 + 2 + 2 + (4 * 3); // header + pivot
+  const headerSize = 4 + 2 + 2 + 2 + 2 + 4 * 3; // header + pivot
   const offsetTableSize = 4 * (2 * 2); // 2x2 columns
   const slabSize = 8; // simple slab
 
@@ -11,10 +11,14 @@ function createValidTestKvx(): ArrayBuffer {
   const dv = new DataView(buffer);
 
   let ptr = 0;
-  dv.setUint32(ptr, totalSize, true); ptr += 4;
-  dv.setUint16(ptr, 2, true); ptr += 2; // xSize = 2
-  dv.setUint16(ptr, 2, true); ptr += 2; // ySize = 2
-  dv.setUint16(ptr, 4, true); ptr += 2; // zSize = 4
+  dv.setUint32(ptr, totalSize, true);
+  ptr += 4;
+  dv.setUint16(ptr, 2, true);
+  ptr += 2; // xSize = 2
+  dv.setUint16(ptr, 2, true);
+  ptr += 2; // ySize = 2
+  dv.setUint16(ptr, 4, true);
+  ptr += 2; // zSize = 4
   ptr += 2; // dummy
   ptr += 4 * 3; // pivots
 
@@ -43,7 +47,7 @@ describe('kvxLoader', () => {
     const buffer = createValidTestKvx();
 
     (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(buffer)
+      arrayBuffer: () => Promise.resolve(buffer),
     });
 
     const mesh = await loadKvxModel('/fake/valid.kvx');
@@ -60,7 +64,7 @@ describe('kvxLoader', () => {
     dv.setUint32(24, 9999999, true);
 
     (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(buffer)
+      arrayBuffer: () => Promise.resolve(buffer),
     });
 
     const mesh = await loadKvxModel('/fake/corrupt.kvx');
@@ -74,7 +78,7 @@ describe('kvxLoader', () => {
     const shortBuffer = buffer.slice(0, buffer.byteLength - 5);
 
     (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(shortBuffer)
+      arrayBuffer: () => Promise.resolve(shortBuffer),
     });
 
     const mesh = await loadKvxModel('/fake/truncated.kvx');

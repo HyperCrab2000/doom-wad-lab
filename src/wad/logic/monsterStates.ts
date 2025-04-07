@@ -1,7 +1,7 @@
 export interface MonsterState {
   angle: number; // in degrees
   pitch: number; // in degrees
-  roll: number;  // in degrees
+  roll: number; // in degrees
   targetX: number; // world-space target x
   targetY: number; // world-space target y
   smooth: boolean; // smooth interpolation toggle
@@ -30,7 +30,7 @@ export function updateAngle(state: MonsterState, speed: number = 9): void {
     if (Math.abs(diff) <= speed) {
       state.angle = desiredAngle;
     } else {
-      state.angle += (diff < 0 ? -speed : speed);
+      state.angle += diff < 0 ? -speed : speed;
     }
   } else {
     state.angle = desiredAngle;

@@ -95,17 +95,21 @@ for (const [baseName, frames] of Object.entries(voxelAnimations)) {
 
     const maxDimension = 16384; // Doom voxel assets might be chunky but reasonable
     if (
-      xSize <= 0 || xSize > maxDimension ||
-      ySize <= 0 || ySize > maxDimension ||
-      zSize <= 0 || zSize > maxDimension
+      xSize <= 0 ||
+      xSize > maxDimension ||
+      ySize <= 0 ||
+      ySize > maxDimension ||
+      zSize <= 0 ||
+      zSize > maxDimension
     ) {
-      console.warn(`Skipping invalid KVX file ${baseName}${frame} — invalid dimensions ${xSize}x${ySize}x${zSize}`);
+      console.warn(
+        `Skipping invalid KVX file ${baseName}${frame} — invalid dimensions ${xSize}x${ySize}x${zSize}`
+      );
       delete voxelAnimations[baseName][frame];
       continue;
     }
   }
 }
-
 
 type FramesByThingNameMap = Record<string, Record<number, Record<number, ThingSprite>>>;
 
@@ -348,7 +352,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         }
       }
 
-
       if (frames) {
         console.log(frames);
         const frameKeys = Object.keys(frames).sort();
@@ -388,9 +391,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
           return;
         }
-
       }
-
 
       // ❌ Fallback: classic sprite rendering pipeline
       const dx = thingObj.x - camera.pos[0];
