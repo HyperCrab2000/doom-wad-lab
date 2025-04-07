@@ -31,7 +31,6 @@
   import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.js';
   import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
 
-  // --- 2D view code remains unchanged ---
   function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth = false) {
     const cvs = document.getElementById(canvasId);
     const ctx = cvs.getContext('2d');
@@ -75,15 +74,16 @@
     }
   }
 
-  // --- 3D preview function ---
-  // This version treats file voxel coordinates as the voxel centers.
-  // It computes the model's bounding box from the drawn voxels and
-  // offsets the model so that the bounding box center is at desiredAnchor.
+  // --- Utility: convert file coordinates to Three.js coordinates.
+  // File coordinate system: x = left-right, y = front-back, z = vertical.
+  // Three.js coordinate system: x = left-right, y = up, z = depth.
+  // We map: Three.js.x = file.x, Three.js.y = file.z, Three.js.z = file.y.
+  function fileToWorld(v) {
+    return new THREE.Vector3(v.x, v.z, v.y);
+  }
+
   function create3DPreview(kvx, desiredAnchor) {
-    // desiredAnchor is a THREE.Vector3; for example, new THREE.Vector3(0,0,0)
     const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
-    // STEP 1: Build voxel meshes.
-    // Create a group to hold the voxel cubes.
     const modelGroup = new THREE.Group();
     const boxGeom = new THREE.BoxGeometry(1, 1, 1);
     for (let v of voxdata) {
@@ -95,26 +95,24 @@
       const b = parseInt(m[3], 10) / 255;
       const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
       const mesh = new THREE.Mesh(boxGeom, mat);
-      // Place each cube so its center is at (v.x, v.y, v.z)
-      mesh.position.set(v.x, v.y, v.z);
+      // Use fileToWorld: This makes file.z become Three.js.y (up)
+      const pos = fileToWorld(v);
+      mesh.position.copy(pos);
       modelGroup.add(mesh);
     }
 
-    // STEP 2: Compute the bounding box of the model.
+    // Compute the bounding box from the drawn voxel meshes.
     modelGroup.updateMatrixWorld(true);
     const computedBox = new THREE.Box3().setFromObject(modelGroup);
     const computedCenter = new THREE.Vector3();
     computedBox.getCenter(computedCenter);
     console.log("Computed model bounding box center:", computedCenter);
 
-    // STEP 3: Compute the offset needed to place computedCenter at desiredAnchor.
-    // For instance, if desiredAnchor is (0,0,0), then offset = -computedCenter.
     const offset = new THREE.Vector3().subVectors(desiredAnchor, computedCenter);
-    // Apply this offset to the modelGroup.
     modelGroup.position.add(offset);
-    console.log("Model group offset applied:", offset);
+    console.log("Applied model offset:", offset);
 
-    // STEP 4: Now recompute the bounding box after the offset.
+    // Now, compute the final bounding box (should be centered at desiredAnchor).
     modelGroup.updateMatrixWorld(true);
     const finalBox = new THREE.Box3().setFromObject(modelGroup);
     const bboxHelper = new THREE.Box3Helper(finalBox, 0xff00ff);
@@ -124,7 +122,6 @@
     const yawGroup = new THREE.Group();
     scene.add(yawGroup);
     yawGroup.add(modelGroup);
-    // Add the bounding box helper so it rotates with the model.
     yawGroup.add(bboxHelper);
 
     const renderer = new THREE.WebGLRenderer({
@@ -135,35 +132,33 @@
     renderer.setClearColor(0x222222, 1);
 
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    // Position the camera so that the model is visible.
     camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
     camera.lookAt(new THREE.Vector3(0, 0, 0));
 
     function animate() {
       requestAnimationFrame(animate);
+      // Rotate only the voxel model (yaw) about its own center.
       yawGroup.rotation.y += 0.01;
-      yawGroup.rotation.x += 0.01;
       renderer.render(scene, camera);
     }
     animate();
 
-    // Debug: Log where the voxel (0,0,0)'s center is drawn in world coordinates.
-    const voxelOriginWorld = new THREE.Vector3(0, 0, 0).applyMatrix4(modelGroup.matrixWorld);
-    console.log("Voxel (0,0,0) center world position:", voxelOriginWorld);
+    const fileOriginWorld = fileToWorld({ x: 0, y: 0, z: 0 });
+    const voxelOriginWorld = fileOriginWorld.clone().add(modelGroup.position);
+    console.log("File voxel (0,0,0) center world position:", voxelOriginWorld);
 
-    // Return the modelGroup so you can use it in your level.
+    // Return the modelGroup so it can be placed in your level.
     return modelGroup;
   }
 
   // --- Level placement example ---
-  // When you load the KVX file, you get the monster data.
-  // You can then call create3DPreview with a desired anchor point.
-  // For instance, to place the monster so its center is at (0,0,0):
-  const desiredAnchor = new THREE.Vector3(10, 0, 0);
-  // Or, if you want to place it at a different level coordinate, e.g. (100,200,0):
+  // desiredAnchor is where you want the voxel object's center to be.
+  // For example, to center it at (0,0,0):
+  const desiredAnchor = new THREE.Vector3(0, 0, 0);
+  // Or, to place it at (100, 200, 0):
   // const desiredAnchor = new THREE.Vector3(100, 200, 0);
 
-  // Load the KVX file and display everything.
+  // Load the KVX file and display.
   fetch("HEADA.kvx")
     .then((r) => r.arrayBuffer())
     .then(loadKvxSlab6Full)
@@ -176,13 +171,10 @@
       drawView("frontView", kvx, "x", "z", "y", true);
       drawView("sideView", kvx, "y", "z", "x", true);
 
-      // 3D preview: Create the modelGroup with the desired anchor.
+      // 3D preview: Create the model using desiredAnchor.
       const modelGroup = create3DPreview(kvx, desiredAnchor);
-
-      // Now, if you want to place the monster in your level, you can simply add modelGroup
-      // to your level scene at the desired world coordinate.
-      // For example, if desiredAnchor is (0,0,0), then the monster is centered at (0,0,0).
-      // If you want it elsewhere, change desiredAnchor accordingly.
+      // Now, to place the monster in your level you simply add modelGroup to your level scene.
+      // Its center (computed from the drawn voxels) will be at the desiredAnchor coordinate.
     })
     .catch((err) => {
       console.error("Error loading KVX:", err);
