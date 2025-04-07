@@ -31,6 +31,7 @@
   import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.js';
   import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
 
+  // --- 2D view function (unchanged) ---
   function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth = false) {
     const cvs = document.getElementById(canvasId);
     const ctx = cvs.getContext('2d');
@@ -76,10 +77,11 @@
 
   // --- Utility: convert file coordinates to Three.js coordinates.
   // File coordinate system: x = left-right, y = front-back, z = vertical.
-  // Three.js coordinate system: x = left-right, y = up, z = depth.
-  // We map: Three.js.x = file.x, Three.js.y = file.z, Three.js.z = file.y.
+  // We want Three.js: x = left-right, y = up, z = depth.
+  // If the file's z is vertical but increases downward, we can flip it.
+  // Try: three.js.x = file.x, three.js.y = -file.z, three.js.z = file.y.
   function fileToWorld(v) {
-    return new THREE.Vector3(v.x, v.z, v.y);
+    return new THREE.Vector3(v.x, -v.z, v.y);
   }
 
   function create3DPreview(kvx, desiredAnchor) {
@@ -101,7 +103,7 @@
       modelGroup.add(mesh);
     }
 
-    // Compute the bounding box from the drawn voxel meshes.
+    // Compute the bounding box of the drawn model.
     modelGroup.updateMatrixWorld(true);
     const computedBox = new THREE.Box3().setFromObject(modelGroup);
     const computedCenter = new THREE.Vector3();
