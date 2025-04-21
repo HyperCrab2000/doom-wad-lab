@@ -17,7 +17,8 @@
     "apl-image-packer": "^1.1.0",
     "earcut": "^3.0.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.175.0"
   },
   "homepage": "https://github.com/andrewlowndes/doom",
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@types/node": "^22.13.10",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
+    "@types/three": "^0.175.0",
     "@vitejs/plugin-react": "^4.3.4",
     "canvas": "^3.1.0",
     "eslint": "^9.22.0",

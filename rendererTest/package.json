@@ -4,8 +4,8 @@
   "description": "Test setup for voxel renderer using KVX",
   "main": "index.js",
   "scripts": {
-    "dev": "vite --port 8081",
-    "build": "vite build",
+    "dev": "node_modules/.bin/vite --port 8081",
+    "build": "node_modules/.bin/vite build",
     "test": "vitest run"
   },
   "dependencies": {

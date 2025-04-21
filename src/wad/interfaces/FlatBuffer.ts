@@ -6,4 +6,6 @@ export interface FlatBuffer {
   indices: ElementBuffer;
   flatName: string;
   sector: Sector;
+  normal: Buffer;
+  uv: Buffer;
 }

@@ -5,4 +5,6 @@ export interface FlatObject {
   flatName: string;
   position: Float32Array;
   indices: Uint16Array;
+  normal: Float32Array;
+  uv: Float32Array;
 }

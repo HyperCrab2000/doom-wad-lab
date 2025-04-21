@@ -3,40 +3,41 @@ import { skyFlats } from '@/wad/constants/WadInfo';
 import { FlatObject } from '@/wad/interfaces/FlatObject';
 import { Triangle } from '@/wad/interfaces/Triangle';
 import { WadMap } from '@/wad/interfaces/WadMap';
+import { vec3 } from 'gl-matrix';
 
 const createFlat = (
   triangles: Array<Triangle>,
   height: number,
   reverseOrientation?: boolean
-): Pick<FlatObject, 'position' | 'indices'> => {
-  const flatPositions = new Array<number>();
-  const flatIndices = new Array<number>();
+): Pick<FlatObject, 'position' | 'indices' | 'normal' | 'uv'> => {
+  const flatPositions: number[] = [];
+  const flatIndices: number[] = [];
+  const flatNormals: number[] = [];
+  const flatUVs: number[] = [];
 
   let posIndex = 0;
 
   triangles.forEach((triangle) => {
-    const p1 = triangle[0];
-    const p2 = triangle[1];
-    const p3 = triangle[2];
+    const p1: vec3 = vec3.fromValues(triangle[0].x, height, -triangle[0].y);
+    const p2: vec3 = vec3.fromValues(triangle[1].x, height, -triangle[1].y);
+    const p3: vec3 = vec3.fromValues(triangle[2].x, height, -triangle[2].y);
 
-    flatPositions.splice(
-      flatPositions.length,
-      0,
-      p1.x,
-      height,
-      -p1.y,
-      p2.x,
-      height,
-      -p2.y,
-      p3.x,
-      height,
-      -p3.y
+    const normal = computeNormal(p1, p2, p3);
+
+    flatPositions.push(...p1, ...p2, ...p3);
+    flatNormals.push(...normal, ...normal, ...normal);
+
+    // DOOM-style UVs: 1 texel = 1 world unit, repeat every 64
+    flatUVs.push(
+      triangle[0].x % 64, triangle[0].y % 64,
+      triangle[1].x % 64, triangle[1].y % 64,
+      triangle[2].x % 64, triangle[2].y % 64,
     );
 
     if (reverseOrientation) {
-      flatIndices.splice(flatIndices.length, 0, posIndex + 2, posIndex + 1, posIndex);
+      flatIndices.push(posIndex + 2, posIndex + 1, posIndex);
     } else {
-      flatIndices.splice(flatIndices.length, 0, posIndex, posIndex + 1, posIndex + 2);
+      flatIndices.push(posIndex, posIndex + 1, posIndex + 2);
     }
 
     posIndex += 3;
@@ -45,8 +46,17 @@ const createFlat = (
   return {
     position: new Float32Array(flatPositions),
     indices: new Uint16Array(flatIndices),
+    normal: new Float32Array(flatNormals),
+    uv: new Float32Array(flatUVs),
   };
 };
+
+function computeNormal(p1: vec3, p2: vec3, p3: vec3): vec3 {
+  const u = vec3.subtract(vec3.create(), p2, p1); // vector from p1 to p2
+  const v = vec3.subtract(vec3.create(), p3, p1); // vector from p1 to p3
+  const n = vec3.cross(vec3.create(), u, v);      // perpendicular vector
+  return vec3.normalize(n, n);                    // unit length
+}
 
 export const mapToFlats = (
   map: WadMap,

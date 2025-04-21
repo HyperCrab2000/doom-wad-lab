@@ -1,10 +1,4 @@
-import {
-  createContext,
-  createRenderer,
-  canvasToTexture,
-  ShaderProgram,
-  createProgram,
-} from 'apl-easy-gl';
+import { createRenderer, canvasToTexture, ShaderProgram, createProgram } from 'apl-easy-gl';
 import { mat4, vec3 } from 'gl-matrix';
 
 import { animatedFlatFps, animatedWallFps, animatedSpriteFps } from '@/wad/constants/WadInfo';
@@ -40,13 +34,36 @@ import { ThingKind } from '@/wad/constants/ThingTypes';
 import { hasValidFlags } from '@/wad/renderer/utils/hasValidFlags';
 import { createSkyboxBuffers, drawSkybox } from '@/wad/renderer/drawAssets/drawSkybox';
 import { selectSkyTexture } from '@/wad/renderer/utils/selectSkyTexture';
-import { loadKvxModel } from '@/wad/parser/kvxLoader';
 import { voxelRenderer } from '@/wad/renderer/voxelRenderer';
 
 interface TriangleHashObject {
   triangle: Triangle;
   sector: Sector;
 }
+
+import { loadKvxSlab6Full } from '@/wad/parser/kvxLoader.js';
+
+type KvxModel = Awaited<ReturnType<typeof loadKvxSlab6Full>>
+
+const kvxMeshes: Record<string, Record<string, KvxModel>> = {}
+
+// async function initKvxMeshes() {
+//   for (const [baseName, frames] of Object.entries(voxelAnimations)) {
+//     kvxMeshes[baseName] = {}
+//     for (const [frame, url] of Object.entries(frames)) {
+//       try {
+//         const buffer = await fetch(url).then(r => r.arrayBuffer())
+//         // await here so kvxMeshes[baseName][frame] is a KvxModel, not a Promise
+//         kvxMeshes[baseName][frame] = await loadKvxSlab6Full(buffer)
+//       } catch (err) {
+//         console.warn(`Failed to load KVX ${baseName}${frame}`, err)
+//       }
+//     }
+//   }
+// }
+
+// immediately kick off your loader before starting the game:
+// await initKvxMeshes();
 
 interface ThingSprite {
   sprite: SpriteTexture;
@@ -72,6 +89,18 @@ for (const [path, mod] of Object.entries(voxelFiles)) {
   voxelAnimations[baseName] = voxelAnimations[baseName] || {};
   voxelAnimations[baseName][frame] = url;
 }
+
+// for (const [baseName, frames] of Object.entries(voxelAnimations)) {
+//   kvxMeshes[baseName] = {};
+//   for (const [frame, url] of Object.entries(frames)) {
+//     try {
+//       const buffer = await fetch(url).then((r) => r.arrayBuffer());
+//       kvxMeshes[baseName][frame] = loadKvxSlab6Full(buffer);
+//     } catch (err) {
+//       console.warn(`Failed to load KVX ${baseName}${frame}`, err);
+//     }
+//   }
+// }
 
 // 🔵 Put this part immediately after voxelAnimations is populated:
 for (const [baseName, frames] of Object.entries(voxelAnimations)) {
@@ -365,31 +394,19 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           console.info(`Valid voxel${baseName}A`);
         }
 
-        if (voxelUrl) {
-          fetch(voxelUrl)
-            .then((res) => res.arrayBuffer())
-            .then((arrayBuffer) => {
-              const kvxMesh = loadKvxModel(`${baseName}${frameLetter}`);
-              if (!kvxMesh) {
-                console.warn(`❌ Skipped voxel ${baseName}${frameLetter} due to bad mesh`);
-                return;
-              }
-
-              voxelRenderer.render(gl, {
-                mesh: kvxMesh,
-                position: [thingObj.x, thingSector!.floorheight, -thingObj.y],
-                rotation: thingObj.angle,
-                viewMatrix,
-                projectionMatrix,
-                cameraPos: camera.pos,
-                lightIntensity: thingSector!.lightIntensity,
-              });
-            })
-            .catch((err) => {
-              console.error(`Failed to load voxel ${voxelUrl}`, err);
-            });
-
-          return;
+        // 🔵 Try voxel first:
+        const meshSet = kvxMeshes[baseName];
+        if (meshSet && meshSet[frameLetter]) {
+          voxelRenderer.render(gl, {
+            mesh: meshSet[frameLetter], // parsed voxdata + metadata
+            position: [thingObj.x, thingSector.floorheight, -thingObj.y],
+            rotation: thingObj.angle,
+            viewMatrix,
+            projectionMatrix,
+            cameraPos: camera.pos,
+            lightIntensity: thingSector.lightIntensity,
+          });
+          return; // skip the sprite fallback
         }
       }
 

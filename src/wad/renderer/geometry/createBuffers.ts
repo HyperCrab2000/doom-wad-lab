@@ -66,6 +66,8 @@ export const createMapBuffers = (
     sectorTriangles,
     flats: flats.map((flat) => ({
       position: createBuffer(gl, flat.position, 3),
+      normal: createBuffer(gl, flat.normal, 3),
+      uv: createBuffer(gl, flat.uv, 2),
       indices: createElementBuffer(gl, flat.indices, 1),
       flatName: flat.flatName,
       sector: flat.sector,

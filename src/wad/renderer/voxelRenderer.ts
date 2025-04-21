@@ -1,12 +1,12 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { createProgram, ShaderProgram } from 'apl-easy-gl';
-import voxelVert from '@/src/assets/shaders/voxel/voxel.vert?raw';
-import voxelFragRaw from '@/src/assets/shaders/voxel/voxelMaterial.glsl?raw';
-import commonGLSL from '@/src/assets/shaders/voxel/common.glsl?raw';
-import normalMapGLSL from '@/src/assets/shaders/voxel/normalMap.glsl?raw';
-import specularMapGLSL from '@/src/assets/shaders/voxel/specularMap.glsl?raw';
-import pbrGLSL from '@/src/assets/shaders/voxel/pbr.glsl?raw';
-import parallaxGLSL from '@/src/assets/shaders/voxel/parallax.glsl?raw';
+import voxelVert from '@/assets/shaders/voxel/voxel.vert?raw';
+import voxelFragRaw from '@/assets/shaders/voxel/voxelMaterial.glsl?raw';
+import commonGLSL from '@/assets/shaders/voxel/common.glsl?raw';
+import normalMapGLSL from '@/assets/shaders/voxel/normalMap.glsl?raw';
+import specularMapGLSL from '@/assets/shaders/voxel/specularMap.glsl?raw';
+import pbrGLSL from '@/assets/shaders/voxel/pbr.glsl?raw';
+import parallaxGLSL from '@/assets/shaders/voxel/parallax.glsl?raw';
 
 const voxelFrag = voxelFragRaw
   .replace('#include "common.glsl"', commonGLSL)

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Slab6 KVX Viewer</title>
+    <style>
+      body {
+        background: #111;
+        color: #eee;
+        font-family: sans-serif;
+        margin: 20px;
+      }
+      canvas {
+        border: 1px solid #444;
+        background: black;
+        margin: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Slab6-Style KVX Viewer</h1>
+    <p>Top | Bottom | Back | Front | Side</p>
+    <canvas id="topView" width="512" height="512"></canvas>
+    <canvas id="bottomView" width="512" height="512"></canvas>
+    <canvas id="backView" width="512" height="512"></canvas>
+    <canvas id="frontView" width="512" height="512"></canvas>
+    <canvas id="sideView" width="512" height="512"></canvas>
+    <canvas id="webglView"></canvas>
+
+    <script type="module">
+      import { loadKvxSlab6Full } from '@/src/wad/parser/kvxLoader.ts';
+      import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+
+      // --- 2D view function (unchanged) ---
+      function drawView(canvasId, kvx, axisH, axisV, axisD, reverseDepth = false) {
+        const cvs = document.getElementById(canvasId);
+        const ctx = cvs.getContext('2d');
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
+        let sizeH = axisH === 'x' ? xsiz : axisH === 'y' ? ysiz : zsiz;
+        let sizeV = axisV === 'x' ? xsiz : axisV === 'y' ? ysiz : zsiz;
+        const pixelColorIndex = new Array(sizeH * sizeV).fill(-1);
+        function getAxisVal(axis, v) {
+          if (axis === 'x') return v.x;
+          if (axis === 'y') return v.y;
+          return v.z;
+        }
+        for (let v of voxdata) {
+          const hVal = getAxisVal(axisH, v);
+          const vVal = getAxisVal(axisV, v);
+          if (hVal < 0 || vVal < 0) continue;
+          if (hVal >= sizeH || vVal >= sizeV) continue;
+          const dVal = getAxisVal(axisD, v);
+          let idx = vVal * sizeH + hVal;
+          if (pixelColorIndex[idx] === -1) pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
+          else {
+            let old = pixelColorIndex[idx];
+            let oldDepth = old >>> 16;
+            if ((reverseDepth && dVal > oldDepth) || (!reverseDepth && dVal < oldDepth))
+              pixelColorIndex[idx] = (v.col & 0xffff) | (dVal << 16);
+          }
+        }
+        const cellSize = Math.floor(Math.min(cvs.width / sizeH, cvs.height / sizeV));
+        const offx = (cvs.width - cellSize * sizeH) / 2;
+        const offy = (cvs.height - cellSize * sizeV) / 2;
+        for (let vv = 0; vv < sizeV; vv++) {
+          for (let hh = 0; hh < sizeH; hh++) {
+            let cd = pixelColorIndex[vv * sizeH + hh];
+            if (cd === -1) continue;
+            let cIndex = cd & 0xffff;
+            ctx.fillStyle = getColor(cIndex);
+            ctx.fillRect(offx + hh * cellSize, offy + vv * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+
+      // --- Utility: convert file coordinates to Three.js coordinates.
+      // File coordinate system: x = left-right, y = front-back, z = vertical.
+      // We want Three.js: x = left-right, y = up, z = depth.
+      // If the file's z is vertical but increases downward, we can flip it.
+      // Try: three.js.x = file.x, three.js.y = -file.z, three.js.z = file.y.
+      function fileToWorld(v) {
+        return new THREE.Vector3(v.x, -v.z, v.y);
+      }
+
+      function create3DPreview(kvx, desiredAnchor) {
+        const { xsiz, ysiz, zsiz, voxdata, getColor } = kvx;
+        const modelGroup = new THREE.Group();
+        const boxGeom = new THREE.BoxGeometry(1, 1, 1);
+        for (let v of voxdata) {
+          const colStr = getColor(v.col);
+          const m = colStr.match(/rgb\((\d+),(\d+),(\d+)\)/);
+          if (!m) continue;
+          const r = parseInt(m[1], 10) / 255;
+          const g = parseInt(m[2], 10) / 255;
+          const b = parseInt(m[3], 10) / 255;
+          const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) });
+          const mesh = new THREE.Mesh(boxGeom, mat);
+          // Use fileToWorld: This makes file.z become Three.js.y (up)
+          const pos = fileToWorld(v);
+          mesh.position.copy(pos);
+          modelGroup.add(mesh);
+        }
+
+        // Compute the bounding box of the drawn model.
+        modelGroup.updateMatrixWorld(true);
+        const computedBox = new THREE.Box3().setFromObject(modelGroup);
+        const computedCenter = new THREE.Vector3();
+        computedBox.getCenter(computedCenter);
+        console.log('Computed model bounding box center:', computedCenter);
+
+        const offset = new THREE.Vector3().subVectors(desiredAnchor, computedCenter);
+        modelGroup.position.add(offset);
+        console.log('Applied model offset:', offset);
+
+        // Now, compute the final bounding box (should be centered at desiredAnchor).
+        modelGroup.updateMatrixWorld(true);
+        const finalBox = new THREE.Box3().setFromObject(modelGroup);
+        const bboxHelper = new THREE.Box3Helper(finalBox, 0xff00ff);
+
+        // Setup scene, camera, and yaw group.
+        const scene = new THREE.Scene();
+        const yawGroup = new THREE.Group();
+        scene.add(yawGroup);
+        yawGroup.add(modelGroup);
+        yawGroup.add(bboxHelper);
+
+        const renderer = new THREE.WebGLRenderer({
+          canvas: document.getElementById('webglView'),
+          antialias: true,
+        });
+        renderer.setSize(512, 512);
+        renderer.setClearColor(0x222222, 1);
+
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        camera.position.set(xsiz * 1.5, ysiz * 1.5, zsiz * 1.5);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+        function animate() {
+          requestAnimationFrame(animate);
+          // Rotate only the voxel model (yaw) about its own center.
+          yawGroup.rotation.y += 0.01;
+          renderer.render(scene, camera);
+        }
+        animate();
+
+        const fileOriginWorld = fileToWorld({ x: 0, y: 0, z: 0 });
+        const voxelOriginWorld = fileOriginWorld.clone().add(modelGroup.position);
+        console.log('File voxel (0,0,0) center world position:', voxelOriginWorld);
+
+        // Return the modelGroup so it can be placed in your level.
+        return modelGroup;
+      }
+
+      // --- Level placement example ---
+      // desiredAnchor is where you want the voxel object's center to be.
+      // For example, to center it at (0,0,0):
+      const desiredAnchor = new THREE.Vector3(10, 0, 0);
+      // Or, to place it at (100, 200, 0):
+      // const desiredAnchor = new THREE.Vector3(100, 200, 0);
+
+      // Load the KVX file and display.
+      fetch('HEADA.kvx')
+        .then((r) => r.arrayBuffer())
+        .then(loadKvxSlab6Full)
+        .then((kvx) => {
+          console.log('Loaded KVX:', kvx);
+          // 2D orthographic views
+          drawView('topView', kvx, 'x', 'y', 'z', false);
+          drawView('bottomView', kvx, 'x', 'y', 'z', true);
+          drawView('backView', kvx, 'x', 'z', 'y', false);
+          drawView('frontView', kvx, 'x', 'z', 'y', true);
+          drawView('sideView', kvx, 'y', 'z', 'x', true);
+
+          // 3D preview: Create the model using desiredAnchor.
+          const modelGroup = create3DPreview(kvx, desiredAnchor);
+          // Now, to place the monster in your level you simply add modelGroup to your level scene.
+          // Its center (computed from the drawn voxels) will be at the desiredAnchor coordinate.
+        })
+        .catch((err) => {
+          console.error('Error loading KVX:', err);
+        });
+    </script>
+  </body>
+</html>
