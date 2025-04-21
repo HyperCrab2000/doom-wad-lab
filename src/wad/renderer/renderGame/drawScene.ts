@@ -79,6 +79,7 @@ export function drawScene(params: DrawSceneParams) {
     flatShader.setUniforms({
       tex: textures.flats[flatName],
       lightIntensity: flat.sector.lightIntensity,
+      ambientColor: flat.sector.ambientColor ?? [1.0, 1.0, 1.0],
     });
     flatShader.setUniforms({
       lightDir: [0.3, 1.0, 0.4], // ☀️ tweak this for dramatic lighting

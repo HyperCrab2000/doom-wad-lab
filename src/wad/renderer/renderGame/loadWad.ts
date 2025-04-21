@@ -36,6 +36,21 @@ export interface LoadedWadData {
   playerZ: number;
 }
 
+export function getAverageColor(canvas: HTMLCanvasElement): [number, number, number] {
+  const ctx = canvas.getContext('2d')!;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+  let r = 0, g = 0, b = 0, count = 0;
+  for (let i = 0; i < imageData.length; i += 4) {
+    r += imageData[i];
+    g += imageData[i + 1];
+    b += imageData[i + 2];
+    count++;
+  }
+
+  return [r / count / 255, g / count / 255, b / count / 255];
+}
+
 function createEnhancedTexture(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement): WebGLTexture {
   const tex = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -49,14 +64,12 @@ function createEnhancedTexture(gl: WebGL2RenderingContext, canvas: HTMLCanvasEle
     canvas
   );
 
-  gl.generateMipmap(gl.TEXTURE_2D); // 🧹 Generates mipmaps
-
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); // smooth
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
-  // ✨ Try to enable anisotropic filtering
   const ext = gl.getExtension('EXT_texture_filter_anisotropic');
   if (ext) {
     gl.texParameterf(gl.TEXTURE_2D, ext.TEXTURE_MAX_ANISOTROPY_EXT, 16);
@@ -144,11 +157,19 @@ export function loadWad(
   const currentSky = selectSkyTexture(mapName);
   const buffers = createMapBuffers(gl, map, wadAssets.texturesByName);
 
+  const textureColors = new Map<string, [number, number, number]>();
+  wadAssets.flats.forEach((flat) => {
+    textureColors.set(flat.name, getAverageColor(flat.graphics.canvas));
+  });
+
+  buffers.flats.forEach((flat) => {
+    flat.sector.ambientColor = textureColors.get(flat.flatName) ?? [1, 1, 1];
+  });
+
   const playerStartThing = map.THINGS.find((thing) => thing.type === 1);
   const playerStart = { x: playerStartThing?.x ?? 0, y: playerStartThing?.y ?? 0 };
   const cameraAngle = (playerStartThing?.angle ?? 0) * Math.PI / 180;
 
-  // Find sector under player
   const mapTriangleHash = { x: [], y: [] };
   map.SECTORS.forEach((_, sectorIndex) => {
     buffers.sectorTriangles[sectorIndex].forEach((triangle) => {

@@ -8,4 +8,6 @@ export interface Sector {
   tag: number;
 
   lightIntensity?: number; //normalised light level
+
+  ambientColor?: [number, number, number];
 }

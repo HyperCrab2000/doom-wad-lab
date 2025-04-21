@@ -1,16 +1,16 @@
 #version 300 es
 precision mediump float;
 
-in vec3 aPosition;
-in vec3 aNormal;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
 
 uniform mat4 modelViewProj;
 
-out vec3 vNormal;
 out vec2 vUv;
+out vec3 vNormal;
 
 void main() {
-  vUv = aPosition.xz;           // Worldspace position used for UVs
-  vNormal = normalize(aNormal); // Pass through real normals
+  vUv = aPosition.xz;        // for 64x64 tile wrapping
+  vNormal = aNormal;         // world space normal
   gl_Position = modelViewProj * vec4(aPosition, 1.0);
 }

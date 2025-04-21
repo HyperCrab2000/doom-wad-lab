@@ -8,6 +8,7 @@ in vec3 vNormal;
 in vec2 vUv;
 
 out vec4 fragColor;
+uniform vec3 ambientColor;
 
 const float flatSize = 64.0;
 
@@ -22,5 +23,7 @@ void main() {
   float fakeDepth = clamp(gl_FragCoord.w * 500.0, 0.0, 1.0);
   float light = lightIntensity * (0.75 + 0.25 * directional) * fakeDepth;
 
-  fragColor = vec4(texVal.rgb * light, texVal.a);
+  vec3 litColor = mix(texVal.rgb * ambientColor, texVal.rgb, 0.7);
+  fragColor = vec4(litColor * light, texVal.a);
+
 }
