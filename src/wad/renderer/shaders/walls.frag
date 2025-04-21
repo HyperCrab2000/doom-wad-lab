@@ -1,25 +1,26 @@
+#version 300 es
 precision mediump float;
 
-uniform bool shouldClip;
 uniform sampler2D tex;
 uniform float lightIntensity;
+uniform bool shouldClip;
 
-varying vec3 vPos;
-varying vec2 vUv;
+in vec2 vUv;
+in vec3 vWorldNormal;
 
-void main(void) {
-  if (shouldClip && (vUv.y > 1.0 || vUv.y < 0.0)) {
-    discard;
-  }
+out vec4 fragColor;
 
-  vec4 col = texture2D(tex, vUv);
-  
-  if (col.a < 0.1) {
-    discard;
-  }
-  
-  //fake distance-based darkening
-  float fakeDepthLighting = clamp(gl_FragCoord.w * 500.0, 0.0, 1.0);
-  
-  gl_FragColor = vec4(col.xyz * lightIntensity * fakeDepthLighting, 1.0);
+void main() {
+  vec4 texColor = texture(tex, vUv);
+
+  // Discard transparent pixels (e.g. grates, trees)
+  if (shouldClip && texColor.a < 0.1) discard;
+
+  vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4));
+  float lighting = max(dot(vWorldNormal, lightDir), 0.0);
+
+  // Combine DOOM-style lightIntensity with directional light
+  float finalLight = lightIntensity * (0.75 + 0.25 * lighting);
+
+  fragColor = vec4(texColor.rgb * finalLight, texColor.a);
 }
