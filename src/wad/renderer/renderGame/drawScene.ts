@@ -80,10 +80,24 @@ export function drawScene(params: DrawSceneParams) {
       tex: textures.flats[flatName],
       lightIntensity: flat.sector.lightIntensity,
       ambientColor: flat.sector.ambientColor ?? [1.0, 1.0, 1.0],
-    });
-    flatShader.setUniforms({
       lightDir: [0.3, 1.0, 0.4], // ☀️ tweak this for dramatic lighting
     });
+
+    const ambient = flat.sector.ambientColor ?? [1.0, 1.0, 1.0];
+    // Optionally blend with walls here:
+    const wallAmbient = flat.sector.ambientColorFromWall ?? ambient;
+    const finalAmbient = [
+      (ambient[0] + wallAmbient[0]) / 2,
+      (ambient[1] + wallAmbient[1]) / 2,
+      (ambient[2] + wallAmbient[2]) / 2,
+    ];
+
+    flatShader.setUniforms({
+      tex: textures.flats[flatName],
+      lightIntensity: flat.sector.lightIntensity,
+      ambientColor: finalAmbient,
+    });
+
     flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });
     flat.indices.draw();
   });

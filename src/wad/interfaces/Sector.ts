@@ -10,4 +10,6 @@ export interface Sector {
   lightIntensity?: number; //normalised light level
 
   ambientColor?: [number, number, number];
+
+  ambientColorFromWall?: [number, number, number];
 }

@@ -10,7 +10,7 @@ out vec2 vUv;
 out vec3 vNormal;
 
 void main() {
-  vUv = aPosition.xz;        // for 64x64 tile wrapping
-  vNormal = aNormal;         // world space normal
+  vUv = aPosition.xz;     // world XY for 64x64 wrap
+  vNormal = aNormal;
   gl_Position = modelViewProj * vec4(aPosition, 1.0);
 }
