@@ -1,18 +1,26 @@
+#version 300 es
 precision mediump float;
 
 uniform sampler2D tex;
 uniform float lightIntensity;
 
-varying vec2 vPos;
+in vec3 vNormal;
+in vec2 vUv;
+
+out vec4 fragColor;
 
 const float flatSize = 64.0;
 
-void main(void) {
-  //FIXME: better to interpolate over uv coords?
-  vec4 texVal = texture2D(tex, fract(vPos / flatSize));
+void main() {
+  vec4 texVal = texture(tex, fract(vUv / flatSize));
 
-  //fake distance-based darkening
-  float fakeDepthLighting = clamp(gl_FragCoord.w * 500.0, 0.0, 1.0);
+  // Directional lighting — static light from above-left
+  vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4));
+  float directional = max(dot(normalize(vNormal), lightDir), 0.0);
 
-  gl_FragColor = vec4(texVal.xyz * lightIntensity * fakeDepthLighting, 1.0);
+  // Sector + fake distance-based attenuation
+  float fakeDepth = clamp(gl_FragCoord.w * 500.0, 0.0, 1.0);
+  float light = lightIntensity * (0.75 + 0.25 * directional) * fakeDepth;
+
+  fragColor = vec4(texVal.rgb * light, texVal.a);
 }
