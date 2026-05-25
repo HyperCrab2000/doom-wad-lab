@@ -16,7 +16,6 @@ dist-ssr
 .terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
 infra/terraform.tfvars
 
 # IWAD files (user-supplied, not redistributable)
