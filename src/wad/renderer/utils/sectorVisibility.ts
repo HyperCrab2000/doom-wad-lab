@@ -1,6 +1,12 @@
 import { Node } from '@/wad/interfaces/Node';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { Triangle } from '@/wad/interfaces/Triangle';
+import {
+  DEFAULT_VISIBILITY_DISTANCE,
+  MAX_PORTAL_TRAVERSAL_DEPTH,
+  PORTAL_VISIBILITY_RADIUS,
+  VISIBILITY_DISTANCE_MARGIN,
+} from '@/wad/constants/RenderInfo';
 import { findSectorAt, SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
 
 const SUBSECTOR_FLAG = 0x8000;
@@ -8,6 +14,7 @@ const SUBSECTOR_FLAG = 0x8000;
 export interface SectorVisibilityIndex {
   subsectorToSector: number[];
   sectorBounds: Array<{ minX: number; maxX: number; minY: number; maxY: number } | null>;
+  sectorAdjacency: number[][];
 }
 
 function mergeBounds(
@@ -116,7 +123,22 @@ export function buildSectorVisibilityIndex(map: WadMap): SectorVisibilityIndex |
     }
   }
 
-  return { subsectorToSector, sectorBounds };
+  return { subsectorToSector, sectorBounds, sectorAdjacency: buildSectorAdjacency(map) };
+}
+
+export function buildSectorAdjacency(map: WadMap): number[][] {
+  const adjacency = map.SECTORS.map(() => new Set<number>());
+
+  for (const line of map.LINEDEFS) {
+    if (line.sidenum[0] < 0 || line.sidenum[1] < 0) continue;
+    const sectorA = map.SIDEDEFS[line.sidenum[0]].sector;
+    const sectorB = map.SIDEDEFS[line.sidenum[1]].sector;
+    if (sectorA === sectorB) continue;
+    adjacency[sectorA].add(sectorB);
+    adjacency[sectorB].add(sectorA);
+  }
+
+  return adjacency.map((neighbors) => [...neighbors]);
 }
 
 export function findCameraSubsector(map: WadMap, x: number, y: number): number {
@@ -163,41 +185,92 @@ export function buildPotentiallyVisibleSectors(
   cameraX: number,
   cameraY: number,
   cameraSectorIndex: number,
-  maxRadius: number
+  maxRadius = PORTAL_VISIBILITY_RADIUS
+): Set<number> {
+  return buildPortalVisibleSectors(
+    index,
+    map,
+    cameraX,
+    cameraY,
+    cameraSectorIndex,
+    maxRadius,
+    MAX_PORTAL_TRAVERSAL_DEPTH
+  );
+}
+
+/**
+ * Flood-fill sectors reachable from the camera through two-sided portals.
+ * Unlike the old bounding-circle pass, this skips sectors hidden behind one-sided walls.
+ */
+export function buildPortalVisibleSectors(
+  index: SectorVisibilityIndex,
+  map: WadMap,
+  cameraX: number,
+  cameraY: number,
+  cameraSectorIndex: number,
+  maxRadius = PORTAL_VISIBILITY_RADIUS,
+  maxDepth = MAX_PORTAL_TRAVERSAL_DEPTH
 ): Set<number> {
   const visible = new Set<number>();
-  if (cameraSectorIndex >= 0) {
-    visible.add(cameraSectorIndex);
+  if (cameraSectorIndex < 0 || map.SECTORS.length === 0) {
+    return visible;
   }
 
   const maxRadiusSq = maxRadius * maxRadius;
-  for (let sectorIndex = 0; sectorIndex < map.SECTORS.length; sectorIndex++) {
+  const queue: Array<{ sectorIndex: number; depth: number }> = [
+    { sectorIndex: cameraSectorIndex, depth: 0 },
+  ];
+
+  while (queue.length > 0) {
+    const { sectorIndex, depth } = queue.shift()!;
+    if (visible.has(sectorIndex)) continue;
+
     const bounds = index.sectorBounds[sectorIndex];
-    if (!bounds) {
-      visible.add(sectorIndex);
+    if (
+      sectorIndex !== cameraSectorIndex &&
+      bounds &&
+      !isBoundsWithinRadius(bounds, cameraX, cameraY, maxRadiusSq)
+    ) {
       continue;
     }
 
-    const cameraInsideFootprint =
-      cameraX >= bounds.minX &&
-      cameraX <= bounds.maxX &&
-      cameraY >= bounds.minY &&
-      cameraY <= bounds.maxY;
-    if (cameraInsideFootprint) {
-      visible.add(sectorIndex);
-      continue;
-    }
+    visible.add(sectorIndex);
+    if (depth >= maxDepth) continue;
 
-    const closestX = Math.max(bounds.minX, Math.min(cameraX, bounds.maxX));
-    const closestY = Math.max(bounds.minY, Math.min(cameraY, bounds.maxY));
-    const dx = closestX - cameraX;
-    const dy = closestY - cameraY;
-    if (dx * dx + dy * dy <= maxRadiusSq) {
+    for (const neighbor of index.sectorAdjacency[sectorIndex] ?? []) {
+      if (visible.has(neighbor)) continue;
+      const neighborBounds = index.sectorBounds[neighbor];
+      if (
+        neighborBounds &&
+        !isBoundsWithinRadius(neighborBounds, cameraX, cameraY, maxRadiusSq)
+      ) {
+        continue;
+      }
+      queue.push({ sectorIndex: neighbor, depth: depth + 1 });
+    }
+  }
+
+  // Sectors with no bounds data are treated as always potentially visible.
+  for (let sectorIndex = 0; sectorIndex < map.SECTORS.length; sectorIndex++) {
+    if (!index.sectorBounds[sectorIndex]) {
       visible.add(sectorIndex);
     }
   }
 
   return visible;
+}
+
+function isBoundsWithinRadius(
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+  cameraX: number,
+  cameraY: number,
+  maxRadiusSq: number
+): boolean {
+  const closestX = Math.max(bounds.minX, Math.min(cameraX, bounds.maxX));
+  const closestY = Math.max(bounds.minY, Math.min(cameraY, bounds.maxY));
+  const dx = closestX - cameraX;
+  const dy = closestY - cameraY;
+  return dx * dx + dy * dy <= maxRadiusSq;
 }
 
 export function isDrawVisible(
@@ -217,13 +290,11 @@ export function isDrawVisible(
     return true;
   }
 
-  if (visibleSectors) {
-    return true;
-  }
-
   const dx = center[0] - cameraPos[0];
   const dy = horizontalOnly ? 0 : center[1] - cameraPos[1];
   const dz = center[2] - cameraPos[2];
-  const maxDist = visibilityDistance + 128;
+  const maxDist =
+    (visibilityDistance > 0 ? visibilityDistance : DEFAULT_VISIBILITY_DISTANCE) +
+    VISIBILITY_DISTANCE_MARGIN;
   return dx * dx + dy * dy + dz * dz <= maxDist * maxDist;
 }

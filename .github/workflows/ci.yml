@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SOUNDFONT_URL: https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -27,8 +30,7 @@ jobs:
       - name: Download SoundFont
         run: |
           mkdir -p public/soundfonts
-          curl -fsSL -o public/soundfonts/TimGM6mb.sf2 \
-            "https://raw.githubusercontent.com/uriegel/mp3sfx/master/static/TimGM6mb.sf2"
+          curl -fsSL -o public/soundfonts/TimGM6mb.sf2 "$SOUNDFONT_URL"
 
       - name: Run tests
         run: npm test

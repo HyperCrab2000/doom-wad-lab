@@ -14,6 +14,7 @@ import {
   getFlatIndicesForSectors,
   getLineIndicesForSectors,
 } from '@/wad/renderer/geometry/sectorLineIndex';
+import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
 
 function uploadBuffer(
   gl: WebGL2RenderingContext,
@@ -86,6 +87,7 @@ function applyWallObject(
   wallBuffer.twoSidedMiddle = Boolean(wall.twoSidedMiddle);
   wallBuffer.repeatVertical = wall.repeatVertical !== false;
   wallBuffer.center = wall.center;
+  wallBuffer.facingNormal = readWallFacingNormal(wall);
 }
 
 function rebuildWallBuffers(
@@ -117,6 +119,7 @@ function rebuildWallBuffers(
       twoSidedMiddle: Boolean(wall.twoSidedMiddle),
       repeatVertical: wall.repeatVertical !== false,
       center: wall.center,
+      facingNormal: readWallFacingNormal(wall),
     };
   });
 }
@@ -232,7 +235,7 @@ function refreshPartial(
   return !needsFullRebuild;
 }
 
-export type GeometryRefreshResult = 'partial' | 'partial-pending-full' | 'full';
+export type GeometryRefreshResult = 'partial' | 'full';
 
 export function refreshMapGeometry(
   gl: WebGL2RenderingContext,
@@ -250,7 +253,11 @@ export function refreshMapGeometry(
     if (refreshPartial(gl, map, texturesByName, buffers, dirtySectors)) {
       return 'partial';
     }
-    return 'partial-pending-full';
+    // Crusher-style doors (ceiling == floor when closed) can drop from upper/lower
+    // walls to zero walls when fully open. Deferring a full rebuild leaves stale GPU
+    // geometry that reads as a phantom tunnel until the next full pass.
+    refreshFull(gl, map, texturesByName, buffers);
+    return 'full';
   }
 
   refreshFull(gl, map, texturesByName, buffers);

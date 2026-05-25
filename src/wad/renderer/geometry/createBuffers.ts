@@ -13,6 +13,7 @@ import { SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
 import { SectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
 import { buildMapGeometryInWorker } from '@/wad/renderer/workers/geometryWorkerClient';
 import { buildSortedFlats, buildWallRangesByLine } from '@/wad/renderer/geometry/geometryCache';
+import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
 
 export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
@@ -54,6 +55,7 @@ function uploadCpuGeometry(
       twoSidedMiddle: Boolean(wall.twoSidedMiddle),
       repeatVertical: wall.repeatVertical !== false,
       center: wall.center,
+      facingNormal: readWallFacingNormal(wall),
     };
   });
 

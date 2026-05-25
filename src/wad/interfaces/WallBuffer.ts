@@ -19,4 +19,6 @@ export interface WallBuffer {
   twoSidedMiddle: boolean;
   repeatVertical: boolean;
   center: [number, number, number];
+  /** Outward-facing unit normal for CPU back-face culling. */
+  facingNormal: [number, number, number];
 }

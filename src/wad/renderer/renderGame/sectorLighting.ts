@@ -1,4 +1,8 @@
 import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
+import {
+  MAX_VISIBILITY_DISTANCE,
+  MIN_VISIBILITY_DISTANCE,
+} from '@/wad/constants/RenderInfo';
 import { Sector } from '@/wad/interfaces/Sector';
 import { Thing } from '@/wad/interfaces/Thing';
 import { WadMap } from '@/wad/interfaces/WadMap';
@@ -270,7 +274,7 @@ export function getFlatFogAndGlow(flatName: string): FlatSurfaceLighting {
 
 export function getSectorVisibilityDistance(sector: Sector): number {
   const normalized = Math.max(0, Math.min(1, sector.lightlevel / 255));
-  return 220 + normalized * 1350;
+  return MIN_VISIBILITY_DISTANCE + normalized * (MAX_VISIBILITY_DISTANCE - MIN_VISIBILITY_DISTANCE);
 }
 
 /** @deprecated Use classifyFlatLiquid instead. */

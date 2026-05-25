@@ -33,7 +33,7 @@ variable "github_org" {
 variable "github_repo" {
   type        = string
   description = "GitHub repository name used for OIDC trust."
-  default     = "gl-doom-redo"
+  default     = "doom-wad-lab"
 }
 
 variable "enable_waf" {

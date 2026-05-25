@@ -17,6 +17,12 @@ import {
   findCameraSectorIndex,
   isDrawVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
+import {
+  DEFAULT_VISIBILITY_DISTANCE,
+  FRUSTUM_CULL_RADIUS,
+  VISIBILITY_DISTANCE_MARGIN,
+} from '@/wad/constants/RenderInfo';
+import { extractFrustumPlanes, isSphereInFrustum } from '@/wad/renderer/utils/frustumCull';
 import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
 import {
   computeDynamicLightAt,
@@ -97,10 +103,11 @@ export function drawScene(params: DrawSceneParams) {
           map,
           cameraPos[0],
           -cameraPos[2],
-          cameraSectorIndex,
-          1400
+          cameraSectorIndex
         )
       : null;
+
+  const frustumPlanes = extractFrustumPlanes(modelViewProjMatrix);
 
   const flatShader = shaders.flats;
   gl.useProgram(flatShader.program);
@@ -110,7 +117,9 @@ export function drawScene(params: DrawSceneParams) {
   const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
 
   for (const flat of sortedFlats) {
-    if (!shouldDrawFlat(flat, cameraPos, visibleSectors, cameraSectorIndex)) continue;
+    if (!shouldDrawFlat(flat, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) {
+      continue;
+    }
     drawFlat(flat, {
       flatShader,
       textures,
@@ -128,7 +137,7 @@ export function drawScene(params: DrawSceneParams) {
   wallShader.setUniforms({ modelViewProj: modelViewProjMatrix, uCameraPos: cameraPos });
 
   const drawWall = (wall: MapBuffers['walls'][number]) => {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex)) return;
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) return;
 
     let textureName = wall.texName;
     const animatedTexture = wad.animatedTextures[textureName];
@@ -148,7 +157,7 @@ export function drawScene(params: DrawSceneParams) {
       ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
       fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
       fogDensity: wall.sector.fogDensity ?? 0.25,
-      visibilityDistance: wall.sector.visibilityDistance ?? 900,
+      visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
       ...computeNearestLightUniforms(pointLights, wall.center),
       reliefStrength: getWallReliefStrength(
         textureName,
@@ -172,7 +181,7 @@ export function drawScene(params: DrawSceneParams) {
 
   const transparentWalls: Array<{ wall: MapBuffers['walls'][number]; distanceSq: number }> = [];
   for (const wall of buffers.transparentWalls) {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex)) continue;
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) continue;
     transparentWalls.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
   }
   transparentWalls.sort((a, b) => b.distanceSq - a.distanceSq);
@@ -199,8 +208,20 @@ export function drawScene(params: DrawSceneParams) {
     const dx = thingObj.x - cameraPos[0];
     const dz = -thingObj.y - cameraPos[2];
     const distanceSq = dx * dx + dz * dz;
-    const visibility = thingSector.visibilityDistance ?? 900;
-    if (distanceSq > (visibility + 256) * (visibility + 256)) continue;
+    const visibility = thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE;
+    const maxThingDist = visibility + VISIBILITY_DISTANCE_MARGIN;
+    if (distanceSq > maxThingDist * maxThingDist) continue;
+    if (
+      !isSphereInFrustum(
+        frustumPlanes,
+        thingObj.x,
+        thingSector.floorheight + 32,
+        -thingObj.y,
+        FRUSTUM_CULL_RADIUS
+      )
+    ) {
+      continue;
+    }
 
     const voxelFrames = params.voxelThingFrames.get(thingType.sprite);
     const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % voxelFrames.length];
@@ -243,8 +264,20 @@ export function drawScene(params: DrawSceneParams) {
     const dx = entry.thingObj.x - cameraPos[0];
     const dz = -entry.thingObj.y - cameraPos[2];
     const distanceSq = dx * dx + dz * dz;
-    const visibility = entry.thingSector.visibilityDistance ?? 900;
-    if (distanceSq > (visibility + 256) * (visibility + 256)) continue;
+    const visibility = entry.thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE;
+    const maxThingDist = visibility + VISIBILITY_DISTANCE_MARGIN;
+    if (distanceSq > maxThingDist * maxThingDist) continue;
+    if (
+      !isSphereInFrustum(
+        frustumPlanes,
+        entry.thingObj.x,
+        entry.thingSector.floorheight + 32,
+        -entry.thingObj.y,
+        FRUSTUM_CULL_RADIUS
+      )
+    ) {
+      continue;
+    }
     spriteThings.push({ entry, distanceSq });
   }
   spriteThings.sort((a, b) => b.distanceSq - a.distanceSq);
@@ -289,7 +322,7 @@ export function drawScene(params: DrawSceneParams) {
       lightIntensity: thingSector.lightIntensity,
       fogColor: thingSector.fogColor ?? [0.025, 0.022, 0.02],
       fogDensity: thingSector.fogDensity ?? 0.25,
-      visibilityDistance: thingSector.visibilityDistance ?? 900,
+      visibilityDistance: thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
       nearbyLight: computeDynamicLightAt(pointLights, thingWorldPos, { excludeThing: thingObj }),
       emissiveColor: emissive.emissiveColor,
       emissiveTopExtent: emissive.emissiveTopExtent,
@@ -312,19 +345,30 @@ export function drawScene(params: DrawSceneParams) {
 function shouldDrawFlat(
   flat: FlatBuffer,
   cameraPos: [number, number, number],
-  _visibleSectors: Set<number> | null,
-  cameraSectorIndex: number
+  visibleSectors: Set<number> | null,
+  cameraSectorIndex: number,
+  frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
-  // Floors/ceilings span multiple heights at the same XY footprint (stairs, bridges).
-  // Use horizontal distance only and skip coarse sector-set culling for flats.
-  return isDrawVisible(
-    flat.center,
-    cameraPos,
-    flat.sector.visibilityDistance ?? 900,
-    null,
-    flat.sectorIndex,
-    cameraSectorIndex,
-    true
+  if (
+    !isDrawVisible(
+      flat.center,
+      cameraPos,
+      flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
+      visibleSectors,
+      flat.sectorIndex,
+      cameraSectorIndex,
+      true
+    )
+  ) {
+    return false;
+  }
+
+  return isSphereInFrustum(
+    frustumPlanes,
+    flat.center[0],
+    flat.center[1],
+    flat.center[2],
+    FRUSTUM_CULL_RADIUS
   );
 }
 
@@ -332,16 +376,42 @@ function shouldDrawWall(
   wall: MapBuffers['walls'][number],
   cameraPos: [number, number, number],
   visibleSectors: Set<number> | null,
-  cameraSectorIndex: number
+  cameraSectorIndex: number,
+  frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
-  return isDrawVisible(
-    wall.center,
-    cameraPos,
-    wall.sector.visibilityDistance ?? 900,
-    visibleSectors,
-    wall.sectorIndex,
-    cameraSectorIndex,
-    false
+  if (
+    !isDrawVisible(
+      wall.center,
+      cameraPos,
+      wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
+      visibleSectors,
+      wall.sectorIndex,
+      cameraSectorIndex,
+      false
+    )
+  ) {
+    return false;
+  }
+
+  if (!wall.transparent && !wall.twoSidedMiddle) {
+    const toCameraX = cameraPos[0] - wall.center[0];
+    const toCameraY = cameraPos[1] - wall.center[1];
+    const toCameraZ = cameraPos[2] - wall.center[2];
+    const facing =
+      toCameraX * wall.facingNormal[0] +
+      toCameraY * wall.facingNormal[1] +
+      toCameraZ * wall.facingNormal[2];
+    if (facing <= 0) {
+      return false;
+    }
+  }
+
+  return isSphereInFrustum(
+    frustumPlanes,
+    wall.center[0],
+    wall.center[1],
+    wall.center[2],
+    FRUSTUM_CULL_RADIUS
   );
 }
 
@@ -402,7 +472,7 @@ function drawFlat(
     glowHeight: surfaceGlow ? 512.0 : 36.0,
     fogColor: flat.sector.fogColor ?? [0.025, 0.022, 0.02],
     fogDensity: flat.sector.fogDensity ?? 0.25,
-    visibilityDistance: flat.sector.visibilityDistance ?? 900,
+    visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
     ...computeNearestLightUniforms(ctx.pointLights, flat.center),
     liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
     liquidStrength: floorLiquid?.liquidStrength ?? 0,
@@ -483,7 +553,7 @@ function renderVoxelThing({
     lightIntensity: Math.max(sector.lightIntensity ?? 0.5, 0.35),
     fogColor: sector.fogColor ?? [0.025, 0.022, 0.02],
     fogDensity: sector.fogDensity ?? 0.25,
-    visibilityDistance: sector.visibilityDistance ?? 900,
+    visibilityDistance: sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
     dynamicLight: computeDynamicLightAt(pointLights, thingWorldPos),
   });
 

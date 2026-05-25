@@ -36,13 +36,17 @@ $(terraform -chdir="$INFRA" output -json site_urls | python3 -c 'import json,sys
 
 Set GitHub Actions variables (requires: gh auth login):
 
-  gh variable set AWS_DEPLOY_ROLE_ARN --body "$ROLE_ARN"
-  gh variable set AWS_S3_BUCKET --body "$BUCKET"
-  gh variable set AWS_CLOUDFRONT_DISTRIBUTION_ID --body "$DIST_ID"
+  gh variable set AWS_DEPLOY_ROLE_ARN --body "$ROLE_ARN" --repo HyperCrab2000/doom-wad-lab
+  gh variable set AWS_S3_BUCKET --body "$BUCKET" --repo HyperCrab2000/doom-wad-lab
+  gh variable set AWS_CLOUDFRONT_DISTRIBUTION_ID --body "$DIST_ID" --repo HyperCrab2000/doom-wad-lab
 
 Create the production environment (optional but recommended):
 
-  gh api repos/:owner/:repo/environments/production -X PUT
+  gh api repos/HyperCrab2000/doom-wad-lab/environments/production -X PUT
+
+Upload commercial IWADs separately (not stored in git):
+
+  ./scripts/upload-iwads.sh
 
 Then push main to trigger deploy:
 

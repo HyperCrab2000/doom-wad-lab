@@ -82,19 +82,9 @@ resource "aws_cloudfront_distribution" "site" {
     }
   }
 
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 0
-  }
+  # SPA routing is handled by the viewer-request function for extensionless URLs.
+  # Do not map 404/403 to index.html globally — that breaks binary assets such as
+  # /wads/DOOM2.WAD and surfaces HTML to the WAD parser as a DataView error.
 
   restrictions {
     geo_restriction {

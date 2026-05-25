@@ -82,10 +82,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   const fpsCounter = document.getElementById("fps-counter") as HTMLDivElement | null;
   let lastFrameTime = performance.now();
   let lastGeometryRefresh = 0;
-  let pendingFullGeometryRefresh = false;
   const GEOMETRY_REFRESH_MS = 50;
-  const FULL_GEOMETRY_REFRESH_MS = 250;
-  let lastFullGeometryRefresh = 0;
 
   const setPresentationVisible = (visible: boolean) => {
     presentationVisible = visible;
@@ -108,9 +105,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       wadData = loaded;
       currentMap = map;
       doorSystem = new DoorSystem(map);
-      pendingFullGeometryRefresh = false;
       lastGeometryRefresh = 0;
-      lastFullGeometryRefresh = 0;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
 
       const { playerStart, playerZ, cameraAngle } = wadData;
@@ -177,7 +172,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         const refreshNow = performance.now();
         if (refreshNow - lastGeometryRefresh >= GEOMETRY_REFRESH_MS) {
           const dirtySectors = doorSystem.getDirtySectors();
-          const result = refreshMapGeometry(
+          refreshMapGeometry(
             gl,
             currentMap,
             wadData.wallTexturesByName,
@@ -186,18 +181,6 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           );
           doorSystem.clearDirty();
           lastGeometryRefresh = refreshNow;
-          if (result === 'partial-pending-full') {
-            pendingFullGeometryRefresh = true;
-          }
-        }
-      }
-
-      if (pendingFullGeometryRefresh) {
-        const refreshNow = performance.now();
-        if (refreshNow - lastFullGeometryRefresh >= FULL_GEOMETRY_REFRESH_MS) {
-          refreshMapGeometry(gl, currentMap, wadData.wallTexturesByName, wadData.buffers);
-          pendingFullGeometryRefresh = false;
-          lastFullGeometryRefresh = refreshNow;
         }
       }
     }
