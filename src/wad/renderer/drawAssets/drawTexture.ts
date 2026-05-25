@@ -3,6 +3,7 @@ import { WallTexture } from '@/wad/interfaces/WallTexture';
 import { Wad } from '@/wad/interfaces/Wad';
 
 import { roundToPow2 } from '@/wad/utils/math';
+import { getOrBuildPatch } from '@/wad/renderer/drawAssets/drawPatch';
 
 //some doom textures actually contain transparency when they shouldn't (MAP30), use a threshold to determine if it should be transparent or not (in pixels)
 const texturePixelsThreshold = 2;
@@ -25,8 +26,10 @@ export const drawTexture = (
   for (let k = 0; k < patches.length; k++) {
     const patch = patches[k];
     const patchName = wad.pnames[patch.patchIndex];
+    const patchCanvas = patchName ? getOrBuildPatch(wad, patchesByName, patchName) : undefined;
+    if (!patchCanvas) continue;
 
-    textureContext.drawImage(patchesByName[patchName].canvas, patch.originX, patch.originY);
+    textureContext.drawImage(patchCanvas.canvas, patch.originX, patch.originY);
   }
 
   //determine if the texture is transparent or not

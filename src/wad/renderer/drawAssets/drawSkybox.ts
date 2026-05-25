@@ -41,7 +41,8 @@ export const drawSkybox = (
   shader: ShaderProgram,
   buffers: ReturnType<typeof createSkyboxBuffers>,
   texture: WebGLTexture,
-  yaw: number // just pass yaw directly now!
+  yaw: number,
+  pitch: number
 ) => {
   gl.depthMask(false);
   gl.disable(gl.DEPTH_TEST);
@@ -53,6 +54,7 @@ export const drawSkybox = (
   shader.setUniforms({
     tex: texture,
     yaw,
+    pitch,
   });
 
   shader.setAttributes({

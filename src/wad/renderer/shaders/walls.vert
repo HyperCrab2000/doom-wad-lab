@@ -9,9 +9,11 @@ uniform mat4 modelViewProj;
 
 out vec2 vUv;
 out vec3 vWorldNormal;
+out vec3 vWorldPos;
 
 void main() {
   vUv = aUv;
   vWorldNormal = aNormal;
+  vWorldPos = aPosition;
   gl_Position = modelViewProj * vec4(aPosition, 1.0);
 }

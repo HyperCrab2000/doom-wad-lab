@@ -16,10 +16,7 @@ void main(void) {
     outUv.x = 1.0 - outUv.x;
   }
 
-  //determine a flat depth for the whole thing based on the center point of the thing (prevents collision when rotated)
-  vUv = aUv;
-
-  vec4 centerPoint = modelViewProj * vec4(0.0, 0.0, 0.0, 1.0);
+  vUv = outUv;
 
   gl_Position = modelViewProj * vec4(aPosition, 1.0);
 }

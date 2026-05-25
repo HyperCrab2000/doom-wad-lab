@@ -50,14 +50,73 @@ for (let i = 0; i < FILLBUFSIZ; i++) {
 }
 
 // For storing loaded voxels in final pass
-interface VoxType {
+export interface KvxVoxel {
   x: number;
   y: number;
   z: number;
   col: number; // color index
   vis: number; // face visibility bits
 }
-let voxdata: VoxType[] = [];
+let voxdata: KvxVoxel[] = [];
+
+export interface KvxModel {
+  xsiz: number;
+  ysiz: number;
+  zsiz: number;
+  xpiv: number;
+  ypiv: number;
+  zpiv: number;
+  palette: Uint8Array;
+  voxdata: KvxVoxel[];
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+  boxCenterX: number;
+  boxCenterY: number;
+  boxCenterZ: number;
+  centerMassX: number;
+  centerMassY: number;
+  centerMassZ: number;
+  getColor: (cIndex: number) => string;
+}
+
+/** Slab6 Z-down pivot to world-up Y offset from the mesh origin (bbox center). */
+export function getVoxelFloorLift(model: KvxModel): number {
+  return model.zpiv - model.boxCenterZ;
+}
+
+export function getVoxelSpanHeight(model: KvxModel): number {
+  if (model.voxdata.length === 0) return model.zsiz;
+  return model.maxZ - model.minZ + 1;
+}
+
+export function applyOccupancyVisibility(
+  voxdata: KvxVoxel[],
+  xsiz: number,
+  ysiz: number,
+  zsiz: number
+): void {
+  const occupied = new Set<number>();
+  const index = (x: number, y: number, z: number) => x + y * xsiz + z * xsiz * ysiz;
+
+  for (const voxel of voxdata) {
+    occupied.add(index(voxel.x, voxel.y, voxel.z));
+  }
+
+  for (const voxel of voxdata) {
+    let vis = 0;
+    if (voxel.x === 0 || !occupied.has(index(voxel.x - 1, voxel.y, voxel.z))) vis |= 1;
+    if (voxel.x === xsiz - 1 || !occupied.has(index(voxel.x + 1, voxel.y, voxel.z))) vis |= 2;
+    if (voxel.y === 0 || !occupied.has(index(voxel.x, voxel.y - 1, voxel.z))) vis |= 4;
+    if (voxel.y === ysiz - 1 || !occupied.has(index(voxel.x, voxel.y + 1, voxel.z))) vis |= 8;
+    if (voxel.z === 0 || !occupied.has(index(voxel.x, voxel.y, voxel.z - 1))) vis |= 16;
+    if (voxel.z === zsiz - 1 || !occupied.has(index(voxel.x, voxel.y, voxel.z + 1))) vis |= 32;
+    voxel.vis = vis;
+  }
+}
 
 // For storing how many voxels in each x row / y column, etc.
 // Slab6 uses xlen[x], ylen[x][y], but that’s mostly for editing.
@@ -366,8 +425,8 @@ function getvis(x: number, y: number, z: number, xsiz: number, ysiz: number, zsi
 /* --------------- PALETTE LOGIC --------------- */
 
 function checkpalimito64(dapal: Uint8Array): void {
-  let i: number;
-  for (i = 767; i >= 0; i--) {
+  let i = 767;
+  for (; i >= 0; i--) {
     if ((dapal[i] & 0xc0) !== 0) break;
   }
   if (i >= 0) {
@@ -459,11 +518,26 @@ function initclosestcolorfast(dapal: Uint8Array): void {
  * [All your existing code above... unchanged...]
  */
 
-export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
-  vbit.fill(0);
-  voxdata = [];
-  xlen.fill(0);
-  for (let xi = 0; xi < MAXXSIZ; xi++) ylen[xi].fill(0);
+let loadQueue: Promise<void> = Promise.resolve();
+
+export async function loadKvxSlab6Full(buffer: ArrayBuffer): Promise<KvxModel> {
+  let releaseQueue!: () => void;
+  const previous = loadQueue;
+  loadQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+  await previous;
+
+  try {
+    return parseKvxSlab6Full(buffer);
+  } finally {
+    releaseQueue();
+  }
+}
+
+export function parseKvxSlab6Full(buffer: ArrayBuffer): KvxModel {
+  const localVoxdata: KvxVoxel[] = [];
+  const localPalette = new Uint8Array(768);
 
   let dv = new DataView(buffer);
   let ptr = 0;
@@ -522,71 +596,12 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
   {
     let palPos = buffer.byteLength - 768;
     let palBytes = new Uint8Array(buffer, palPos, 768);
-    fipalette.set(palBytes);
+    localPalette.set(palBytes);
   }
-  checkpalimito64(fipalette);
-  initclosestcolorfast(fipalette);
+  checkpalimito64(localPalette);
+  initclosestcolorfast(localPalette);
 
-  // ============= PASS 1: Mark surface slabs ==============
-  ptr = fidatpos;
-  for (let x = 0; x < xsiz; x++) {
-    for (let y = 0; y < ysiz; y++) {
-      let count = xyoffs[x][y + 1] - xyoffs[x][y];
-      if (!count) continue;
-      let xy = (x * ysiz + y) * BUFZSIZ;
-      while (count > 0) {
-        let z1 = readByte();
-        let k = readByte();
-        let vis = readByte();
-        count -= k + 3;
-        let z2 = z1 + k;
-        skip(k);
-        setzrange1(xy, z1, z2);
-      }
-    }
-  }
-
-  // Flood fill from edges => mark outside
-  for (let x = 0; x < xsiz; x++) {
-    for (let z = 0; z < zsiz; z++) {
-      floodfill3dbits(x, 0, z, xsiz, ysiz, zsiz);
-      floodfill3dbits(x, ysiz - 1, z, xsiz, ysiz, zsiz);
-    }
-  }
-  for (let y = 0; y < ysiz; y++) {
-    for (let z = 0; z < zsiz; z++) {
-      floodfill3dbits(0, y, z, xsiz, ysiz, zsiz);
-      floodfill3dbits(xsiz - 1, y, z, xsiz, ysiz, zsiz);
-    }
-  }
-  for (let x = 0; x < xsiz; x++) {
-    for (let y = 0; y < ysiz; y++) {
-      floodfill3dbits(x, y, 0, xsiz, ysiz, zsiz);
-      floodfill3dbits(x, y, zsiz - 1, xsiz, ysiz, zsiz);
-    }
-  }
-
-  // ============= PASS 2: Clear slabs ==============
-  ptr = fidatpos;
-  for (let x = 0; x < xsiz; x++) {
-    for (let y = 0; y < ysiz; y++) {
-      let count = xyoffs[x][y + 1] - xyoffs[x][y];
-      if (!count) continue;
-      let xy = (x * ysiz + y) * BUFZSIZ;
-      while (count > 0) {
-        let z1 = readByte();
-        let k = readByte();
-        let vis = readByte();
-        count -= k + 3;
-        let z2 = z1 + k;
-        skip(k);
-        setzrange0(xy, z1, z2);
-      }
-    }
-  }
-
-  // ============= PASS 3: Actual color reading + bounding box + center of mass ==============
-  voxdata = [];
+  // Read voxel colors in one pass, then derive face visibility from occupancy.
   let numvoxs = 0;
   ptr = fidatpos;
 
@@ -604,26 +619,21 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
     sumZ = 0;
 
   for (let x = 0; x < xsiz; x++) {
-    xlen[x] = 0;
     for (let y = 0; y < ysiz; y++) {
-      ylen[x][y] = 0;
       let count = xyoffs[x][y + 1] - xyoffs[x][y];
       if (!count) continue;
-      let xy = (x * ysiz + y) * BUFZSIZ;
 
       while (count > 0) {
         let z1 = readByte();
         let k = readByte();
-        let visByte = readByte();
+        readByte(); // slab visibility byte (unused; occupancy is authoritative)
         count -= k + 3;
         let z2 = z1 + k;
 
         for (let z = z1; z < z2; z++) {
           let col = readByte();
-          let vis = getvis(x, y, z, xsiz, ysiz, zsiz);
 
-          voxdata.push({ x, y, z, col, vis });
-          ylen[x][y]++;
+          localVoxdata.push({ x, y, z, col, vis: 0 });
           numvoxs++;
 
           // (ADDED) update bounding box
@@ -640,8 +650,13 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
           sumZ += z + 0.5;
         }
       }
-      xlen[x] += ylen[x][y];
     }
+  }
+
+  applyOccupancyVisibility(localVoxdata, xsiz, ysiz, zsiz);
+
+  if (numvoxs === 0) {
+    minX = maxX = minY = maxY = minZ = maxZ = 0;
   }
 
   // (ADDED) now compute final bounding box center (boxCenterX/Y/Z)
@@ -669,8 +684,8 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
     xpiv,
     ypiv,
     zpiv,
-    palette: fipalette.slice(),
-    voxdata,
+    palette: localPalette.slice(),
+    voxdata: localVoxdata,
 
     // (ADDED) bounding box
     minX,
@@ -689,9 +704,9 @@ export async function loadKvxSlab6Full(buffer: ArrayBuffer) {
     centerMassZ,
 
     getColor: (cIndex: number) => {
-      let r = fipalette[cIndex * 3 + 0] * 4;
-      let g = fipalette[cIndex * 3 + 1] * 4;
-      let b = fipalette[cIndex * 3 + 2] * 4;
+      let r = localPalette[cIndex * 3 + 0] * 4;
+      let g = localPalette[cIndex * 3 + 1] * 4;
+      let b = localPalette[cIndex * 3 + 2] * 4;
       return `rgb(${r},${g},${b})`;
     },
   };

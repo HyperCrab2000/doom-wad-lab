@@ -6,6 +6,8 @@ export const selectSkyTexture = (mapName: string): string => {
     return 'SKY2';
   } else if (mapName.startsWith('E3')) {
     return 'SKY3';
+  } else if (mapName.startsWith('E4')) {
+    return 'SKY4';
   }
 
   // Handle Doom II (MAP01 to MAP32)

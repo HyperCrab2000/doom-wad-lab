@@ -2,27 +2,84 @@ import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
 import type { WadMap } from '@/wad/interfaces/WadMap';
-import type { SkyBuffer } from '@/wad/interfaces/SkyBuffer';
 import type { ThingBuffer } from '@/wad/interfaces/ThingBuffer';
 import type { Triangle } from '@/wad/interfaces/Triangle';
-import type { Vertex } from '@/wad/interfaces/Vertex';
 import type { WallBuffer } from '@/wad/interfaces/WallBuffer';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 
-import { getLineDefsBySector } from '@/wad/renderer/geometry/getLineDefsBySector';
-import { getLinkedSkySectors } from '@/wad/renderer/geometry/getLinkedSkySectors';
 import { createThing } from '@/wad/renderer/geometry/createThing';
-import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
-import { mapToSkys } from '@/wad/renderer/geometry/mapToSkys';
-import { mapToWalls } from '@/wad/renderer/geometry/mapToWalls';
-import { sectorLinesToTriangles } from '@/wad/renderer/geometry/sectorLinesToTriangles';
+import { buildMapGeometryCpu, CpuMapGeometry } from '@/wad/renderer/geometry/buildMapGeometryCpu';
+import { SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
+import { SectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
+import { buildMapGeometryInWorker } from '@/wad/renderer/workers/geometryWorkerClient';
+import { buildSortedFlats, buildWallRangesByLine } from '@/wad/renderer/geometry/geometryCache';
 
 export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
+  triangleHash: SectorTriangleHash | null;
+  sectorVisibility: SectorVisibilityIndex | null;
   flats: Array<FlatBuffer>;
   walls: Array<WallBuffer>;
-  skys: Array<SkyBuffer>;
+  opaqueWalls: Array<WallBuffer>;
+  transparentWalls: Array<WallBuffer>;
+  /** Pre-sorted draw order for flats; rebuilt when geometry changes. */
+  sortedFlats: Array<FlatBuffer>;
+  /** wall index ranges per linedef for partial door updates. */
+  wallRangesByLine: Array<{ start: number; count: number }>;
   thing: ThingBuffer;
+}
+
+function uploadCpuGeometry(
+  gl: WebGLRenderingContext,
+  map: WadMap,
+  geometry: CpuMapGeometry
+): MapBuffers {
+  const wallBuffers = geometry.walls.map((wall) => {
+    const sectorIndex = wall.sectorIndex ?? -1;
+    const sector = sectorIndex >= 0 ? map.SECTORS[sectorIndex] : wall.sector!;
+    return {
+      position: createBuffer(gl, wall.position, 3),
+      uv: createBuffer(gl, wall.uv, 2),
+      normal: createBuffer(gl, wall.normal, 3),
+      indices: createElementBuffer(gl, wall.indices, 1),
+      texName: wall.texName!,
+      sector,
+      sectorIndex,
+      lineIndex: wall.lineIndex ?? -1,
+      transparent: Boolean(wall.transparent),
+      twoSidedMiddle: Boolean(wall.twoSidedMiddle),
+      repeatVertical: wall.repeatVertical !== false,
+      center: wall.center,
+    };
+  });
+
+  const flatBuffers = geometry.flats.map((flat) => {
+    const sectorIndex = flat.sectorIndex;
+    const sector = map.SECTORS[sectorIndex] ?? flat.sector;
+    return {
+      position: createBuffer(gl, flat.position, 3),
+      normal: createBuffer(gl, flat.normal, 3),
+      uv: createBuffer(gl, flat.uv, 2),
+      indices: createElementBuffer(gl, flat.indices, 1),
+      flatName: flat.flatName,
+      sector,
+      sectorIndex,
+      center: flat.center,
+    };
+  });
+
+  return {
+    sectorTriangles: geometry.sectorTriangles,
+    triangleHash: null,
+    sectorVisibility: null,
+    flats: flatBuffers,
+    walls: wallBuffers,
+    opaqueWalls: wallBuffers.filter((wall) => !wall.transparent),
+    transparentWalls: wallBuffers.filter((wall) => wall.transparent),
+    sortedFlats: buildSortedFlats(flatBuffers),
+    wallRangesByLine: buildWallRangesByLine(geometry.walls, map.LINEDEFS.length),
+    thing: createThing(gl),
+  };
 }
 
 export const createMapBuffers = (
@@ -30,56 +87,27 @@ export const createMapBuffers = (
   map: WadMap,
   texturesByName: Record<string, WallTexture>
 ): MapBuffers => {
-  const linkedSkySectors = getLinkedSkySectors(map);
-  const lineDefsBySector = getLineDefsBySector(map);
-
-  const sectorTriangles = map.SECTORS.reduce<Record<number, Array<Triangle>>>(
-    (acc, _, sectorIndex) => {
-      try {
-        if (lineDefsBySector[sectorIndex]) {
-          acc[sectorIndex] = sectorLinesToTriangles(map, lineDefsBySector[sectorIndex]);
-        }
-      } catch (e) {
-        console.log(`Could not create triangles for map, Sector: ${sectorIndex}`);
-        console.log(JSON.stringify(lineDefsBySector[sectorIndex]));
-
-        const vertexesById: Record<number, Vertex> = {};
-
-        lineDefsBySector[sectorIndex].forEach((line) => {
-          vertexesById[line.v1] = map.VERTEXES[line.v1];
-          vertexesById[line.v2] = map.VERTEXES[line.v2];
-        });
-
-        console.log(JSON.stringify(vertexesById));
-      }
-
-      return acc;
-    },
-    {}
-  );
-
-  //create 3d triangle objects out of the flats and walls for intersections testing
-  const flats = mapToFlats(map, sectorTriangles);
-  const walls = mapToWalls(map, texturesByName);
-
-  return {
-    sectorTriangles,
-    flats: flats.map((flat) => ({
-      position: createBuffer(gl, flat.position, 3),
-      normal: createBuffer(gl, flat.normal, 3),
-      uv: createBuffer(gl, flat.uv, 2),
-      indices: createElementBuffer(gl, flat.indices, 1),
-      flatName: flat.flatName,
-      sector: flat.sector,
-    })),
-    walls: walls.map((wall) => ({
-      position: createBuffer(gl, wall.position, 3),
-      uv: createBuffer(gl, wall.uv, 2),
-      indices: createElementBuffer(gl, wall.indices, 1),
-      texName: wall.texName!,
-      sector: wall.sector!,
-    })),
-    skys: mapToSkys(gl, map, sectorTriangles, linkedSkySectors),
-    thing: createThing(gl),
-  };
+  const geometry = buildMapGeometryCpu(map, texturesByName);
+  return uploadCpuGeometry(gl, map, geometry);
 };
+
+export async function createMapBuffersAsync(
+  gl: WebGLRenderingContext,
+  map: WadMap,
+  texturesByName: Record<string, WallTexture>
+): Promise<MapBuffers> {
+  const geometry = await buildMapGeometryInWorker(map, texturesByName);
+  return uploadCpuGeometry(gl, map, geometry);
+}
+
+export function attachMapBufferIndexes(
+  buffers: MapBuffers,
+  triangleHash: SectorTriangleHash,
+  sectorVisibility: SectorVisibilityIndex | null
+): MapBuffers {
+  buffers.triangleHash = triangleHash;
+  buffers.sectorVisibility = sectorVisibility;
+  return buffers;
+}
+
+export { uploadCpuGeometry };

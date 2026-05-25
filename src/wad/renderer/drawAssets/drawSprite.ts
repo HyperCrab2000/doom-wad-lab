@@ -16,6 +16,7 @@ export const drawSprite = (patchLump: ArrayBuffer, colourPalette: ColourPalette)
   );
 
   resizedContext.imageSmoothingEnabled = false;
+  resizedContext.clearRect(0, 0, resizedCanvas.width, resizedCanvas.height);
   resizedContext.drawImage(patch.canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
 
   return {

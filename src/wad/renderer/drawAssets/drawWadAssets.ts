@@ -4,10 +4,12 @@ import type { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
 import type { FlatTexture } from '@/wad/interfaces/FlatTexture';
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
-import { drawPatch } from '@/wad/renderer/drawAssets/drawPatch';
+import { drawPatch, getOrBuildPatch } from '@/wad/renderer/drawAssets/drawPatch';
 import { drawTexture } from '@/wad/renderer/drawAssets/drawTexture';
 import { drawFlat } from '@/wad/renderer/drawAssets/drawFlat';
 import { drawSprite } from '@/wad/renderer/drawAssets/drawSprite';
+import { collectMapAssetNames, type MapAssetNames } from '@/wad/renderer/drawAssets/collectMapAssets';
+import type { WadMap } from '@/wad/interfaces/WadMap';
 
 export interface WadAssets {
   texturesByName: Record<string, WallTexture>;
@@ -17,47 +19,47 @@ export interface WadAssets {
   flats: Array<FlatTexture>;
 }
 
-export const drawWadAssets = (wad: Wad): WadAssets => {
-  const patchesByName = wad.pnames.reduce<Record<string, CanvasRenderingContext2D>>(
-    (acc: { [x: string]: CanvasRenderingContext2D }, patchName: string) => {
-      let patchLump = wad.lumpHash[patchName];
+function buildPatchesByName(
+  wad: Wad,
+  patchNames: Iterable<string>
+): Record<string, CanvasRenderingContext2D> {
+  const patchesByName: Record<string, CanvasRenderingContext2D> = {};
 
-      if (!patchLump) {
-        //some wads misplace their patches (freedoom :P)
-        patchLump = wad.sprites[patchName];
+  for (const patchName of patchNames) {
+    getOrBuildPatch(wad, patchesByName, patchName);
+  }
 
-        if (!patchLump) {
-          throw new Error('Patch not found: ' + patchName);
-        }
-      }
+  return patchesByName;
+}
 
-      acc[patchName] = drawPatch(patchLump, wad.playpal);
-      return acc;
-    },
-    {}
-  );
+function drawWadAssetsFromNames(wad: Wad, names: MapAssetNames): WadAssets {
+  const patchesByName = buildPatchesByName(wad, names.patchLumps);
 
-  const textures = Object.keys(wad.textures).map((texName) => ({
-    ...drawTexture(wad.textures[texName], wad, patchesByName),
-    name: texName,
-  }));
+  const textures = [...names.wallTextures]
+    .filter((texName) => wad.textures[texName])
+    .map((texName) => ({
+      ...drawTexture(wad.textures[texName], wad, patchesByName),
+      name: texName,
+    }));
 
   const texturesByName = textures.reduce<Record<string, WallTexture>>((acc, texture) => {
     acc[texture.name] = texture;
     return acc;
   }, {});
 
-  const flats = Object.keys(wad.flats)
-    .filter((flatName) => !skyFlats.includes(flatName))
+  const flats = [...names.flats]
+    .filter((flatName) => wad.flats[flatName] && !skyFlats.includes(flatName))
     .map((flatName) => ({
       name: flatName,
       graphics: drawFlat(wad.flats[flatName], wad.playpal),
     }));
 
-  const sprites = Object.keys(wad.sprites).map((spriteName) => ({
-    ...drawSprite(wad.sprites[spriteName], wad.playpal),
-    name: spriteName,
-  }));
+  const sprites = [...names.spriteLumps]
+    .filter((spriteName) => wad.sprites[spriteName])
+    .map((spriteName) => ({
+      ...drawSprite(wad.sprites[spriteName], wad.playpal),
+      name: spriteName,
+    }));
 
   const spritesByName = sprites.reduce<Record<string, SpriteTexture>>((acc, sprite) => {
     acc[sprite.name] = sprite;
@@ -71,4 +73,19 @@ export const drawWadAssets = (wad: Wad): WadAssets => {
     texturesByName,
     spritesByName,
   };
+}
+
+export const drawWadAssetsForMap = (wad: Wad, map: WadMap, mapName: string): WadAssets => {
+  const names = collectMapAssetNames(wad, map, mapName);
+  return drawWadAssetsFromNames(wad, names);
+};
+
+export const drawWadAssets = (wad: Wad): WadAssets => {
+  const names: MapAssetNames = {
+    wallTextures: new Set(Object.keys(wad.textures)),
+    flats: new Set(Object.keys(wad.flats).filter((flatName) => !skyFlats.includes(flatName))),
+    spriteLumps: new Set(Object.keys(wad.sprites)),
+    patchLumps: new Set(wad.pnames),
+  };
+  return drawWadAssetsFromNames(wad, names);
 };

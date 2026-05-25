@@ -1,23 +1,29 @@
 {
-  "name": "gl-doom-redo",
+  "name": "doom-wad-lab",
   "version": "0.0.1",
-  "description": "Doom in WebGL",
+  "description": "Doom/Doom II WAD level renderer and KVX voxel viewer",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run src",
+    "test:music": "tsx scripts/test-opl3-browser.ts",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\""
   },
   "author": "Andrew Lowndes",
   "license": "MIT",
   "dependencies": {
+    "@types/matter-js": "^0.20.2",
     "apl-easy-gl": "^0.4.0",
     "apl-image-packer": "^1.1.0",
     "earcut": "^3.0.1",
+    "matter-js": "^0.20.0",
+    "opl3": "^0.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "spessasynth_core": "^4.3.5",
     "three": "^0.175.0"
   },
   "homepage": "https://github.com/andrewlowndes/doom",

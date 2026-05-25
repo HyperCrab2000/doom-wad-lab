@@ -666,6 +666,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         tex: textures.walls[textureName],
         lightIntensity: wall.sector.lightIntensity,
         shouldClip: wadAssets.texturesByName[textureName].transparent,
+        repeatVertical: wall.repeatVertical,
       });
 
       shader.setAttributes({

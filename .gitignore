@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+infra/terraform.tfvars
+
+# IWAD files (user-supplied, not redistributable)
+public/wads/*.WAD
+public/wads/*.wad
+!public/wads/test.wad
+
+# Large binary assets
+public/soundfonts/*.sf2
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

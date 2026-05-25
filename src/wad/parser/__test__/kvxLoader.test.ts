@@ -1,99 +1,77 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildVoxelMesh, loadKvxModel } from '@/wad/parser/kvxLoader';
+import { describe, expect, it } from 'vitest';
+import { loadKvxSlab6Full } from '@/wad/parser/kvxLoader';
 
-function createValidTestKvx(): ArrayBuffer {
-  const headerSize = 4 + 2 + 2 + 2 + 2 + 4 * 3; // header + pivot
-  const offsetTableSize = 4 * (2 * 2); // 2x2 columns
-  const slabSize = 8; // simple slab
+function createSingleVoxelKvx(): ArrayBuffer {
+  const headerSize = 7 * 4;
+  const xStartSize = 2 * 4;
+  const xyOffsetsSize = 2 * 2;
+  const slabSize = 4;
+  const paletteSize = 768;
+  const totalSize = headerSize + xStartSize + xyOffsetsSize + slabSize + paletteSize;
 
-  const totalSize = headerSize + offsetTableSize + slabSize;
   const buffer = new ArrayBuffer(totalSize);
   const dv = new DataView(buffer);
 
   let ptr = 0;
   dv.setUint32(ptr, totalSize, true);
   ptr += 4;
-  dv.setUint16(ptr, 2, true);
-  ptr += 2; // xSize = 2
-  dv.setUint16(ptr, 2, true);
-  ptr += 2; // ySize = 2
-  dv.setUint16(ptr, 4, true);
-  ptr += 2; // zSize = 4
-  ptr += 2; // dummy
-  ptr += 4 * 3; // pivots
+  dv.setUint32(ptr, 1, true);
+  ptr += 4;
+  dv.setUint32(ptr, 1, true);
+  ptr += 4;
+  dv.setUint32(ptr, 1, true);
+  ptr += 4;
+  dv.setInt32(ptr, 0, true);
+  ptr += 4;
+  dv.setInt32(ptr, 0, true);
+  ptr += 4;
+  dv.setInt32(ptr, 0, true);
+  ptr += 4;
 
-  const offsetBase = headerSize + offsetTableSize;
-  for (let i = 0; i < 4; i++) {
-    dv.setUint32(ptr, offsetBase, true);
+  for (let i = 0; i < 2; i++) {
+    dv.setUint32(ptr, 0, true);
     ptr += 4;
   }
 
-  // Slab section
-  dv.setUint8(offsetBase, 1); // slab count
-  dv.setUint8(offsetBase + 1, 0); // dummy
-  dv.setUint8(offsetBase + 2, 0); // zTop
-  dv.setUint8(offsetBase + 3, 4); // zLength
-  dv.setUint8(offsetBase + 4, 0); // dummy
+  dv.setUint16(ptr, 0, true);
+  ptr += 2;
+  dv.setUint16(ptr, slabSize, true);
+  ptr += 2;
+
+  dv.setUint8(ptr, 0);
+  ptr += 1;
+  dv.setUint8(ptr, 1);
+  ptr += 1;
+  dv.setUint8(ptr, 0);
+  ptr += 1;
+  dv.setUint8(ptr, 1);
+  ptr += 1;
+
+  const paletteStart = totalSize - paletteSize;
+  dv.setUint8(paletteStart + 3, 63);
+  dv.setUint8(paletteStart + 4, 0);
+  dv.setUint8(paletteStart + 5, 0);
 
   return buffer;
 }
 
-beforeEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe('kvxLoader', () => {
-  it('should load valid KVX model', async () => {
-    const buffer = createValidTestKvx();
+  it('loads a minimal Slab6-style KVX model', async () => {
+    const model = await loadKvxSlab6Full(createSingleVoxelKvx());
 
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(buffer),
-    });
-
-    const mesh = await loadKvxModel('/fake/valid.kvx');
-
-    expect(mesh.vertices.length).toBeGreaterThan(0);
-    expect(mesh.indices.length).toBeGreaterThan(0);
+    expect(model.xsiz).toBe(1);
+    expect(model.ysiz).toBe(1);
+    expect(model.zsiz).toBe(1);
+    expect(model.voxdata).toHaveLength(1);
+    expect(model.voxdata[0].vis).toBe(63);
+    expect(model.getColor(1)).toBe('rgb(252,0,0)');
   });
 
-  it('should still process valid columns even if one offset is corrupt', async () => {
-    const buffer = createValidTestKvx();
+  it('rejects invalid dimensions', async () => {
+    const buffer = createSingleVoxelKvx();
     const dv = new DataView(buffer);
+    dv.setUint32(4, 999, true);
 
-    // Corrupt just one offset (first one)
-    dv.setUint32(24, 9999999, true);
-
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(buffer),
-    });
-
-    const mesh = await loadKvxModel('/fake/corrupt.kvx');
-
-    expect(mesh.vertices.length).toBeGreaterThan(0);
-    expect(mesh.indices.length).toBeGreaterThan(0);
-  });
-
-  it('should handle truncated buffer gracefully', async () => {
-    const buffer = createValidTestKvx();
-    const shortBuffer = buffer.slice(0, buffer.byteLength - 5);
-
-    (global.fetch as any) = vi.fn().mockResolvedValue({
-      arrayBuffer: () => Promise.resolve(shortBuffer),
-    });
-
-    const mesh = await loadKvxModel('/fake/truncated.kvx');
-
-    expect(mesh.vertices.length).toBe(0);
-    expect(mesh.indices.length).toBe(0);
-  });
-});
-
-describe('buildVoxelMesh', () => {
-  it('should return empty mesh if no valid slabs', () => {
-    const dummy = new DataView(new ArrayBuffer(64));
-    const mesh = buildVoxelMesh(dummy, [0, 0, 0, 0], 2, 2, 4, 0, 0, 0);
-
-    expect(mesh.vertices.length).toBe(0);
-    expect(mesh.indices.length).toBe(0);
+    await expect(loadKvxSlab6Full(buffer)).rejects.toThrow('KVX too big');
   });
 });

@@ -9,11 +9,15 @@ const createFlat = (
   triangles: Array<Triangle>,
   height: number,
   reverseOrientation?: boolean
-): Pick<FlatObject, 'position' | 'indices' | 'normal' | 'uv'> => {
+): Pick<FlatObject, 'position' | 'indices' | 'normal' | 'uv' | 'center'> => {
   const flatPositions: number[] = [];
   const flatIndices: number[] = [];
   const flatNormals: number[] = [];
   const flatUVs: number[] = [];
+  let sumX = 0;
+  let sumY = 0;
+  let sumZ = 0;
+  let pointCount = 0;
 
   let posIndex = 0;
 
@@ -25,6 +29,12 @@ const createFlat = (
     const normal = computeNormal(p1, p2, p3);
 
     flatPositions.push(...p1, ...p2, ...p3);
+    for (const point of [p1, p2, p3]) {
+      sumX += point[0];
+      sumY += point[1];
+      sumZ += point[2];
+      pointCount++;
+    }
     flatNormals.push(...normal, ...normal, ...normal);
 
     // DOOM-style UVs: 1 texel = 1 world unit, repeat every 64
@@ -48,6 +58,7 @@ const createFlat = (
     indices: new Uint16Array(flatIndices),
     normal: new Float32Array(flatNormals),
     uv: new Float32Array(flatUVs),
+    center: pointCount ? [sumX / pointCount, sumY / pointCount, sumZ / pointCount] : [0, height, 0],
   };
 };
 
@@ -78,6 +89,7 @@ export const mapToFlats = (
       if (skyFlats.indexOf(sector.floorpic) < 0) {
         flats.push({
           sector,
+          sectorIndex,
           flatName: sector.floorpic,
           ...createFlat(triangles, sector.floorheight, false),
         });
@@ -86,6 +98,7 @@ export const mapToFlats = (
       if (skyFlats.indexOf(sector.ceilingpic) < 0) {
         flats.push({
           sector,
+          sectorIndex,
           flatName: sector.ceilingpic,
           ...createFlat(triangles, sector.ceilingheight, true),
         });

@@ -13,9 +13,18 @@ import skyboxVert from '@/wad/renderer/shaders/skyBox.vert';
 import skyboxFrag from '@/wad/renderer/shaders/skyBox.frag';
 import thingsVert from '@/wad/renderer/shaders/things.vert';
 import thingsFrag from '@/wad/renderer/shaders/things.frag';
+import voxelColorVert from '@/wad/renderer/shaders/voxelColor.vert';
+import voxelColorFrag from '@/wad/renderer/shaders/voxelColor.frag';
+import voxelParallaxGlsl from '@/wad/renderer/shaders/voxelParallax.glsl';
 
 import { createSkyboxBuffers } from '@/wad/renderer/drawAssets/drawSkybox';
-import { freenavControls } from '@/wad/renderer/controls/freenavControls';
+
+function resolveShaderIncludes(source: string): string {
+  return source.replace('#include "voxelParallax.glsl"', voxelParallaxGlsl);
+}
+
+const wallsFragSource = resolveShaderIncludes(wallsFrag);
+const flatFragSource = resolveShaderIncludes(flatFrag);
 
 export interface Camera {
   pos: vec3;
@@ -57,14 +66,13 @@ export function setupCamera(gl: WebGL2RenderingContext, canvas: HTMLCanvasElemen
   const skyboxBuffers = createSkyboxBuffers(gl);
 
   const shaders = {
-    walls: createProgram(gl, wallsVert, wallsFrag),
-    flats: createProgram(gl, flatVert, flatFrag),
+    walls: createProgram(gl, wallsVert, wallsFragSource),
+    flats: createProgram(gl, flatVert, flatFragSource),
     sky: createProgram(gl, skyVert, skyFrag),
     skybox: createProgram(gl, skyboxVert, skyboxFrag),
     things: createProgram(gl, thingsVert, thingsFrag),
+    voxelThings: createProgram(gl, voxelColorVert, voxelColorFrag),
   };
-
-  const unbindControls = freenavControls(viewMatrix, canvas);
 
   return {
     camera,
@@ -77,8 +85,6 @@ export function setupCamera(gl: WebGL2RenderingContext, canvas: HTMLCanvasElemen
     resizeScene,
     skyboxBuffers,
     shaders,
-    unbindControls,
-    setUnbindControls: (cb: () => void) => cb(), // Optional external override
   };
 }
 

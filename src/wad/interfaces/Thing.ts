@@ -7,6 +7,9 @@ export interface Thing {
   type: number;
   flags: {
     difficulty: difficulty;
+    appearsOnEasy?: boolean;
+    appearsOnMedium?: boolean;
+    appearsOnHard?: boolean;
     isDeaf: boolean;
     hideInSingleplayer: boolean;
     hideInDeathmatch?: boolean;

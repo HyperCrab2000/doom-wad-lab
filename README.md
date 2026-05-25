@@ -1,54 +1,41 @@
-# React + TypeScript + Vite
+# Doom WAD Lab
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Recovered from `gl-doom-redo`, with the working Doom/Doom II WAD level renderer and Slab6/KVX voxel loader kept together in one Vite app.
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```sh
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The app has two modes:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `Level Viewer`: loads a WAD and lets you select maps for the WebGL level renderer.
+- `Voxel Viewer`: previews Doom things from the Voxel Doom `VOXELDEF` catalog using the Slab6/KVX loader, with rotating 3D voxels plus top/bottom/front/back/side projections.
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+## Assets
+
+- Put `DOOM.WAD` and `DOOM2.WAD` in `public/wads/`.
+- Put Voxel Doom `.kvx` files in `public/voxels/`, for example `SARGA.kvx`, `SARGC.kvx`, or `HEADA.kvx`. The voxel UI already knows the expected filenames from `VOXELDEF` and will auto-load the selected model when the matching file exists.
+- A small recovered `test.wad` is copied into `public/wads/test.wad` so the app has a bundled WAD option.
+
+The Voxel Doom metadata is preserved under `voxel_doom/`, but the actual `.kvx` model files were not present in the recovered source tree.
+
+The Slab6 viewer lives in `src/components/VoxelModelViewer.tsx`; the older standalone `rendererTest` copy was removed so there is only one working KVX viewer path.
+
+## Deploy
+
+Hosting uses **S3 + CloudFront + WAF** with **GitHub Actions OIDC** (no AWS keys stored in GitHub). See [`infra/README.md`](infra/README.md) for bootstrap and DNS details.
+
+Production URLs (after infra apply):
+
+- https://wadlab.computingandtooting.com
+- https://wadlab.tootingandcomputing.com
+
+## Checks
+
+```sh
+npm run build
+npm test
 ```

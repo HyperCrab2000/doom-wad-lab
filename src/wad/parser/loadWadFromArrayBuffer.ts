@@ -1,7 +1,7 @@
 import { animatedFlatMap, animatedTextureMap } from '@/wad/constants/WadInfo';
-import { difficulty } from '@/wad/constants/WadInfo';
 
 import { ByteReader } from '@/wad/ByteReader/ByteReader';
+import { parseClassicThingFlags, parseExtendedThingFlags } from '@/wad/parser/thingFlags';
 import { Lump, LumpName } from '@/wad/interfaces/Lump';
 import { Wad } from '@/wad/interfaces/Wad';
 import { Patch } from '@/wad/interfaces/Patch';
@@ -181,8 +181,8 @@ function extractSectors(lumpDataReader: ByteReader) {
     const newSector: Sector = {
       floorheight: lumpDataReader.readInt16(),
       ceilingheight: lumpDataReader.readInt16(),
-      floorpic: lumpDataReader.readASCII(8),
-      ceilingpic: lumpDataReader.readASCII(8),
+      floorpic: lumpDataReader.readASCII(8).trim(),
+      ceilingpic: lumpDataReader.readASCII(8).trim(),
       lightlevel: lumpDataReader.readInt16(),
       type: lumpDataReader.readInt16(),
       tag: lumpDataReader.readInt16(),
@@ -353,28 +353,15 @@ function extractThings(lumpDataReader: ByteReader, isExtended: boolean) {
       const startHeight = lumpDataReader.readInt16();
       const angle = lumpDataReader.readInt16();
       const type = lumpDataReader.readInt16();
-      const flags = lumpDataReader.readBytesAsBits(2);
+      const flagsWord = lumpDataReader.readUint16();
+      const parsedFlags = parseExtendedThingFlags(flagsWord);
 
       const thing = {
         x,
         y,
         angle,
         type,
-        flags: {
-          difficulty: flags[0]
-            ? difficulty.easy
-            : flags[1]
-              ? difficulty.intermediate
-              : difficulty.hard,
-          isDeaf: !!flags[3],
-          isDormant: !!flags[4],
-          class1Only: !!flags[5],
-          class2Only: !!flags[6],
-          class3Only: !!flags[7],
-          hideInSingleplayer: !!flags[9] || !!flags[10],
-          hideInCoop: !!flags[8] || !!flags[10],
-          hideInDeathmatch: !!flags[8] || !!flags[9],
-        },
+        flags: parsedFlags,
         thingId,
         startHeight,
         action: lumpDataReader.readUint8(),
@@ -393,25 +380,15 @@ function extractThings(lumpDataReader: ByteReader, isExtended: boolean) {
       const y = lumpDataReader.readInt16();
       const angle = lumpDataReader.readInt16();
       const type = lumpDataReader.readInt16();
-      const flags = lumpDataReader.readBytesAsBits(2);
+      const flagsWord = lumpDataReader.readUint16();
+      const parsedFlags = parseClassicThingFlags(flagsWord);
 
       const thing = {
         x,
         y,
         angle,
         type,
-        flags: {
-          difficulty: flags[0]
-            ? difficulty.easy
-            : flags[1]
-              ? difficulty.intermediate
-              : difficulty.hard,
-          isDeaf: !!flags[3],
-          hideInSingleplayer: !!flags[4],
-          hideInDeathmatch: !!flags[5],
-          hideInCoop: !!flags[6],
-          friendly: !!flags[7],
-        },
+        flags: parsedFlags,
       };
 
       things.push(thing);

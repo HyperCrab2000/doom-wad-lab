@@ -21,14 +21,33 @@ interface CreateWallProps {
   texSize: WallTexture;
   drawFromTop?: boolean;
   bottomStart?: number;
+  /** Doom tiles midtextures horizontally only; solid walls tile both axes. */
+  repeatVertical?: boolean;
 }
 
 const createWall = (props: CreateWallProps): WallObject => {
-  const { v1, v2, bottom, top, inverse, side, texSize, drawFromTop, bottomStart } = props;
+  const {
+    v1,
+    v2,
+    bottom,
+    top,
+    inverse,
+    side,
+    texSize,
+    drawFromTop,
+    bottomStart,
+    repeatVertical = true,
+  } = props;
 
   const wallPositions = new Array<number>();
   const wallUvs = new Array<number>();
+  const wallNormals = new Array<number>();
   const wallIndices = new Array<number>();
+  const dx = v2.x - v1.x;
+  const dy = v2.y - v1.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = (inverse ? -dy : dy) / length;
+  const normalZ = (inverse ? -dx : dx) / length;
 
   wallPositions.splice(
     wallPositions.length,
@@ -47,14 +66,32 @@ const createWall = (props: CreateWallProps): WallObject => {
     -v2.y //top right
   );
 
-  const wallWidth = vec3.distance([v1.x, bottom, -v1.y], [v2.x, bottom, -v2.y]) / texSize.width,
-    wallHeight = (top - bottom) / texSize.height;
+  wallNormals.splice(
+    wallNormals.length,
+    0,
+    normalX,
+    0,
+    normalZ,
+    normalX,
+    0,
+    normalZ,
+    normalX,
+    0,
+    normalZ,
+    normalX,
+    0,
+    normalZ
+  );
+
+  const wallWidth = vec3.distance([v1.x, bottom, -v1.y], [v2.x, bottom, -v2.y]) / texSize.width;
+  const physicalHeight = (top - bottom) / texSize.height;
+  const uvHeight = repeatVertical ? physicalHeight : Math.min(physicalHeight, 1);
 
   let offsetX = side.xOffset / texSize.width,
     offsetY = side.yOffset / texSize.height;
 
   if (!drawFromTop) {
-    offsetY += 1 - wallHeight - (bottomStart || 0);
+    offsetY += 1 - uvHeight - (bottomStart || 0);
   }
 
   let posIndex = 0;
@@ -64,9 +101,9 @@ const createWall = (props: CreateWallProps): WallObject => {
       wallUvs.length,
       0,
       offsetX + wallWidth,
-      offsetY + wallHeight,
+      offsetY + uvHeight,
       offsetX,
-      offsetY + wallHeight,
+      offsetY + uvHeight,
       offsetX + wallWidth,
       offsetY,
       offsetX,
@@ -88,9 +125,9 @@ const createWall = (props: CreateWallProps): WallObject => {
       wallUvs.length,
       0,
       offsetX,
-      offsetY + wallHeight,
+      offsetY + uvHeight,
       offsetX + wallWidth,
-      offsetY + wallHeight,
+      offsetY + uvHeight,
       offsetX,
       offsetY,
       offsetX + wallWidth,
@@ -112,7 +149,10 @@ const createWall = (props: CreateWallProps): WallObject => {
   return {
     position: new Float32Array(wallPositions),
     uv: new Float32Array(wallUvs),
+    normal: new Float32Array(wallNormals),
     indices: new Uint16Array(wallIndices),
+    center: [(v1.x + v2.x) / 2, (bottom + top) / 2, -(v1.y + v2.y) / 2],
+    repeatVertical,
   };
 };
 
@@ -146,6 +186,7 @@ const procesSideDef = (
   const v2 = map.VERTEXES[lineDef.v2];
   const side = map.SIDEDEFS[sideDef];
   const sector = map.SECTORS[side.sector];
+  const sectorIndex = side.sector;
 
   let bottom = sector.floorheight;
   let top = sector.ceilingheight;
@@ -156,6 +197,7 @@ const procesSideDef = (
     if (resolveTexName(side.midTexture)) {
       walls.push({
         sector,
+        sectorIndex,
         texName: side.midTexture,
         ...createWall({
           v1,
@@ -171,6 +213,7 @@ const procesSideDef = (
     } else if (resolveTexName(side.bottomTexture)) {
       walls.push({
         sector,
+        sectorIndex,
         texName: side.bottomTexture,
         ...createWall({
           v1,
@@ -186,6 +229,7 @@ const procesSideDef = (
     } else if (resolveTexName(side.topTexture)) {
       walls.push({
         sector,
+        sectorIndex,
         texName: side.topTexture,
         ...createWall({
           v1,
@@ -213,7 +257,11 @@ const procesSideDef = (
 
     walls.push({
       sector,
+      sectorIndex,
       texName: side.midTexture,
+      transparent: texturesByName[side.midTexture].transparent,
+      twoSidedMiddle: true,
+      repeatVertical: false,
       ...createWall({
         v1,
         v2,
@@ -222,13 +270,16 @@ const procesSideDef = (
         inverse,
         side,
         texSize: texturesByName[side.midTexture],
-        drawFromTop: !lineDef.flags.lowerUnpegged,
+        // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
+        drawFromTop: lineDef.flags.upperUnpegged,
+        repeatVertical: false,
       }),
     });
   }
 
-  //draw a lower wall if it is visible
-  if (otherSector.floorheight > bottom) {
+  const lowerWallBottom = Math.min(sector.floorheight, otherSector.floorheight);
+  const lowerWallTop = Math.max(sector.floorheight, otherSector.floorheight);
+  if (lowerWallTop > lowerWallBottom) {
     const tex = resolveSolidTexName(
       [
         side.bottomTexture,
@@ -250,12 +301,13 @@ const procesSideDef = (
 
       walls.push({
         sector,
+        sectorIndex,
         texName: tex,
         ...createWall({
           v1,
           v2,
-          bottom: sector.floorheight,
-          top: otherSector.floorheight,
+          bottom: lowerWallBottom,
+          top: lowerWallTop,
           inverse,
           side,
           texSize: texturesByName[tex],
@@ -266,12 +318,15 @@ const procesSideDef = (
     }
   }
 
-  //draw an upper wall if it is visible
+  const upperWallBottom = Math.min(sector.ceilingheight, otherSector.ceilingheight);
+  const upperWallTop = Math.max(sector.ceilingheight, otherSector.ceilingheight);
+  const sectorHasSky = skyFlats.indexOf(sector.ceilingpic) >= 0;
+  const otherSectorHasSky = skyFlats.indexOf(otherSector.ceilingpic) >= 0;
   if (
-    otherSector.ceilingheight < top &&
-    (skyFlats.indexOf(otherSector.ceilingpic) < 0 || skyFlats.indexOf(sector.ceilingpic) < 0)
+    upperWallTop > upperWallBottom &&
+    (!sectorHasSky || !otherSectorHasSky)
   ) {
-    let tex = resolveSolidTexName(
+    const tex = resolveSolidTexName(
       [
         side.topTexture,
         side.bottomTexture,
@@ -287,12 +342,13 @@ const procesSideDef = (
     if (tex) {
       walls.push({
         sector,
+        sectorIndex,
         texName: tex,
         ...createWall({
           v1,
           v2,
-          bottom: otherSector.ceilingheight,
-          top: sector.ceilingheight,
+          bottom: upperWallBottom,
+          top: upperWallTop,
           inverse,
           side,
           texSize: texturesByName[tex],
@@ -305,42 +361,64 @@ const procesSideDef = (
   return walls;
 };
 
+function resolveDefaultWall(texturesByName: Record<string, WallTexture>): string {
+  return 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : firstObjectKey(texturesByName)!;
+}
+
+export function mapToWallsForLine(
+  map: WadMap,
+  texturesByName: Record<string, WallTexture>,
+  lineIndex: number,
+  defaultWall?: string
+): WallObject[] {
+  const lineDef = map.LINEDEFS[lineIndex];
+  if (!lineDef) return [];
+
+  const fallbackWall = defaultWall ?? resolveDefaultWall(texturesByName);
+  const walls: WallObject[] = [];
+
+  const sideResults = procesSideDef(
+    map,
+    lineDef.sidenum[0],
+    lineDef.sidenum[1],
+    lineDef,
+    texturesByName,
+    false,
+    fallbackWall
+  );
+  for (const wall of sideResults) {
+    wall.lineIndex = lineIndex;
+    walls.push(wall);
+  }
+
+  if (lineDef.sidenum[1] !== -1) {
+    const otherSideResults = procesSideDef(
+      map,
+      lineDef.sidenum[1],
+      lineDef.sidenum[0],
+      lineDef,
+      texturesByName,
+      true,
+      fallbackWall
+    );
+    for (const wall of otherSideResults) {
+      wall.lineIndex = lineIndex;
+      walls.push(wall);
+    }
+  }
+
+  return walls;
+}
+
 export const mapToWalls = (
   map: WadMap,
   texturesByName: Record<string, WallTexture>
 ): Array<WallObject> => {
   const walls = new Array<WallObject>();
+  const defaultWall = resolveDefaultWall(texturesByName);
 
-  const defaultWall = 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : firstObjectKey(texturesByName)!;
-
-  //now draw the walls
-  map.LINEDEFS.forEach((lineDef) => {
-    //line def (x/y pos)
-    // - get right/left side-def from line def (tex pegging/offset for u/v)
-    // - get sector from each side-def (height, z pos, ceiling and floor pos/tex, light)
-    const sideResults = procesSideDef(
-      map,
-      lineDef.sidenum[0],
-      lineDef.sidenum[1],
-      lineDef,
-      texturesByName,
-      false,
-      defaultWall
-    );
-    walls.splice(walls.length, 0, ...sideResults);
-
-    if (lineDef.sidenum[1] !== -1) {
-      const otherSideResults = procesSideDef(
-        map,
-        lineDef.sidenum[1],
-        lineDef.sidenum[0],
-        lineDef,
-        texturesByName,
-        true,
-        defaultWall
-      );
-      walls.splice(walls.length, 0, ...otherSideResults);
-    }
+  map.LINEDEFS.forEach((_lineDef, lineIndex) => {
+    walls.push(...mapToWallsForLine(map, texturesByName, lineIndex, defaultWall));
   });
 
   return walls;

@@ -1,24 +1,53 @@
-import { DoomCanvas } from '@/components/DoomCanvas';
+import { useState } from 'react';
+import type { Wad } from '@/wad/interfaces/Wad';
+import { LevelViewer } from '@/features/level-viewer/LevelViewer';
+import { DoomHeaderLogo } from '@/features/level-viewer/DoomHeaderLogo';
+import { VoxelModelViewer } from '@/features/voxel-viewer/VoxelModelViewer';
+
+type AppMode = 'levels' | 'voxels';
 
 export const App = () => {
-  console.log('App loaded!'); // Debug here
+  const [mode, setMode] = useState<AppMode>('levels');
+  const [loadedWad, setLoadedWad] = useState<Wad | null>(null);
+
   return (
-    <div style={{ padding: '1rem' }}>
-      <h1>Doom React/Vite/WebGL</h1>
-      <DoomCanvas />
-      <div id="fps-counter" style={{
-        position: 'absolute',
-        top: '8px',
-        left: '8px',
-        background: 'rgba(0, 0, 0, 0.6)',
-        color: '#0f0',
-        padding: '4px 8px',
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        zIndex: 1000,
-        pointerEvents: 'none'
-      }}>
+    <div className="app-shell">
+      <header className="hero">
+        <div className="hero-copy">
+          <span className="eyebrow">TypeScript DOOM Clone</span>
+          <DoomHeaderLogo wad={loadedWad} />
+          <p className="hero-tagline">
+            Browser WebGL2 renderer for IWAD maps — built with Node, drawn in the GPU.
+          </p>
+        </div>
+
+        <nav className="mode-tabs" aria-label="Viewer mode">
+          <button
+            type="button"
+            className={mode === 'levels' ? 'active' : ''}
+            onClick={() => setMode('levels')}
+          >
+            Level Viewer
+          </button>
+          <button
+            type="button"
+            className={mode === 'voxels' ? 'active' : ''}
+            onClick={() => setMode('voxels')}
+          >
+            Voxel Viewer
+          </button>
+        </nav>
+      </header>
+
+      <main className="app-main">
+        {mode === 'levels' ? <LevelViewer onWadChange={setLoadedWad} /> : <VoxelModelViewer />}
+      </main>
+
+      <div id="fps-counter" className="fps-counter">
         FPS: ...
+      </div>
+      <div id="voxel-counter" className="voxel-counter">
+        VOXELS: ...
       </div>
     </div>
   );

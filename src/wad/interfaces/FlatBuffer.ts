@@ -6,6 +6,8 @@ export interface FlatBuffer {
   indices: ElementBuffer;
   flatName: string;
   sector: Sector;
+  sectorIndex: number;
   normal: Buffer;
   uv: Buffer;
+  center: [number, number, number];
 }
