@@ -21,6 +21,8 @@ export interface ActiveDoor {
   speed: number;
   direction: DoorMoveDirection;
   waitRemaining: number;
+  /** Seconds to wait at the top before closing (openWaitClose). */
+  waitAtTopSeconds: number;
   action: DoorAction;
   staysOpen: boolean;
   sound: DoorSpecialDef['sound'];
@@ -130,12 +132,16 @@ export class DoorSystem {
         if (door.waitRemaining <= 0) {
           if (door.action === 'openWaitClose') {
             door.direction = 'down';
+            door.waitRemaining = 0;
             playClose = true;
             sound = door.sound;
           } else if (door.action === 'closeWaitOpen') {
             door.direction = 'up';
+            door.waitRemaining = 0;
             playOpen = true;
             sound = door.sound;
+          } else if (door.staysOpen) {
+            this.doors.delete(door.sectorIndex);
           }
         }
         continue;
@@ -163,8 +169,7 @@ export class DoorSystem {
       }
 
       if (door.sector.ceilingheight !== previous) {
-        this.dirty = true;
-        this.dirtySectorIndices.add(door.sectorIndex);
+        this.markSectorAndNeighborsDirty(door.sectorIndex);
       }
     }
 
@@ -179,7 +184,7 @@ export class DoorSystem {
       }
       if (door.action === 'closeWaitOpen') {
         door.direction = 'wait';
-        door.waitRemaining = 30;
+        door.waitRemaining = door.waitAtTopSeconds;
         return null;
       }
       this.doors.delete(door.sectorIndex);
@@ -189,7 +194,7 @@ export class DoorSystem {
     if (direction === 'up') {
       if (door.action === 'openWaitClose') {
         door.direction = 'wait';
-        door.waitRemaining = 4;
+        door.waitRemaining = door.waitAtTopSeconds;
         return null;
       }
       if (door.action === 'closeWaitOpen') {
@@ -197,8 +202,8 @@ export class DoorSystem {
         return 'open';
       }
       if (door.staysOpen) {
-        door.direction = 'wait';
-        return null;
+        this.doors.delete(door.sectorIndex);
+        return 'open';
       }
       this.doors.delete(door.sectorIndex);
       return 'open';
@@ -224,15 +229,13 @@ export class DoorSystem {
       if (def.action === 'openWaitClose' && open) {
         existing.direction = 'down';
         existing.waitRemaining = 0;
-        this.dirty = true;
-        this.dirtySectorIndices.add(sectorIndex);
+        this.markSectorAndNeighborsDirty(sectorIndex);
         return 'close';
       }
       if (def.action === 'closeWaitOpen' && closed) {
         existing.direction = 'up';
         existing.waitRemaining = 0;
-        this.dirty = true;
-        this.dirtySectorIndices.add(sectorIndex);
+        this.markSectorAndNeighborsDirty(sectorIndex);
         return 'open';
       }
       return null;
@@ -275,13 +278,32 @@ export class DoorSystem {
       speed,
       direction,
       waitRemaining: def.waitSeconds,
+      waitAtTopSeconds: def.waitSeconds,
       action: def.action,
       staysOpen,
       sound: def.sound,
     });
+    this.markSectorAndNeighborsDirty(sectorIndex);
+    return direction === 'up' ? 'open' : 'close';
+  }
+
+  private markSectorAndNeighborsDirty(sectorIndex: number): void {
     this.dirty = true;
     this.dirtySectorIndices.add(sectorIndex);
-    return direction === 'up' ? 'open' : 'close';
+    for (const line of this.map.LINEDEFS) {
+      for (const sideIndex of line.sidenum) {
+        if (sideIndex < 0) continue;
+        if (this.map.SIDEDEFS[sideIndex].sector !== sectorIndex) continue;
+        for (const otherSideIndex of line.sidenum) {
+          if (otherSideIndex < 0) continue;
+          const neighbor = this.map.SIDEDEFS[otherSideIndex].sector;
+          if (neighbor !== sectorIndex) {
+            this.dirtySectorIndices.add(neighbor);
+          }
+        }
+        break;
+      }
+    }
   }
 
   private resolveTargetSectors(line: LineDef, def: DoorSpecialDef): Array<{ sectorIndex: number; sector: Sector }> {

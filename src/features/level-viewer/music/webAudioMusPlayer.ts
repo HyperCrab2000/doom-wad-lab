@@ -3,12 +3,14 @@ import { getSoundfontEngine } from './soundfontEngine';
 export class WebAudioMusPlayer {
   private cacheKey: string | null = null;
   private stopped = true;
+  private generation = 0;
 
   unlockAudio(): void {
     void getSoundfontEngine().then((engine) => engine.unlockAudio());
   }
 
   async play(musData: ArrayBuffer, cacheKey: string): Promise<void> {
+    const generation = ++this.generation;
     this.stopped = false;
 
     if (typeof AudioContext === 'undefined') {
@@ -16,11 +18,13 @@ export class WebAudioMusPlayer {
     }
 
     const engine = await getSoundfontEngine();
-    if (this.stopped) return;
+    if (this.stopped || generation !== this.generation) return;
 
     await engine.unlockAudio();
+    if (this.stopped || generation !== this.generation) return;
+
     await engine.prepareMus(musData, cacheKey);
-    if (this.stopped) return;
+    if (this.stopped || generation !== this.generation) return;
 
     this.cacheKey = cacheKey;
     await engine.playPrepared(cacheKey);
@@ -29,6 +33,13 @@ export class WebAudioMusPlayer {
   stop(): void {
     this.stopped = true;
     this.cacheKey = null;
-    void getSoundfontEngine().then((engine) => engine.stop()).catch(() => {});
+    const generation = ++this.generation;
+    void getSoundfontEngine()
+      .then((engine) => {
+        if (generation === this.generation) {
+          engine.stop();
+        }
+      })
+      .catch(() => {});
   }
 }

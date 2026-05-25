@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download SoundFont
+        run: |
+          mkdir -p public/soundfonts
+          curl -fsSL -o public/soundfonts/TimGM6mb.sf2 \
+            "https://raw.githubusercontent.com/uriegel/mp3sfx/master/static/TimGM6mb.sf2"
+
       - name: Run tests
         run: npm test
 

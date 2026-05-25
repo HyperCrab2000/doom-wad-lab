@@ -36,7 +36,7 @@ vec2 ParallaxOcclusionMap(
     return texCoord;
   }
 
-  const float parallaxScale = 0.22;
+  const parallaxScale = 0.36;
   const float minLayers = 12.0;
   const float maxLayers = 16.0;
 

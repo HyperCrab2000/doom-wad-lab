@@ -11,6 +11,21 @@ import { musBufferToMidi } from './mus2midi';
 const AUDIO_BUFFER_SIZE = 512;
 
 let enginePromise: Promise<SoundfontEngine> | null = null;
+let soundfontBufferPromise: Promise<ArrayBuffer> | null = null;
+
+function fetchSoundfontBuffer(): Promise<ArrayBuffer> {
+  if (!soundfontBufferPromise) {
+    soundfontBufferPromise = fetch(SOUNDFONT_URL).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load SoundFont (${response.status}). Place TimGM6mb.sf2 at ${SOUNDFONT_URL}`
+        );
+      }
+      return response.arrayBuffer();
+    });
+  }
+  return soundfontBufferPromise;
+}
 
 export function getSoundfontEngine(): Promise<SoundfontEngine> {
   if (!enginePromise) {
@@ -22,15 +37,18 @@ export function getSoundfontEngine(): Promise<SoundfontEngine> {
 export function resetSoundfontEngine(): void {
   enginePromise?.then((engine) => engine.dispose()).catch(() => {});
   enginePromise = null;
+  soundfontBufferPromise = null;
 }
 
 export class SoundfontEngine {
-  private readonly audioContext: AudioContext;
-  private readonly gainNode: GainNode;
-  private readonly synth: SpessaSynthProcessor;
-  private readonly sequencer: SpessaSynthSequencer;
+  private audioContext: AudioContext | null = null;
+  private gainNode: GainNode | null = null;
+  private synth: SpessaSynthProcessor | null = null;
+  private sequencer: SpessaSynthSequencer | null = null;
   private scriptNode: ScriptProcessorNode | null = null;
-  private preparedKey: string | null = null;
+  private audioInitPromise: Promise<void> | null = null;
+  private readonly midiByKey = new Map<string, BasicMIDI>();
+  private loadedKey: string | null = null;
   private disposed = false;
 
   static async create(): Promise<SoundfontEngine> {
@@ -38,77 +56,59 @@ export class SoundfontEngine {
       throw new Error('Web Audio is not available in this environment.');
     }
 
-    const audioContext = new AudioContext();
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 0.85;
-    gainNode.connect(audioContext.destination);
-
-    const synth = new SpessaSynthProcessor(audioContext.sampleRate);
-    await synth.processorInitialized;
-
-    const response = await fetch(SOUNDFONT_URL);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to load SoundFont (${response.status}). Place TimGM6mb.sf2 at ${SOUNDFONT_URL}`
-      );
-    }
-
-    const soundfont = SoundBankLoader.fromArrayBuffer(await response.arrayBuffer());
-    synth.soundBankManager.addSoundBank(soundfont, 'main');
-
-    const sequencer = new SpessaSynthSequencer(synth);
-    sequencer.loopCount = Infinity;
-    sequencer.preload = true;
-
-    return new SoundfontEngine(audioContext, gainNode, synth, sequencer);
-  }
-
-  private constructor(
-    audioContext: AudioContext,
-    gainNode: GainNode,
-    synth: SpessaSynthProcessor,
-    sequencer: SpessaSynthSequencer
-  ) {
-    this.audioContext = audioContext;
-    this.gainNode = gainNode;
-    this.synth = synth;
-    this.sequencer = sequencer;
+    await fetchSoundfontBuffer();
+    return new SoundfontEngine();
   }
 
   async unlockAudio(): Promise<void> {
-    if (this.audioContext.state === 'suspended') {
+    await this.ensureAudioGraph();
+    if (this.audioContext?.state === 'suspended') {
       await this.audioContext.resume();
     }
   }
 
-  /** Converts MUS → MIDI and preloads voices (runs off the play hot path). */
+  /** Converts MUS → MIDI and caches it. Audio graph loads on first user gesture. */
   async prepareMus(musData: ArrayBuffer, cacheKey: string): Promise<void> {
     if (this.disposed) return;
-    if (this.preparedKey === cacheKey) return;
 
-    const midi = musBufferToMidi(musData);
-    this.sequencer.loadNewSongList([midi]);
-    midi.preloadSynth(this.synth);
-    this.preparedKey = cacheKey;
+    if (!this.midiByKey.has(cacheKey)) {
+      this.midiByKey.set(cacheKey, musBufferToMidi(musData));
+    }
+
+    if (this.sequencer && this.synth && this.loadedKey !== cacheKey) {
+      const midi = this.midiByKey.get(cacheKey)!;
+      this.sequencer.loadNewSongList([midi]);
+      midi.preloadSynth(this.synth);
+      this.loadedKey = cacheKey;
+    }
   }
 
   async playPrepared(cacheKey: string): Promise<void> {
     if (this.disposed) throw new Error('Soundfont engine disposed');
-    if (this.preparedKey !== cacheKey) {
+
+    const midi = this.midiByKey.get(cacheKey);
+    if (!midi) {
       throw new Error('Music track is not prepared yet');
     }
 
     await this.unlockAudio();
+
+    const sequencer = this.sequencer!;
+    const synth = this.synth!;
+
+    if (this.loadedKey !== cacheKey) {
+      sequencer.loadNewSongList([midi]);
+      midi.preloadSynth(synth);
+      this.loadedKey = cacheKey;
+    }
+
     this.ensureScriptNode();
-    this.sequencer.pause();
-    this.sequencer.songIndex = 0;
-    this.sequencer.currentTime = 0;
-    this.sequencer.play();
+    sequencer.currentTime = 0;
+    sequencer.play();
   }
 
   stop(): void {
-    this.sequencer.pause();
-    this.preparedKey = null;
+    this.sequencer?.pause();
   }
 
   dispose(): void {
@@ -117,19 +117,71 @@ export class SoundfontEngine {
     this.stop();
     this.scriptNode?.disconnect();
     this.scriptNode = null;
-    this.gainNode.disconnect();
-    void this.audioContext.close();
+    this.gainNode?.disconnect();
+    this.gainNode = null;
+    if (this.audioContext) {
+      void this.audioContext.close();
+    }
+    this.audioContext = null;
+    this.synth = null;
+    this.sequencer = null;
+    this.midiByKey.clear();
+    this.loadedKey = null;
+    this.audioInitPromise = null;
+  }
+
+  private async ensureAudioGraph(): Promise<void> {
+    if (this.disposed) throw new Error('Soundfont engine disposed');
+    if (this.audioContext && this.sequencer) return;
+    if (this.audioInitPromise) {
+      await this.audioInitPromise;
+      return;
+    }
+
+    this.audioInitPromise = (async () => {
+      const audioContext = new AudioContext();
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.85;
+      gainNode.connect(audioContext.destination);
+
+      const synth = new SpessaSynthProcessor(audioContext.sampleRate);
+      await synth.processorInitialized;
+
+      const soundfont = SoundBankLoader.fromArrayBuffer(await fetchSoundfontBuffer());
+      synth.soundBankManager.addSoundBank(soundfont, 'main');
+
+      const sequencer = new SpessaSynthSequencer(synth);
+      sequencer.loopCount = Infinity;
+      sequencer.preload = true;
+
+      this.audioContext = audioContext;
+      this.gainNode = gainNode;
+      this.synth = synth;
+      this.sequencer = sequencer;
+
+      if (this.loadedKey) {
+        const midi = this.midiByKey.get(this.loadedKey);
+        if (midi) {
+          sequencer.loadNewSongList([midi]);
+          midi.preloadSynth(synth);
+        }
+      }
+    })();
+
+    await this.audioInitPromise;
   }
 
   private ensureScriptNode(): void {
-    if (this.scriptNode) return;
+    if (this.scriptNode || !this.audioContext || !this.gainNode || !this.sequencer || !this.synth) {
+      return;
+    }
 
     const node = this.audioContext.createScriptProcessor(AUDIO_BUFFER_SIZE, 0, 2);
     node.onaudioprocess = (event) => {
       const left = event.outputBuffer.getChannelData(0);
       const right = event.outputBuffer.getChannelData(1);
-      this.sequencer.processTick();
-      this.synth.process(left, right);
+      this.sequencer!.processTick();
+      this.synth!.process(left, right);
     };
     node.connect(this.gainNode);
     this.scriptNode = node;

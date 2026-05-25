@@ -6,6 +6,11 @@ export interface WallBuffer {
   position: Buffer;
   uv: Buffer;
   normal: Buffer;
+  /** Cached byte lengths to avoid gl.getBufferParameter on every door refresh. */
+  positionBytes: number;
+  uvBytes: number;
+  normalBytes: number;
+  indicesBytes: number;
   texName: string;
   sector: Sector;
   sectorIndex: number;

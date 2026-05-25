@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasHeightVariation, heightPixelsFromRgba, propagateWallHeightRelief } from './heightTextures';
+import { hasHeightVariation, heightPixelsFromRgba, propagateWallHeightRelief, getWallReliefStrength, getFlatReliefStrength } from './heightTextures';
 import type { HeightTextureSet } from './heightTextures';
 
 describe('heightTextures', () => {
@@ -23,8 +23,6 @@ describe('heightTextures', () => {
 
     const height = heightPixelsFromRgba(rgba, 64, 64);
     expect(hasHeightVariation(height)).toBe(true);
-    expect(Math.min(...height)).toBeGreaterThanOrEqual(40);
-    expect(Math.max(...height)).toBeLessThanOrEqual(220);
     expect(Math.max(...height) - Math.min(...height)).toBeGreaterThan(20);
   });
 
@@ -57,5 +55,14 @@ describe('heightTextures', () => {
     expect(set.walls.STARTAN3).toBe(donor);
     expect(set.reliefWalls.has('STARTAN3')).toBe(true);
     expect(set.loadedWalls.has('STARTAN3')).toBe(true);
+  });
+
+  it('uses stronger relief for voxel height maps than procedural fallbacks', () => {
+    const relief = new Set(['STARTAN2', 'PLAINTEX']);
+    const loaded = new Set(['STARTAN2']);
+    expect(getWallReliefStrength('STARTAN2', relief, loaded)).toBeGreaterThan(
+      getWallReliefStrength('PLAINTEX', relief, loaded)
+    );
+    expect(getFlatReliefStrength('CEIL1_1', new Set(['CEIL1_1']), new Set(['CEIL1_1']))).toBeGreaterThan(0);
   });
 });

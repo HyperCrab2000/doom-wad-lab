@@ -33,6 +33,7 @@ interface DoomPlayerControlsOptions {
   map: WadMap;
   buffers: MapBuffers;
   start: { x: number; y: number; angle: number };
+  isAutomapActive?: () => boolean;
   onLiquidTransition?: (event: {
     kind: 'enter' | 'exit';
     liquidKind: NonNullable<Sector['liquidKind']>;
@@ -56,6 +57,18 @@ interface PlayerState {
   sector: Sector | null;
 }
 
+export interface PlayerSnapshot {
+  x: number;
+  y: number;
+  yaw: number;
+  pitch: number;
+}
+
+export interface DoomPlayerControlsHandle {
+  unbind: () => void;
+  getPlayerState: () => PlayerSnapshot;
+}
+
 // Doom default movement is run speed; Shift is the walk/speed key (see p_user.c forwardmove).
 const GROUND_ACCELERATION = 3200;
 const GROUND_FRICTION = 18;
@@ -74,7 +87,8 @@ export function doomPlayerControls({
   doorSystem,
   onDoorUse,
   onWalkDoor,
-}: DoomPlayerControlsOptions): () => void {
+  isAutomapActive,
+}: DoomPlayerControlsOptions): DoomPlayerControlsHandle {
   const startSector = findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, start);
   const state: PlayerState = {
     x: start.x,
@@ -95,7 +109,11 @@ export function doomPlayerControls({
   let animationFrame = 0;
 
   const keyDown = (event: KeyboardEvent) => {
+    if (isAutomapActive?.()) {
+      return;
+    }
     if (event.code === 'KeyE') {
+      if (event.repeat) return;
       event.preventDefault();
       tryUseSwitch();
       return;
@@ -116,6 +134,7 @@ export function doomPlayerControls({
 
 
   const mouseDown = (event: MouseEvent) => {
+    if (isAutomapActive?.()) return;
     if (event.button !== 0) return;
     event.preventDefault();
     canvas.focus();
@@ -131,18 +150,25 @@ export function doomPlayerControls({
   };
 
   const mouseMove = (event: MouseEvent) => {
+    if (isAutomapActive?.()) return;
     if (document.pointerLockElement !== canvas) return;
     state.yaw -= event.movementX * MOUSE_SENSITIVITY;
     // Positive pitch = look up. Browser movementY grows downward.
     state.pitch = clamp(state.pitch - event.movementY * MOUSE_SENSITIVITY, -MAX_PITCH, MAX_PITCH);
   };
 
+  let lastUseSwitchAt = 0;
+  const USE_SWITCH_DEBOUNCE_MS = 400;
+
   const tryUseSwitch = (): boolean => {
     if (!doorSystem) return false;
+    const now = performance.now();
+    if (now - lastUseSwitchAt < USE_SWITCH_DEBOUNCE_MS) return false;
     const target = findUseLine(map, { x: state.x, y: state.y }, { yaw: state.yaw });
     if (!target) return false;
     const result = doorSystem.tryUseLine(target.lineIndex, target.line);
     if (result.triggered) {
+      lastUseSwitchAt = now;
       onDoorUse?.(result);
     }
     return result.triggered;
@@ -152,6 +178,12 @@ export function doomPlayerControls({
     const now = performance.now();
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
+
+    if (isAutomapActive?.()) {
+      updateViewMatrix(viewMatrix, state);
+      animationFrame = requestAnimationFrame(tick);
+      return;
+    }
 
     const previousPosition = { x: state.x, y: state.y };
     updateHorizontalVelocity(state, keys, dt);
@@ -251,16 +283,24 @@ export function doomPlayerControls({
   window.addEventListener('keydown', keyDown);
   window.addEventListener('keyup', keyUp);
 
-  return () => {
-    cancelAnimationFrame(animationFrame);
-    invalidateBlockingSegmentCache();
-    if (document.pointerLockElement === canvas) {
-      document.exitPointerLock();
-    }
-    canvas.removeEventListener('mousedown', mouseDown);
-    window.removeEventListener('mousemove', mouseMove);
-    window.removeEventListener('keydown', keyDown);
-    window.removeEventListener('keyup', keyUp);
+  return {
+    unbind: () => {
+      cancelAnimationFrame(animationFrame);
+      invalidateBlockingSegmentCache();
+      if (document.pointerLockElement === canvas) {
+        document.exitPointerLock();
+      }
+      canvas.removeEventListener('mousedown', mouseDown);
+      window.removeEventListener('mousemove', mouseMove);
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
+    },
+    getPlayerState: (): PlayerSnapshot => ({
+      x: state.x,
+      y: state.y,
+      yaw: state.yaw,
+      pitch: state.pitch,
+    }),
   };
 }
 

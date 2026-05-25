@@ -1,26 +1,38 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Wad } from '@/wad/interfaces/Wad';
 import { WAD_OPTIONS } from '@/config/doomAssets';
-import { drawMap } from '@/wad/renderer/drawAssets/drawMap';
 import { renderGame } from '@/wad/renderer/renderGame/renderGame';
 import { useDoomLoader } from './useDoomLoader';
 import { useLevelMusic } from './music/useLevelMusic';
 import { DoomLevelTransition } from './DoomLevelTransition';
+import {
+  AutomapCheatLevel,
+  cycleAutomapCheat,
+  drawAutomap,
+} from '@/wad/renderer/automap/automap';
+import { appendCheatChar, cheatTriggered } from '@/wad/game/doomCheats';
 
 interface GameRenderer {
   load: ReturnType<typeof renderGame>['load'];
   setPresentationVisible: ReturnType<typeof renderGame>['setPresentationVisible'];
+  setAutomapActive: ReturnType<typeof renderGame>['setAutomapActive'];
+  getPlayerState: ReturnType<typeof renderGame>['getPlayerState'];
 }
 
 type PlaybackPhase = 'hidden' | 'loading-screen' | 'wiping' | 'playing';
 
-export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> = ({
-  onWadChange,
-}) => {
-  const mapCanvasRef = useRef<HTMLCanvasElement>(null);
+export const LevelViewer: React.FC<{
+  onWadChange?: (wad: Wad | null) => void;
+  onImmersiveChange?: (immersive: boolean) => void;
+}> = ({ onWadChange, onImmersiveChange }) => {
+  const automapCanvasRef = useRef<HTMLCanvasElement>(null);
   const gameCanvasRef = useRef<HTMLCanvasElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<GameRenderer | null>(null);
   const [playbackPhase, setPlaybackPhase] = useState<PlaybackPhase>('hidden');
+  const [automapActive, setAutomapActive] = useState(false);
+  const [automapCheat, setAutomapCheat] = useState<AutomapCheatLevel>(0);
+  const cheatBufferRef = useRef('');
 
   useEffect(() => {
     if (gameCanvasRef.current && !game) {
@@ -48,9 +60,18 @@ export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> 
 
   const levelDataReady = mapLoadState === 'ready';
   const awaitingReveal = levelDataReady && playbackPhase !== 'playing';
+  const isPlaying = playbackPhase === 'playing';
+
+  useEffect(() => {
+    onImmersiveChange?.(isPlaying);
+  }, [isPlaying, onImmersiveChange]);
 
   useEffect(() => {
     setPlaybackPhase('hidden');
+    setAutomapActive(false);
+    setAutomapCheat(0);
+    cheatBufferRef.current = '';
+    game?.setAutomapActive(false);
     game?.setPresentationVisible(false);
   }, [selectedMap, wadPath, game]);
 
@@ -81,13 +102,66 @@ export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> 
     }
   }, [music]);
 
+  const toggleAutomap = useCallback(() => {
+    setAutomapActive((active) => {
+      const next = !active;
+      game?.setAutomapActive(next);
+      return next;
+    });
+  }, [game]);
+
+  const triggerIddt = useCallback(() => {
+    setAutomapCheat((level) => cycleAutomapCheat(level));
+    setAutomapActive(true);
+    game?.setAutomapActive(true);
+  }, [game]);
+
   useEffect(() => {
-    if (!wad || !selectedMap || !mapCanvasRef.current) return;
+    if (!isPlaying) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === 'Tab') {
+        event.preventDefault();
+        toggleAutomap();
+        return;
+      }
+
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const tag = (event.target as HTMLElement | null)?.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+        cheatBufferRef.current = appendCheatChar(cheatBufferRef.current, event.key);
+        if (cheatTriggered(cheatBufferRef.current, 'iddt')) {
+          cheatBufferRef.current = '';
+          event.preventDefault();
+          triggerIddt();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isPlaying, toggleAutomap, triggerIddt]);
+
+  useEffect(() => {
+    if (!automapActive || !isPlaying || !wad || !selectedMap || !game) return;
+
     const map = wad.maps[selectedMap];
-    if (map) {
-      drawMap(mapCanvasRef.current, map);
-    }
-  }, [selectedMap, wad]);
+    if (!map) return;
+
+    let frame = 0;
+    const drawFrame = () => {
+      const canvas = automapCanvasRef.current;
+      const player = game.getPlayerState();
+      if (canvas && player) {
+        drawAutomap(canvas, map, { player, cheatLevel: automapCheat });
+      }
+      frame = requestAnimationFrame(drawFrame);
+    };
+
+    frame = requestAnimationFrame(drawFrame);
+    return () => cancelAnimationFrame(frame);
+  }, [automapActive, automapCheat, isPlaying, wad, selectedMap, game]);
 
   const transitionMode =
     playbackPhase === 'wiping' ? 'wipe' : ('static' as const);
@@ -97,7 +171,7 @@ export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> 
   const hideGameCanvas = playbackPhase !== 'playing';
 
   return (
-    <section className="doom-panel level-viewer">
+    <section className={`doom-panel level-viewer ${isPlaying ? 'level-viewer--playing' : ''}`}>
       <div className="level-controls">
         <div className="level-toolbar">
           <label className="doom-field">
@@ -164,18 +238,23 @@ export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> 
 
       <DoomLoader status={status} wad={wad} mapLoading={mapLoadState === 'loading'} />
 
-      <div className="canvas-grid">
-        <figure className="canvas-card minimap-card">
-          <figcaption>Automap</figcaption>
-          <canvas ref={mapCanvasRef} width="400" height="400" />
-        </figure>
+      <div className="game-stage">
         <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
-          <figcaption>
+          <figcaption className="game-card__caption">
             Renderer
-            <span>WASD move · Shift walk · Space jump · Click/E use · Esc release</span>
+            <span>Tab automap · iddt map modes · WASD move · Click/E use · Esc release mouse</span>
           </figcaption>
-          <div className="game-card__viewport">
-            <canvas ref={gameCanvasRef} width="960" height="600" tabIndex={0} />
+          <div className="game-card__viewport" ref={viewportRef}>
+            <canvas
+              ref={gameCanvasRef}
+              className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''}`}
+              tabIndex={0}
+            />
+            <canvas
+              ref={automapCanvasRef}
+              className={`automap-canvas ${automapActive ? 'automap-canvas--active' : ''}`}
+              aria-hidden={!automapActive}
+            />
             <DoomLevelTransition
               active={showTransition}
               mode={transitionMode}
@@ -183,6 +262,12 @@ export const LevelViewer: React.FC<{ onWadChange?: (wad: Wad | null) => void }> 
               gameCanvasRef={gameCanvasRef}
               onComplete={handleWipeComplete}
             />
+            {automapActive ? (
+              <div className="automap-hud" aria-live="polite">
+                AUTOMAP
+                {automapCheat === 1 ? ' · ALL LINES' : automapCheat === 2 ? ' · ALL THINGS' : ''}
+              </div>
+            ) : null}
           </div>
         </figure>
       </div>

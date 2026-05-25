@@ -156,6 +156,9 @@ const createWall = (props: CreateWallProps): WallObject => {
   };
 };
 
+/** Avoid upper/lower wall segments flickering on/off while door ceilings move. */
+const WALL_VISIBILITY_EPS = 1;
+
 const resolveTexName = (str: string): string | undefined => {
   return str !== '-' ? str : undefined;
 };
@@ -254,32 +257,33 @@ const procesSideDef = (
   if (resolveTexName(side.midTexture)) {
     const midBottom = Math.max(sector.floorheight, otherSector.floorheight);
     const midTop = Math.min(sector.ceilingheight, otherSector.ceilingheight);
-
-    walls.push({
-      sector,
-      sectorIndex,
-      texName: side.midTexture,
-      transparent: texturesByName[side.midTexture].transparent,
-      twoSidedMiddle: true,
-      repeatVertical: false,
-      ...createWall({
-        v1,
-        v2,
-        bottom: midBottom,
-        top: midTop,
-        inverse,
-        side,
-        texSize: texturesByName[side.midTexture],
-        // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
-        drawFromTop: lineDef.flags.upperUnpegged,
+    if (midTop > midBottom + WALL_VISIBILITY_EPS) {
+      walls.push({
+        sector,
+        sectorIndex,
+        texName: side.midTexture,
+        transparent: texturesByName[side.midTexture].transparent,
+        twoSidedMiddle: true,
         repeatVertical: false,
-      }),
-    });
+        ...createWall({
+          v1,
+          v2,
+          bottom: midBottom,
+          top: midTop,
+          inverse,
+          side,
+          texSize: texturesByName[side.midTexture],
+          // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
+          drawFromTop: lineDef.flags.upperUnpegged,
+          repeatVertical: false,
+        }),
+      });
+    }
   }
 
   const lowerWallBottom = Math.min(sector.floorheight, otherSector.floorheight);
   const lowerWallTop = Math.max(sector.floorheight, otherSector.floorheight);
-  if (lowerWallTop > lowerWallBottom) {
+  if (lowerWallTop > lowerWallBottom + WALL_VISIBILITY_EPS) {
     const tex = resolveSolidTexName(
       [
         side.bottomTexture,
@@ -323,7 +327,7 @@ const procesSideDef = (
   const sectorHasSky = skyFlats.indexOf(sector.ceilingpic) >= 0;
   const otherSectorHasSky = skyFlats.indexOf(otherSector.ceilingpic) >= 0;
   if (
-    upperWallTop > upperWallBottom &&
+    upperWallTop > upperWallBottom + WALL_VISIBILITY_EPS &&
     (!sectorHasSky || !otherSectorHasSky)
   ) {
     const tex = resolveSolidTexName(

@@ -34,6 +34,11 @@ export function useLevelMusic(
   const wadRef = useRef(wad);
   const mapRef = useRef(mapName);
   const wadPathRef = useRef(wadPath);
+  const lastTrackRef = useRef<{ wad: Wad | null; mapName: string; wadPath: string | null }>({
+    wad: null,
+    mapName: '',
+    wadPath: null,
+  });
 
   wadRef.current = wad;
   mapRef.current = mapName;
@@ -113,7 +118,16 @@ export function useLevelMusic(
   }, []);
 
   useEffect(() => {
-    playerRef.current?.stop();
+    const trackChanged =
+      lastTrackRef.current.wad !== wad ||
+      lastTrackRef.current.mapName !== mapName ||
+      lastTrackRef.current.wadPath !== wadPath;
+
+    if (trackChanged) {
+      playerRef.current?.stop();
+      lastTrackRef.current = { wad, mapName, wadPath };
+    }
+
     setIsPrepared(!enabledRef.current);
 
     if (!wad || !mapName) {
@@ -145,7 +159,7 @@ export function useLevelMusic(
         setIsPrepared(false);
         setStatus(error instanceof Error ? error.message : `Could not prepare ${lump.name}`);
       });
-  }, [wad, mapName, wadPath, playCurrentTrack]);
+  }, [wad, mapName, wadPath]);
 
   const play = useCallback(() => {
     playerRef.current?.unlockAudio();

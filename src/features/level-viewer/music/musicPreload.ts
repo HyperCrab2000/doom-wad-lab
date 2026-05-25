@@ -6,7 +6,7 @@ export function musicCacheKey(wadPath: string | null, lumpName: string): string 
   return `${wadPath ?? 'wad'}:${lumpName}`;
 }
 
-/** Warm SoundFont + MUS→MIDI conversion before the user hits Play. */
+/** Warm MUS→MIDI conversion before the user hits Play. */
 export async function preloadMusicLump(
   musData: ArrayBuffer,
   cacheKey: string

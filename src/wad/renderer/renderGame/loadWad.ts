@@ -26,7 +26,7 @@ import { Thing } from '@/wad/interfaces/Thing';
 import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
 import { doomAngleToYaw } from '@/wad/renderer/controls/playerView';
 import { createVoxelThingFrameMap, VoxelThingFrameMap } from './voxelThingMeshes';
-import { createHeightTextureSet, propagateWallHeightRelief } from './heightTextures';
+import { createHeightTextureSet, propagateWallHeightRelief, clearHeightUrlMissCache } from './heightTextures';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
 import { buildSectorTriangleHash, TriangleHashObject } from '@/wad/renderer/utils/sectorLookup';
 import { buildSectorVisibilityIndex, finalizeSectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
@@ -105,6 +105,8 @@ async function loadWadUncached(
   const wallNameList = [...wallNames];
   const flatNameList = [...flatNames];
   const currentSky = selectSkyTexture(mapName);
+
+  clearHeightUrlMissCache();
 
   const heightSources = {
     wallCanvases: Object.fromEntries(

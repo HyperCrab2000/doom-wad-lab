@@ -232,7 +232,7 @@ export function normalizeHeightRange(
     const half = range * 0.5;
     for (let i = 0; i < pixels.length; i++) {
       const t = (pixels[i] - mid) / half;
-      pixels[i] = Math.round(128 + t * 72);
+      pixels[i] = Math.round(128 + t * 96);
     }
     return pixels;
   }
@@ -348,4 +348,37 @@ function setHeightTextureParams(gl: WebGL2RenderingContext): void {
 
 export function clearHeightUrlMissCache(): void {
   heightUrlMissCache.clear();
+}
+
+/** Wall parallax strength when a VoxelDoom height map loaded. */
+export const WALL_RELIEF_VOXEL = 0.88;
+/** Wall parallax strength when using procedural height from texture luminance. */
+export const WALL_RELIEF_PROCEDURAL = 0.58;
+/** Flat parallax strength when a VoxelDoom height map loaded. */
+export const FLAT_RELIEF_VOXEL = 0.72;
+/** Flat parallax strength when using procedural height from flat art. */
+export const FLAT_RELIEF_PROCEDURAL = 0.48;
+
+export function getWallReliefStrength(
+  textureName: string,
+  reliefWalls: ReadonlySet<string>,
+  loadedWalls: ReadonlySet<string>
+): number {
+  const key = textureName.toUpperCase();
+  const hasRelief = reliefWalls.has(key) || reliefWalls.has(textureName);
+  if (!hasRelief) return 0;
+  const hasVoxelHeight = loadedWalls.has(key) || loadedWalls.has(textureName);
+  return hasVoxelHeight ? WALL_RELIEF_VOXEL : WALL_RELIEF_PROCEDURAL;
+}
+
+export function getFlatReliefStrength(
+  flatName: string,
+  reliefFlats: ReadonlySet<string>,
+  loadedFlats: ReadonlySet<string>
+): number {
+  const key = flatName.toUpperCase();
+  const hasRelief = reliefFlats.has(key) || reliefFlats.has(flatName);
+  if (!hasRelief) return 0;
+  const hasVoxelHeight = loadedFlats.has(key) || loadedFlats.has(flatName);
+  return hasVoxelHeight ? FLAT_RELIEF_VOXEL : FLAT_RELIEF_PROCEDURAL;
 }

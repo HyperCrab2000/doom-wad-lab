@@ -17,7 +17,7 @@ import {
   findCameraSectorIndex,
   isDrawVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
-import { getFloorLiquidDrawUniforms, getTextureSurfaceGlow, getThingEmissiveUniforms, normalizeFlatName, PointLight } from '@/wad/renderer/renderGame/sectorLighting';
+import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
 import {
   computeDynamicLightAt,
   computeNearestLightUniforms,
@@ -150,8 +150,11 @@ export function drawScene(params: DrawSceneParams) {
       fogDensity: wall.sector.fogDensity ?? 0.25,
       visibilityDistance: wall.sector.visibilityDistance ?? 900,
       ...computeNearestLightUniforms(pointLights, wall.center),
-      reliefStrength:
-        textures.reliefWalls.has(reliefKey) || textures.reliefWalls.has(textureName) ? 0.42 : 0.0,
+      reliefStrength: getWallReliefStrength(
+        textureName,
+        textures.reliefWalls,
+        textures.heightWallLoaded
+      ),
       surfaceGlowColor: surfaceGlow?.color ?? [0, 0, 0],
       surfaceGlowStrength: surfaceGlow?.strength ?? 0,
       surfaceGlowPulse: surfaceGlow?.animated ? 1 : 0,
@@ -376,8 +379,11 @@ function drawFlat(
 
   const surfaceGlow = getTextureSurfaceGlow(flatName);
   const flatReliefKey = flatName.toUpperCase();
-  const hasHeightMap =
-    ctx.textures.reliefFlats.has(flatReliefKey) || ctx.textures.reliefFlats.has(flatName);
+  const heightStrength = getFlatReliefStrength(
+    flatName,
+    ctx.textures.reliefFlats,
+    ctx.textures.heightFlatLoaded
+  );
 
   ctx.flatShader.setUniforms({
     tex: ctx.textures.flats[flatName],
@@ -402,7 +408,7 @@ function drawFlat(
     liquidStrength: floorLiquid?.liquidStrength ?? 0,
     liquidEmissive: floorLiquid?.liquidEmissive ?? 0,
     uCameraPos: ctx.cameraPos,
-    heightStrength: hasHeightMap ? 0.38 : 0.0,
+    heightStrength,
     timeSeconds: ctx.timeSeconds,
   });
 
