@@ -1,10 +1,12 @@
-// skybox.vert (Doom style)
-attribute vec3 aPosition;
-attribute vec2 aUv;
+#version 300 es
+precision mediump float;
 
-varying vec2 vUv;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec2 aUv;
+
+out vec2 vUv;
 
 void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPosition.xy, 1.0, 1.0); // Render on far plane with no perspective distortion
+  vUv = aUv;
+  gl_Position = vec4(aPosition.xy, 1.0, 1.0);
 }

@@ -37,3 +37,14 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Smoke test (no console errors)
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 &
+          PREVIEW_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4173/ >/dev/null && break
+            sleep 1
+          done
+          TEST_URL=http://127.0.0.1:4173 npm run test:console
+          kill $PREVIEW_PID

@@ -12,15 +12,19 @@ async function main() {
 
   page.on('console', (msg) => {
     const text = msg.text();
-    if (msg.type() === 'error') errors.push(text);
-    else if (msg.type() === 'warning') warnings.push(text);
+    if (msg.type() === 'error') {
+      if (/favicon\.ico/i.test(text)) return;
+      errors.push(text);
+    } else if (msg.type() === 'warning') warnings.push(text);
   });
   page.on('pageerror', (err) => errors.push(`PAGEERROR: ${err.stack ?? err.message}`));
   page.on('requestfailed', (req) => {
     failedRequests.push(`${req.failure()?.errorText ?? 'failed'} ${req.url()}`);
   });
   page.on('response', (res) => {
-    if (res.status() >= 400) failedRequests.push(`${res.status()} ${res.url()}`);
+    const url = res.url();
+    if (url.includes('favicon.ico')) return;
+    if (res.status() >= 400) failedRequests.push(`${res.status()} ${url}`);
   });
 
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -51,6 +55,11 @@ async function main() {
   const uniqueWarnings = [...new Set(warnings)];
   console.log(`\n=== WARNINGS (${uniqueWarnings.length}) ===`);
   uniqueWarnings.slice(0, 15).forEach((w, i) => console.log(`${i + 1}. ${w.slice(0, 400)}`));
+
+  if (uniqueErrors.length > 0) {
+    console.error(`\nFAILED: ${uniqueErrors.length} console error(s)`);
+    process.exit(1);
+  }
 
   await browser.close();
 }

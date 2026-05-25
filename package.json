@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run src",
+    "test:console": "tsx scripts/capture-console-errors.ts",
     "test:music": "tsx scripts/test-opl3-browser.ts",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\""
