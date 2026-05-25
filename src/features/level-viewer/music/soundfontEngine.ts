@@ -8,6 +8,7 @@ import {
 import { SOUNDFONT_URL } from '@/config/doomAssets';
 import { musBufferToMidi } from './mus2midi';
 
+/** ScriptProcessor quantum — must be a power of two (256+). */
 const AUDIO_BUFFER_SIZE = 512;
 
 let enginePromise: Promise<SoundfontEngine> | null = null;
@@ -46,6 +47,7 @@ export class SoundfontEngine {
   private synth: SpessaSynthProcessor | null = null;
   private sequencer: SpessaSynthSequencer | null = null;
   private scriptNode: ScriptProcessorNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
   private audioInitPromise: Promise<void> | null = null;
   private readonly midiByKey = new Map<string, BasicMIDI>();
   private loadedKey: string | null = null;
@@ -67,19 +69,12 @@ export class SoundfontEngine {
     }
   }
 
-  /** Converts MUS → MIDI and caches it. Audio graph loads on first user gesture. */
+  /** Converts MUS → MIDI and caches it. Synth preload happens at play time. */
   async prepareMus(musData: ArrayBuffer, cacheKey: string): Promise<void> {
     if (this.disposed) return;
 
     if (!this.midiByKey.has(cacheKey)) {
       this.midiByKey.set(cacheKey, musBufferToMidi(musData));
-    }
-
-    if (this.sequencer && this.synth && this.loadedKey !== cacheKey) {
-      const midi = this.midiByKey.get(cacheKey)!;
-      this.sequencer.loadNewSongList([midi]);
-      midi.preloadSynth(this.synth);
-      this.loadedKey = cacheKey;
     }
   }
 
@@ -111,12 +106,18 @@ export class SoundfontEngine {
     this.sequencer?.pause();
   }
 
+  getAnalyser(): AnalyserNode | null {
+    return this.analyserNode;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.stop();
     this.scriptNode?.disconnect();
     this.scriptNode = null;
+    this.analyserNode?.disconnect();
+    this.analyserNode = null;
     this.gainNode?.disconnect();
     this.gainNode = null;
     if (this.audioContext) {
@@ -142,9 +143,16 @@ export class SoundfontEngine {
       const audioContext = new AudioContext();
       const gainNode = audioContext.createGain();
       gainNode.gain.value = 0.85;
+
+      const analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.82;
+      analyserNode.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      const synth = new SpessaSynthProcessor(audioContext.sampleRate);
+      const synth = new SpessaSynthProcessor(audioContext.sampleRate, {
+        maxBufferSize: AUDIO_BUFFER_SIZE,
+      });
       await synth.processorInitialized;
 
       const soundfont = SoundBankLoader.fromArrayBuffer(await fetchSoundfontBuffer());
@@ -156,6 +164,7 @@ export class SoundfontEngine {
 
       this.audioContext = audioContext;
       this.gainNode = gainNode;
+      this.analyserNode = analyserNode;
       this.synth = synth;
       this.sequencer = sequencer;
 
@@ -172,7 +181,7 @@ export class SoundfontEngine {
   }
 
   private ensureScriptNode(): void {
-    if (this.scriptNode || !this.audioContext || !this.gainNode || !this.sequencer || !this.synth) {
+    if (this.scriptNode || !this.audioContext || !this.analyserNode || !this.sequencer || !this.synth) {
       return;
     }
 
@@ -180,10 +189,11 @@ export class SoundfontEngine {
     node.onaudioprocess = (event) => {
       const left = event.outputBuffer.getChannelData(0);
       const right = event.outputBuffer.getChannelData(1);
+
       this.sequencer!.processTick();
       this.synth!.process(left, right);
     };
-    node.connect(this.gainNode);
+    node.connect(this.analyserNode!);
     this.scriptNode = node;
   }
 }

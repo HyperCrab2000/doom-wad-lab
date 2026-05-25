@@ -1,6 +1,7 @@
 import { Node } from '@/wad/interfaces/Node';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { Triangle } from '@/wad/interfaces/Triangle';
+import { skyFlats } from '@/wad/constants/WadInfo';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
   MAX_PORTAL_TRAVERSAL_DEPTH,
@@ -126,11 +127,20 @@ export function buildSectorVisibilityIndex(map: WadMap): SectorVisibilityIndex |
   return { subsectorToSector, sectorBounds, sectorAdjacency: buildSectorAdjacency(map) };
 }
 
+export function isSkySector(map: WadMap, sectorIndex: number): boolean {
+  const sector = map.SECTORS[sectorIndex];
+  if (!sector) return false;
+  return (
+    skyFlats.indexOf(sector.ceilingpic) >= 0 || skyFlats.indexOf(sector.floorpic) >= 0
+  );
+}
+
 export function buildSectorAdjacency(map: WadMap): number[][] {
   const adjacency = map.SECTORS.map(() => new Set<number>());
 
   for (const line of map.LINEDEFS) {
     if (line.sidenum[0] < 0 || line.sidenum[1] < 0) continue;
+    if (line.flags.blockAll) continue;
     const sectorA = map.SIDEDEFS[line.sidenum[0]].sector;
     const sectorB = map.SIDEDEFS[line.sidenum[1]].sector;
     if (sectorA === sectorB) continue;
@@ -217,6 +227,7 @@ export function buildPortalVisibleSectors(
   }
 
   const maxRadiusSq = maxRadius * maxRadius;
+  const cameraInSky = isSkySector(map, cameraSectorIndex);
   const queue: Array<{ sectorIndex: number; depth: number }> = [
     { sectorIndex: cameraSectorIndex, depth: 0 },
   ];
@@ -239,6 +250,11 @@ export function buildPortalVisibleSectors(
 
     for (const neighbor of index.sectorAdjacency[sectorIndex] ?? []) {
       if (visible.has(neighbor)) continue;
+
+      if (!canTraversePortal(map, cameraSectorIndex, cameraInSky, sectorIndex, neighbor)) {
+        continue;
+      }
+
       const neighborBounds = index.sectorBounds[neighbor];
       if (
         neighborBounds &&
@@ -250,14 +266,47 @@ export function buildPortalVisibleSectors(
     }
   }
 
-  // Sectors with no bounds data are treated as always potentially visible.
-  for (let sectorIndex = 0; sectorIndex < map.SECTORS.length; sectorIndex++) {
-    if (!index.sectorBounds[sectorIndex]) {
-      visible.add(sectorIndex);
-    }
+  return visible;
+}
+
+/**
+ * When the camera is indoors, only the camera sector and outdoor sky sectors
+ * should be reachable. This prevents distant indoor areas from leaking into
+ * sky views through the outdoor sector graph (E1M1 start window, etc.).
+ */
+function canTraversePortal(
+  map: WadMap,
+  cameraSectorIndex: number,
+  cameraInSky: boolean,
+  fromSectorIndex: number,
+  toSectorIndex: number
+): boolean {
+  if (cameraInSky) {
+    return true;
   }
 
-  return visible;
+  if (toSectorIndex === cameraSectorIndex) {
+    return true;
+  }
+
+  const toIsSky = isSkySector(map, toSectorIndex);
+  const fromIsSky = isSkySector(map, fromSectorIndex);
+
+  // Direct portal from the camera room (stacked floors, adjacent rooms).
+  if (fromSectorIndex === cameraSectorIndex) {
+    return true;
+  }
+
+  if (toIsSky) {
+    return true;
+  }
+
+  // Do not walk from outdoor sky into distant indoor areas.
+  if (fromIsSky) {
+    return false;
+  }
+
+  return false;
 }
 
 function isBoundsWithinRadius(
@@ -273,6 +322,29 @@ function isBoundsWithinRadius(
   return dx * dx + dy * dy <= maxRadiusSq;
 }
 
+export function getLineSectorIndices(map: WadMap, lineIndex: number): number[] {
+  if (lineIndex < 0) return [];
+  const line = map.LINEDEFS[lineIndex];
+  if (!line) return [];
+
+  const sectors: number[] = [];
+  for (const sideIndex of line.sidenum) {
+    if (sideIndex < 0) continue;
+    sectors.push(map.SIDEDEFS[sideIndex].sector);
+  }
+  return sectors;
+}
+
+export function isSectorPotentiallyVisible(
+  sectorIndex: number,
+  visibleSectors: Set<number> | null,
+  relatedSectorIndices: readonly number[] = []
+): boolean {
+  if (!visibleSectors) return true;
+  if (visibleSectors.has(sectorIndex)) return true;
+  return relatedSectorIndices.some((index) => visibleSectors.has(index));
+}
+
 export function isDrawVisible(
   center: [number, number, number],
   cameraPos: [number, number, number],
@@ -280,9 +352,10 @@ export function isDrawVisible(
   visibleSectors: Set<number> | null,
   sectorIndex: number,
   cameraSectorIndex = -1,
-  horizontalOnly = false
+  horizontalOnly = false,
+  relatedSectorIndices: readonly number[] = []
 ): boolean {
-  if (visibleSectors && !visibleSectors.has(sectorIndex)) {
+  if (!isSectorPotentiallyVisible(sectorIndex, visibleSectors, relatedSectorIndices)) {
     return false;
   }
 

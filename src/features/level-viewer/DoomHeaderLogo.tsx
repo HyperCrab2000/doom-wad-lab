@@ -4,15 +4,15 @@ const DOOM_LOGO_SRC = '/images/doom-logo.png';
 
 /** Classic DOOM box-art wordmark (letters only, no marine). */
 export const DoomHeaderLogo: React.FC = () => (
-  <h1 className="doom-wordmark" aria-label="DOOM">
+  <div className="doom-wordmark" aria-label="DOOM JS">
     <img
       src={DOOM_LOGO_SRC}
       className="doom-wordmark-logo"
       alt=""
-      width={160}
-      height={58}
+      width={90}
+      height={60}
       decoding="async"
     />
     <span className="doom-wordmark-sub">JS</span>
-  </h1>
+  </div>
 );

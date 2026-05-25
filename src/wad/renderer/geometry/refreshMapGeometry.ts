@@ -1,11 +1,13 @@
-import { createBuffer, createElementBuffer } from 'apl-easy-gl';
+import { createBuffer, createElementBuffer, type Buffer, type ElementBuffer } from 'apl-easy-gl';
+
+import { FRUSTUM_CULL_RADIUS } from '@/wad/constants/RenderInfo';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
 import { WallObject } from '@/wad/interfaces/WallObject';
 import { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import {
   buildSortedFlats,
-  buildWallRangesByLine,
+  buildWallRangesFromWallBuffers,
   rebuildWallDrawLists,
 } from '@/wad/renderer/geometry/geometryCache';
 import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
@@ -18,12 +20,12 @@ import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
 
 function uploadBuffer(
   gl: WebGL2RenderingContext,
-  buffer: WebGLBuffer,
+  buffer: Buffer,
   data: Float32Array,
   usage: number,
   cachedBytes: number
 ): number {
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer.buffer);
   if (cachedBytes > 0 && data.byteLength === cachedBytes) {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
     return cachedBytes;
@@ -34,12 +36,12 @@ function uploadBuffer(
 
 function uploadIndexBuffer(
   gl: WebGL2RenderingContext,
-  buffer: WebGLBuffer,
+  buffer: ElementBuffer,
   data: Uint16Array | Uint32Array,
   usage: number,
   cachedBytes: number
 ): number {
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer.buffer);
   if (cachedBytes > 0 && data.byteLength === cachedBytes) {
     gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, data);
     return cachedBytes;
@@ -87,41 +89,109 @@ function applyWallObject(
   wallBuffer.twoSidedMiddle = Boolean(wall.twoSidedMiddle);
   wallBuffer.repeatVertical = wall.repeatVertical !== false;
   wallBuffer.center = wall.center;
+  wallBuffer.boundsRadius = wall.boundsRadius ?? FRUSTUM_CULL_RADIUS;
   wallBuffer.facingNormal = readWallFacingNormal(wall);
+}
+
+function createWallBufferFromObject(
+  gl: WebGL2RenderingContext,
+  wall: WallObject,
+  map: WadMap,
+  dynamic: number
+): MapBuffers['walls'][number] {
+  const sectorIndex = wall.sectorIndex ?? -1;
+  const sector = sectorIndex >= 0 ? map.SECTORS[sectorIndex] : wall.sector!;
+  const position = createBuffer(gl, wall.position, 3);
+  const uv = createBuffer(gl, wall.uv, 2);
+  const normal = createBuffer(gl, wall.normal, 3);
+  const indices = createElementBuffer(gl, wall.indices, 1);
+  gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, wall.position, dynamic);
+  gl.bindBuffer(gl.ARRAY_BUFFER, uv.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, wall.uv, dynamic);
+  gl.bindBuffer(gl.ARRAY_BUFFER, normal.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, wall.normal, dynamic);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices.buffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wall.indices, dynamic);
+
+  return {
+    position,
+    uv,
+    normal,
+    indices,
+    positionBytes: wall.position.byteLength,
+    uvBytes: wall.uv.byteLength,
+    normalBytes: wall.normal.byteLength,
+    indicesBytes: wall.indices.byteLength,
+    texName: wall.texName!,
+    sector,
+    sectorIndex,
+    lineIndex: wall.lineIndex ?? -1,
+    transparent: Boolean(wall.transparent),
+    twoSidedMiddle: Boolean(wall.twoSidedMiddle),
+    repeatVertical: wall.repeatVertical !== false,
+    center: wall.center,
+    boundsRadius: wall.boundsRadius ?? FRUSTUM_CULL_RADIUS,
+    facingNormal: readWallFacingNormal(wall),
+  };
+}
+
+function rebuildWallRanges(buffers: MapBuffers, lineCount: number): void {
+  buffers.wallRangesByLine = buildWallRangesFromWallBuffers(buffers.walls, lineCount);
+}
+
+function replaceLineWalls(
+  gl: WebGL2RenderingContext,
+  map: WadMap,
+  buffers: MapBuffers,
+  lineIndex: number,
+  newWalls: WallObject[],
+  dynamic: number
+): 'updated' | 'spliced' | 'missing-range' | 'empty' {
+  const range = buffers.wallRangesByLine[lineIndex];
+  if (!range || range.start < 0) {
+    return newWalls.length === 0 ? 'empty' : 'missing-range';
+  }
+
+  if (newWalls.length === 0) {
+    for (let i = range.start; i < range.start + range.count; i++) {
+      deleteWallBuffer(gl, buffers.walls[i]);
+    }
+    buffers.walls.splice(range.start, range.count);
+    rebuildWallRanges(buffers, map.LINEDEFS.length);
+    return 'spliced';
+  }
+
+  if (range.count === newWalls.length) {
+    for (let i = 0; i < newWalls.length; i++) {
+      applyWallObject(gl, buffers.walls[range.start + i], newWalls[i], map, dynamic);
+    }
+    return 'updated';
+  }
+
+  for (let i = range.start; i < range.start + range.count; i++) {
+    deleteWallBuffer(gl, buffers.walls[i]);
+  }
+  const replacement = newWalls.map((wall) => createWallBufferFromObject(gl, wall, map, dynamic));
+  buffers.walls.splice(range.start, range.count, ...replacement);
+  rebuildWallRanges(buffers, map.LINEDEFS.length);
+  return 'spliced';
+}
+
+function deleteWallBuffer(gl: WebGL2RenderingContext, wall: MapBuffers['walls'][number]): void {
+  gl.deleteBuffer(wall.position);
+  gl.deleteBuffer(wall.uv);
+  gl.deleteBuffer(wall.normal);
+  gl.deleteBuffer(wall.indices);
 }
 
 function rebuildWallBuffers(
   gl: WebGL2RenderingContext,
   map: WadMap,
-  walls: ReturnType<typeof mapToWalls>
+  walls: ReturnType<typeof mapToWalls>,
+  dynamic: number
 ): MapBuffers['walls'] {
-  return walls.map((wall) => {
-    const sectorIndex = wall.sectorIndex ?? (wall.sector ? map.SECTORS.indexOf(wall.sector) : -1);
-    const sector = sectorIndex >= 0 ? map.SECTORS[sectorIndex] : wall.sector!;
-    const position = createBuffer(gl, wall.position, 3);
-    const uv = createBuffer(gl, wall.uv, 2);
-    const normal = createBuffer(gl, wall.normal, 3);
-    const indices = createElementBuffer(gl, wall.indices, 1);
-    return {
-      position,
-      uv,
-      normal,
-      indices,
-      positionBytes: wall.position.byteLength,
-      uvBytes: wall.uv.byteLength,
-      normalBytes: wall.normal.byteLength,
-      indicesBytes: wall.indices.byteLength,
-      texName: wall.texName!,
-      sector,
-      sectorIndex,
-      lineIndex: wall.lineIndex ?? -1,
-      transparent: Boolean(wall.transparent),
-      twoSidedMiddle: Boolean(wall.twoSidedMiddle),
-      repeatVertical: wall.repeatVertical !== false,
-      center: wall.center,
-      facingNormal: readWallFacingNormal(wall),
-    };
-  });
+  return walls.map((wall) => createWallBufferFromObject(gl, wall, map, dynamic));
 }
 
 function refreshFlatsForSectors(
@@ -131,7 +201,6 @@ function refreshFlatsForSectors(
   dirtySectors: ReadonlySet<number>
 ): void {
   const flats = mapToFlats(map, buffers.sectorTriangles);
-  const dynamic = gl.DYNAMIC_DRAW;
 
   for (const flatIndex of getFlatIndicesForSectors(buffers.flats, dirtySectors)) {
     const flatBuffer = buffers.flats[flatIndex];
@@ -142,6 +211,7 @@ function refreshFlatsForSectors(
     gl.bindBuffer(gl.ARRAY_BUFFER, flatBuffer.normal);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, flat.normal);
     flatBuffer.center = flat.center;
+    flatBuffer.boundsRadius = flat.boundsRadius;
     flatBuffer.sector = map.SECTORS[flat.sectorIndex] ?? flatBuffer.sector;
   }
 
@@ -158,42 +228,17 @@ function refreshFull(
   const dynamic = gl.DYNAMIC_DRAW;
 
   if (walls.length !== buffers.walls.length) {
-    buffers.walls = rebuildWallBuffers(gl, map, walls);
-    const lists = rebuildWallDrawLists(buffers.walls);
-    buffers.opaqueWalls = lists.opaqueWalls;
-    buffers.transparentWalls = lists.transparentWalls;
-    buffers.wallRangesByLine = buildWallRangesByLine(walls, map.LINEDEFS.length);
+    buffers.walls = rebuildWallBuffers(gl, map, walls, dynamic);
   } else {
     walls.forEach((wall, index) => {
       applyWallObject(gl, buffers.walls[index], wall, map, dynamic);
     });
-    const lists = rebuildWallDrawLists(buffers.walls);
-    buffers.opaqueWalls = lists.opaqueWalls;
-    buffers.transparentWalls = lists.transparentWalls;
   }
-}
 
-function patchMiddleWallsOnLine(
-  gl: WebGL2RenderingContext,
-  map: WadMap,
-  buffers: MapBuffers,
-  lineIndex: number,
-  newWalls: WallObject[],
-  dynamic: number
-): void {
-  const range = buffers.wallRangesByLine[lineIndex];
-  if (!range || range.start < 0) return;
-
-  for (const newWall of newWalls) {
-    if (!newWall.twoSidedMiddle) continue;
-    for (let i = range.start; i < range.start + range.count; i++) {
-      const wallBuffer = buffers.walls[i];
-      if (wallBuffer.twoSidedMiddle && wallBuffer.lineIndex === lineIndex) {
-        applyWallObject(gl, wallBuffer, newWall, map, dynamic);
-        break;
-      }
-    }
-  }
+  rebuildWallRanges(buffers, map.LINEDEFS.length);
+  const lists = rebuildWallDrawLists(buffers.walls);
+  buffers.opaqueWalls = lists.opaqueWalls;
+  buffers.transparentWalls = lists.transparentWalls;
 }
 
 function refreshPartial(
@@ -201,38 +246,48 @@ function refreshPartial(
   map: WadMap,
   texturesByName: Record<string, WallTexture>,
   buffers: MapBuffers,
-  dirtySectors: ReadonlySet<number>
+  dirtySectors: ReadonlySet<number>,
+  options: { includeFlats?: boolean } = {}
 ): boolean {
   const lineIndices = getLineIndicesForSectors(map, dirtySectors);
   const defaultWall = 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : Object.keys(texturesByName)[0];
   const dynamic = gl.DYNAMIC_DRAW;
-  let needsFullRebuild = false;
+  let missingRange = false;
 
   for (const lineIndex of lineIndices) {
     const newWalls = mapToWallsForLine(map, texturesByName, lineIndex, defaultWall);
-    const range = buffers.wallRangesByLine[lineIndex];
-    if (!range || range.start < 0) {
-      needsFullRebuild = true;
-      continue;
-    }
-
-    patchMiddleWallsOnLine(gl, map, buffers, lineIndex, newWalls, dynamic);
-
-    if (range.count !== newWalls.length) {
-      needsFullRebuild = true;
-      continue;
-    }
-
-    for (let i = 0; i < newWalls.length; i++) {
-      applyWallObject(gl, buffers.walls[range.start + i], newWalls[i], map, dynamic);
+    const result = replaceLineWalls(gl, map, buffers, lineIndex, newWalls, dynamic);
+    if (result === 'missing-range') {
+      missingRange = true;
     }
   }
 
-  refreshFlatsForSectors(gl, map, buffers, dirtySectors);
+  if (options.includeFlats !== false) {
+    refreshFlatsForSectors(gl, map, buffers, dirtySectors);
+  }
+
   const lists = rebuildWallDrawLists(buffers.walls);
   buffers.opaqueWalls = lists.opaqueWalls;
   buffers.transparentWalls = lists.transparentWalls;
-  return !needsFullRebuild;
+  return !missingRange;
+}
+
+/** Fast path for animated doors: update wall meshes only (no flat rebuild). */
+export function refreshDoorWallGeometry(
+  gl: WebGL2RenderingContext,
+  map: WadMap,
+  texturesByName: Record<string, WallTexture>,
+  buffers: MapBuffers,
+  dirtySectors: ReadonlySet<number>
+): GeometryRefreshResult {
+  const partialOk = refreshPartial(gl, map, texturesByName, buffers, dirtySectors, {
+    includeFlats: false,
+  });
+  if (partialOk) {
+    return 'partial';
+  }
+  refreshFull(gl, map, texturesByName, buffers);
+  return 'full';
 }
 
 export type GeometryRefreshResult = 'partial' | 'full';
@@ -253,9 +308,6 @@ export function refreshMapGeometry(
     if (refreshPartial(gl, map, texturesByName, buffers, dirtySectors)) {
       return 'partial';
     }
-    // Crusher-style doors (ceiling == floor when closed) can drop from upper/lower
-    // walls to zero walls when fully open. Deferring a full rebuild leaves stale GPU
-    // geometry that reads as a phantom tunnel until the next full pass.
     refreshFull(gl, map, texturesByName, buffers);
     return 'full';
   }

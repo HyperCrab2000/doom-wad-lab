@@ -87,6 +87,21 @@ const createWall = (props: CreateWallProps): WallObject => {
   const physicalHeight = (top - bottom) / texSize.height;
   const uvHeight = repeatVertical ? physicalHeight : Math.min(physicalHeight, 1);
 
+  const center: [number, number, number] = [(v1.x + v2.x) / 2, (bottom + top) / 2, -(v1.y + v2.y) / 2];
+  const corners: Array<[number, number, number]> = [
+    [v1.x, bottom, -v1.y],
+    [v2.x, bottom, -v2.y],
+    [v1.x, top, -v1.y],
+    [v2.x, top, -v2.y],
+  ];
+  let boundsRadius = 0;
+  for (const corner of corners) {
+    boundsRadius = Math.max(
+      boundsRadius,
+      Math.hypot(corner[0] - center[0], corner[1] - center[1], corner[2] - center[2])
+    );
+  }
+
   let offsetX = side.xOffset / texSize.width,
     offsetY = side.yOffset / texSize.height;
 
@@ -151,7 +166,8 @@ const createWall = (props: CreateWallProps): WallObject => {
     uv: new Float32Array(wallUvs),
     normal: new Float32Array(wallNormals),
     indices: new Uint16Array(wallIndices),
-    center: [(v1.x + v2.x) / 2, (bottom + top) / 2, -(v1.y + v2.y) / 2],
+    center,
+    boundsRadius,
     repeatVertical,
   };
 };

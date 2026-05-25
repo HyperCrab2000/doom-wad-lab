@@ -36,6 +36,13 @@ vec2 ParallaxOcclusionMap(
     return texCoord;
   }
 
+  // TBN/POM becomes unstable at very close range — fade out parallax near the camera.
+  float closeFade = smoothstep(48.0, 160.0, dist);
+  reliefStrength *= closeFade;
+  if (reliefStrength < 0.01) {
+    return texCoord;
+  }
+
   const float parallaxScale = 0.36;
   const float minLayers = 12.0;
   const float maxLayers = 16.0;

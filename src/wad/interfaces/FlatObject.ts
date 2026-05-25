@@ -9,4 +9,6 @@ export interface FlatObject {
   normal: Float32Array;
   uv: Float32Array;
   center: [number, number, number];
+  /** Max distance from center to any vertex; used for frustum culling. */
+  boundsRadius: number;
 }

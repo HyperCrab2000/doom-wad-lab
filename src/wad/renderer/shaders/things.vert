@@ -1,21 +1,22 @@
+#version 300 es
+precision mediump float;
+
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec2 aUv;
+
 uniform mat4 modelViewProj;
 uniform bool shouldMirror;
 
-attribute vec3 aPosition;
-attribute vec2 aUv;
-
-varying vec3 vPos;
-varying vec2 vUv;
+out vec3 vPos;
+out vec2 vUv;
 
 void main(void) {
   vPos = aPosition;
-  
-  vec2 outUv = aUv;
 
+  vec2 outUv = aUv;
   if (shouldMirror) {
     outUv.x = 1.0 - outUv.x;
   }
-
   vUv = outUv;
 
   gl_Position = modelViewProj * vec4(aPosition, 1.0);

@@ -64,6 +64,16 @@ describe('mapToWalls', () => {
     expect(upper.position![1]).toBe(72);
     expect(upper.position![7]).toBe(216);
   });
+
+  it('computes boundsRadius from wall quad corners', () => {
+    const walls = mapToWalls(oneSidedTallWallMap(), {
+      BRONZE1: texture(false, 64, 128),
+    });
+
+    const wall = walls[0]!;
+    expect(wall.boundsRadius).toBeGreaterThan(100);
+    expect(wall.boundsRadius).toBeLessThan(130);
+  });
 });
 
 function twoSidedMidTextureMap(): WadMap {

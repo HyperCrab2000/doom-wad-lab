@@ -44,8 +44,9 @@ export const drawSkybox = (
   yaw: number,
   pitch: number
 ) => {
-  gl.depthMask(false);
-  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.depthMask(true);
 
   gl.useProgram(shader.program);
   gl.activeTexture(gl.TEXTURE0);
@@ -64,7 +65,6 @@ export const drawSkybox = (
 
   buffers.indices.draw();
 
-  // Restore depth state
   gl.depthMask(true);
   gl.enable(gl.DEPTH_TEST);
 };

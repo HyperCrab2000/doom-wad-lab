@@ -1,5 +1,7 @@
 import { createBuffer, createElementBuffer } from 'apl-easy-gl';
 
+import { FRUSTUM_CULL_RADIUS } from '@/wad/constants/RenderInfo';
+
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { ThingBuffer } from '@/wad/interfaces/ThingBuffer';
@@ -55,6 +57,7 @@ function uploadCpuGeometry(
       twoSidedMiddle: Boolean(wall.twoSidedMiddle),
       repeatVertical: wall.repeatVertical !== false,
       center: wall.center,
+      boundsRadius: wall.boundsRadius ?? FRUSTUM_CULL_RADIUS,
       facingNormal: readWallFacingNormal(wall),
     };
   });
@@ -71,6 +74,7 @@ function uploadCpuGeometry(
       sector,
       sectorIndex,
       center: flat.center,
+      boundsRadius: flat.boundsRadius,
     };
   });
 

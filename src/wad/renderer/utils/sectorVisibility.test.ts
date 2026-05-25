@@ -6,7 +6,10 @@ import {
   buildPotentiallyVisibleSectors,
   buildSectorAdjacency,
   enrichSectorBoundsFromTriangles,
+  getLineSectorIndices,
   isDrawVisible,
+  isSectorPotentiallyVisible,
+  isSkySector,
 } from './sectorVisibility';
 
 function emptyIndex(sectorCount: number, bounds: Array<{
@@ -119,5 +122,63 @@ describe('sector visibility culling', () => {
     expect(
       isDrawVisible(farCenter, [0, 41, 0], 2200, null, 0, -1, true)
     ).toBe(false);
+  });
+
+  it('does not leak distant indoor sectors into sky views from an indoor camera', () => {
+    const indoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
+    const outdoor = { floorpic: 'FLOOR4_8', ceilingpic: 'F_SKY1', floorheight: 0, ceilingheight: 128 } as Sector;
+    const farIndoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
+
+    const map = {
+      SECTORS: [indoor, outdoor, farIndoor],
+      LINEDEFS: [
+        { sidenum: [0, 1], v1: 0, v2: 1, flags: { blockAll: false } },
+        { sidenum: [2, 3], v1: 2, v2: 3, flags: { blockAll: false } },
+      ],
+      SIDEDEFS: [{ sector: 0 }, { sector: 1 }, { sector: 2 }, { sector: 1 }],
+      VERTEXES: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+        { x: 128, y: 0 },
+        { x: 192, y: 0 },
+      ],
+    } as unknown as WadMap;
+
+    expect(isSkySector(map, 0)).toBe(false);
+    expect(isSkySector(map, 1)).toBe(true);
+
+    const index = {
+      subsectorToSector: [],
+      sectorBounds: [
+        { minX: 0, maxX: 64, minY: 0, maxY: 64 },
+        { minX: 64, maxX: 128, minY: 0, maxY: 64 },
+        { minX: 128, maxX: 192, minY: 0, maxY: 64 },
+      ],
+      sectorAdjacency: buildSectorAdjacency(map),
+    };
+
+    const visible = buildPortalVisibleSectors(index, map, 32, 32, 0, 512);
+    expect(visible.has(0)).toBe(true);
+    expect(visible.has(1)).toBe(true);
+    expect(visible.has(2)).toBe(false);
+  });
+
+  it('treats boundary walls as visible when either adjacent sector is visible', () => {
+    const map = {
+      SECTORS: [{}, {}],
+      LINEDEFS: [{ sidenum: [0, 1], v1: 0, v2: 1 }],
+      SIDEDEFS: [{ sector: 0 }, { sector: 1 }],
+      VERTEXES: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+      ],
+    } as unknown as WadMap;
+
+    const visible = new Set([1]);
+    expect(getLineSectorIndices(map, 0)).toEqual([0, 1]);
+    expect(isSectorPotentiallyVisible(0, visible, [1])).toBe(true);
+    expect(
+      isDrawVisible([32, 32, -32], [128, 32, -32], 2200, visible, 0, -1, false, [1])
+    ).toBe(true);
   });
 });

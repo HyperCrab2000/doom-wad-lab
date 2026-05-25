@@ -34,20 +34,36 @@ export function propagateWallHeightRelief(
   set: HeightTextureSet,
   animatedTextures: Record<string, string[]>
 ): void {
-  const reliefWalls = set.reliefWalls as Set<string>;
-  const loadedWalls = set.loadedWalls as Set<string>;
+  propagateAnimatedHeightRelief(set.walls, set.reliefWalls, set.loadedWalls, animatedTextures);
+}
 
-  for (const names of Object.values(animatedTextures)) {
+export function propagateFlatHeightRelief(
+  set: HeightTextureSet,
+  animatedFlats: Record<string, string[]>
+): void {
+  propagateAnimatedHeightRelief(set.flats, set.reliefFlats, set.loadedFlats, animatedFlats);
+}
+
+function propagateAnimatedHeightRelief(
+  textures: Record<string, WebGLTexture>,
+  relief: ReadonlySet<string>,
+  loaded: ReadonlySet<string>,
+  animated: Record<string, string[]>
+): void {
+  const reliefSet = relief as Set<string>;
+  const loadedSet = loaded as Set<string>;
+
+  for (const names of Object.values(animated)) {
     const group = [...new Set(names.map(normalizeTextureName))];
-    const donor = group.find((name) => reliefWalls.has(name));
+    const donor = group.find((name) => reliefSet.has(name));
     if (!donor) continue;
 
     for (const name of group) {
-      if (reliefWalls.has(name)) continue;
-      set.walls[name] = set.walls[donor];
-      reliefWalls.add(name);
-      if (loadedWalls.has(donor)) {
-        loadedWalls.add(name);
+      if (reliefSet.has(name)) continue;
+      textures[name] = textures[donor];
+      reliefSet.add(name);
+      if (loadedSet.has(donor)) {
+        loadedSet.add(name);
       }
     }
   }
@@ -144,10 +160,11 @@ async function resolveHeightTexture(
 
   if (sourceCanvas) {
     const pixels = generateHeightFromCanvas(sourceCanvas, procW, procH);
+    const hasRelief = hasHeightVariation(pixels);
     return {
       texture: uploadHeightPixels(gl, procW, procH, pixels),
       fromVoxel: false,
-      hasRelief: true,
+      hasRelief,
     };
   }
 

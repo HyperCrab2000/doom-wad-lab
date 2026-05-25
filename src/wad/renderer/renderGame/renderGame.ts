@@ -9,10 +9,11 @@ import { LoadedWadData, loadWad } from './loadWad';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
 import { doomPlayerControls, PlayerSnapshot } from '@/wad/renderer/controls/doomPlayerControls';
-import { DoorSystem } from '@/wad/game/doorSystem';
+import { invalidateBlockingSegmentCache } from '@/wad/renderer/controls/doomCollision';
+import { DoorSystem, DoorTriggerResult } from '@/wad/game/doorSystem';
 import { playDoorMotionSound, playDoorTriggerSounds } from '@/wad/game/doorSounds';
 import { DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
-import { refreshMapGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
+import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
 
 let wadData: LoadedWadData | null = null;
 let currentMap: WadMap | null = null;
@@ -78,11 +79,87 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   let unbindControls: (() => void) | null = null;
   let unbindResize: (() => void) | null = null;
   let frameRequest: number | null = null;
+  let renderedFrameCount = 0;
+  let pendingFrameWaiters: Array<() => void> = [];
 
   const fpsCounter = document.getElementById("fps-counter") as HTMLDivElement | null;
   let lastFrameTime = performance.now();
-  let lastGeometryRefresh = 0;
-  const GEOMETRY_REFRESH_MS = 50;
+  const lastRefreshedCeilings = new Map<number, number>();
+  let forceDoorGeometryRefresh = false;
+
+  const refreshDoorGeometry = () => {
+    if (!wadData || !currentMap || !doorSystem) return;
+    if (!doorSystem.isDirty() && !forceDoorGeometryRefresh) return;
+
+    invalidateBlockingSegmentCache();
+
+    const dirtySectors = doorSystem.getDirtySectors();
+    const hasActiveDoors = doorSystem.getActiveDoorCount() > 0;
+    let shouldUpload = forceDoorGeometryRefresh || hasActiveDoors;
+
+    if (!shouldUpload) {
+      for (const sectorIndex of dirtySectors) {
+        const ceiling = Math.floor(currentMap.SECTORS[sectorIndex]?.ceilingheight ?? 0);
+        if (lastRefreshedCeilings.get(sectorIndex) !== ceiling) {
+          lastRefreshedCeilings.set(sectorIndex, ceiling);
+          shouldUpload = true;
+        }
+      }
+    } else {
+      for (const sectorIndex of dirtySectors) {
+        const ceiling = Math.floor(currentMap.SECTORS[sectorIndex]?.ceilingheight ?? 0);
+        lastRefreshedCeilings.set(sectorIndex, ceiling);
+      }
+    }
+
+    forceDoorGeometryRefresh = false;
+
+    if (shouldUpload) {
+      refreshDoorWallGeometry(
+        gl,
+        currentMap,
+        wadData.wallTexturesByName,
+        wadData.buffers,
+        dirtySectors
+      );
+    }
+
+    doorSystem.clearDirty();
+  };
+
+  const handleDoorTrigger = (result: DoorTriggerResult) => {
+    if (wadData && sfxPlayer) {
+      playDoorTriggerSounds(wadData.wad, sfxPlayer, result);
+    }
+    if (result.triggered) {
+      forceDoorGeometryRefresh = true;
+      invalidateBlockingSegmentCache();
+    }
+  };
+
+  const notifyRenderedFrame = () => {
+    renderedFrameCount += 1;
+    if (pendingFrameWaiters.length === 0) return;
+    const waiters = pendingFrameWaiters;
+    pendingFrameWaiters = [];
+    for (const resolve of waiters) resolve();
+  };
+
+  const waitForRenderedFrame = (): Promise<void> => {
+    const target = renderedFrameCount + 1;
+    if (renderedFrameCount >= target) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      pendingFrameWaiters.push(() => {
+        if (renderedFrameCount >= target) {
+          resolve();
+          return;
+        }
+        waitForRenderedFrame().then(resolve);
+      });
+    });
+  };
 
   const setPresentationVisible = (visible: boolean) => {
     presentationVisible = visible;
@@ -101,11 +178,13 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
   const load = (wad: Wad, map: WadMap, mapName: string, wadPath?: string | null): Promise<void> => {
     presentationVisible = false;
-    return loadWad(gl, wad, map, mapName, wadPath).then((loaded) => {
+    const gameMap = structuredClone(map);
+    return loadWad(gl, wad, gameMap, mapName, wadPath).then((loaded) => {
       wadData = loaded;
-      currentMap = map;
-      doorSystem = new DoorSystem(map);
-      lastGeometryRefresh = 0;
+      currentMap = gameMap;
+      doorSystem = new DoorSystem(gameMap);
+      lastRefreshedCeilings.clear();
+      forceDoorGeometryRefresh = false;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
 
       const { playerStart, playerZ, cameraAngle } = wadData;
@@ -119,22 +198,14 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       playerControls = doomPlayerControls({
         canvas,
         viewMatrix,
-        map,
+        map: gameMap,
         buffers: wadData.buffers,
         start: { x: playerStart.x, y: playerStart.y, angle: cameraAngle },
         isAutomapActive: () => automapActive,
         onLiquidTransition: (event) => triggerPixelSplash(canvas, event.color, event.kind),
         doorSystem,
-        onDoorUse: (result) => {
-          if (wadData && sfxPlayer) {
-            playDoorTriggerSounds(wadData.wad, sfxPlayer, result);
-          }
-        },
-        onWalkDoor: (result) => {
-          if (wadData && sfxPlayer) {
-            playDoorTriggerSounds(wadData.wad, sfxPlayer, result);
-          }
-        },
+        onDoorUse: handleDoorTrigger,
+        onWalkDoor: handleDoorTrigger,
       });
       unbindControls = playerControls.unbind;
 
@@ -159,7 +230,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     updateCameraFromViewMatrix(viewMatrix, invViewMatrix, camera);
 
     if (presentationVisible && wadData && currentMap && doorSystem) {
-      const doorMotion = doorSystem.tick(dt / 1000);
+      const doorMotion = doorSystem.tick(Math.min(dt / 1000, 0.05));
       if (doorMotion.playOpen || doorMotion.playClose) {
         playDoorMotionSound(
           wadData.wad,
@@ -168,20 +239,10 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           doorMotion.playOpen ? 'open' : 'close'
         );
       }
-      if (doorSystem.isDirty()) {
-        const refreshNow = performance.now();
-        if (refreshNow - lastGeometryRefresh >= GEOMETRY_REFRESH_MS) {
-          const dirtySectors = doorSystem.getDirtySectors();
-          refreshMapGeometry(
-            gl,
-            currentMap,
-            wadData.wallTexturesByName,
-            wadData.buffers,
-            dirtySectors
-          );
-          doorSystem.clearDirty();
-          lastGeometryRefresh = refreshNow;
-        }
+      if (doorSystem.isDirty() || forceDoorGeometryRefresh) {
+        refreshDoorGeometry();
+      } else if (doorSystem.getActiveDoorCount() > 0) {
+        invalidateBlockingSegmentCache();
       }
     }
 
@@ -220,10 +281,11 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       if (fpsCounter) {
         fpsCounter.textContent = `FPS: ${fps} (${drawTime.toFixed(2)} ms)`;
       }
+      notifyRenderedFrame();
     }
   }
 
-  return { load, setPresentationVisible, setAutomapActive, getPlayerState };
+  return { load, setPresentationVisible, setAutomapActive, getPlayerState, waitForRenderedFrame };
 };
 
 function triggerPixelSplash(

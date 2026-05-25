@@ -191,8 +191,8 @@ export const VoxelModelViewer: React.FC = () => {
   return (
     <section className="doom-panel voxel-viewer">
       <div className="voxel-toolbar">
-        <label className="doom-field">
-          <span>Doom thing</span>
+        <label className="doom-field doom-field--inline">
+          <span>Thing</span>
           <select
             value={selectedKey}
             onChange={(event) => setSelectedKey(event.target.value)}
@@ -205,8 +205,8 @@ export const VoxelModelViewer: React.FC = () => {
           </select>
         </label>
 
-        <label className="doom-field">
-          <span>Voxel frame</span>
+        <label className="doom-field doom-field--inline">
+          <span>Frame</span>
           <select
             value={selectedVoxel?.lumpName ?? ''}
             onChange={(event) => setSelectedVoxelName(event.target.value)}
@@ -220,11 +220,11 @@ export const VoxelModelViewer: React.FC = () => {
         </label>
 
         <button type="button" className="doom-button" onClick={() => loadSelectedFrameSet()} disabled={isLoading || uniqueVoxelFrames.length === 0}>
-          Reload {selectedThing?.sprite ?? 'KVX'} frame set
+          Reload
         </button>
 
-        <label className="doom-field">
-          <span>Upload KVX</span>
+        <label className="doom-field doom-field--inline doom-field--file">
+          <span>Upload</span>
           <input
             type="file"
             accept=".kvx"
@@ -236,25 +236,25 @@ export const VoxelModelViewer: React.FC = () => {
           />
         </label>
 
-        <label className="doom-check">
+        <label className="doom-check doom-check--compact">
           <input
             type="checkbox"
             checked={autoRotate}
             onChange={(event) => setAutoRotate(event.target.checked)}
           />
-          Auto rotate around model center
+          Auto rotate
         </label>
 
-        <label className="doom-check">
+        <label className="doom-check doom-check--compact">
           <input
             type="checkbox"
             checked={animateVoxels}
             onChange={(event) => setAnimateVoxels(event.target.checked)}
           />
-          Animate KVX frames
+          Animate
         </label>
 
-        <label className="doom-field compact">
+        <label className="doom-field doom-field--inline compact">
           <span>FPS</span>
           <input
             type="number"
@@ -264,31 +264,33 @@ export const VoxelModelViewer: React.FC = () => {
             onChange={(event) => setAnimationFps(Math.max(1, Number(event.target.value) || 1))}
           />
         </label>
+
+        <p className={`voxel-status voxel-status--inline ${activeModel ? 'ready' : ''}`}>
+          {status}
+          {activeFrame ? ` · ${activeFrame.label}.kvx` : ''}
+        </p>
       </div>
 
-      <p className={`voxel-status ${activeModel ? 'ready' : ''}`}>
-        {status}
-        {activeFrame ? ` Current frame: ${activeFrame.label}.kvx` : ''}
-      </p>
-
-      {activeModel ? (
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <VoxelThreePreview model={activeModel} autoRotate={autoRotate} />
-          <p className="voxel-help">
-            Slab6 axes: file X is left/right, file Y is depth, and file Z is vertical downward.
-            The 3D preview maps that to Three.js X/right, Y/up, Z/depth and rotates around the
-            model bounding-box center. Animation order is read from the Voxel Doom ZScript when
-            available.
-          </p>
-          <div className="voxel-projections">
-            <VoxelProjection title="Top" model={activeModel} axisH="x" axisV="y" axisD="z" />
-            <VoxelProjection title="Bottom" model={activeModel} axisH="x" axisV="y" axisD="z" reverseDepth />
-            <VoxelProjection title="Front" model={activeModel} axisH="x" axisV="z" axisD="y" reverseDepth />
-            <VoxelProjection title="Back" model={activeModel} axisH="x" axisV="z" axisD="y" />
-            <VoxelProjection title="Side" model={activeModel} axisH="y" axisV="z" axisD="x" reverseDepth />
-          </div>
-        </div>
-      ) : null}
+      <div className="voxel-stage">
+        {activeModel ? (
+          <>
+            <figure className="voxel-preview-card">
+              <figcaption className="voxel-preview-card__caption">
+                3D preview
+                <span>Slab6 X/Y/Z → Three.js · rotates around bounding-box center</span>
+              </figcaption>
+              <VoxelThreePreview model={activeModel} autoRotate={autoRotate} />
+            </figure>
+            <div className="voxel-projections">
+              <VoxelProjection title="Top" model={activeModel} axisH="x" axisV="y" axisD="z" />
+              <VoxelProjection title="Bottom" model={activeModel} axisH="x" axisV="y" axisD="z" reverseDepth />
+              <VoxelProjection title="Front" model={activeModel} axisH="x" axisV="z" axisD="y" reverseDepth />
+              <VoxelProjection title="Back" model={activeModel} axisH="x" axisV="z" axisD="y" />
+              <VoxelProjection title="Side" model={activeModel} axisH="y" axisV="z" axisD="x" reverseDepth />
+            </div>
+          </>
+        ) : null}
+      </div>
     </section>
   );
 };

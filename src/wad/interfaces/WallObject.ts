@@ -14,4 +14,6 @@ export interface WallObject {
   /** When false, texture is drawn once vertically (two-sided midtextures). */
   repeatVertical?: boolean;
   center: [number, number, number];
+  /** Max distance from center to any vertex; used for frustum culling. */
+  boundsRadius?: number;
 }

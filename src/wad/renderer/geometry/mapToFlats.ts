@@ -9,7 +9,7 @@ const createFlat = (
   triangles: Array<Triangle>,
   height: number,
   reverseOrientation?: boolean
-): Pick<FlatObject, 'position' | 'indices' | 'normal' | 'uv' | 'center'> => {
+): Pick<FlatObject, 'position' | 'indices' | 'normal' | 'uv' | 'center' | 'boundsRadius'> => {
   const flatPositions: number[] = [];
   const flatIndices: number[] = [];
   const flatNormals: number[] = [];
@@ -53,12 +53,25 @@ const createFlat = (
     posIndex += 3;
   });
 
+  const center: [number, number, number] = pointCount
+    ? [sumX / pointCount, sumY / pointCount, sumZ / pointCount]
+    : [0, height, 0];
+
+  let boundsRadius = 0;
+  for (let i = 0; i < flatPositions.length; i += 3) {
+    const dx = flatPositions[i] - center[0];
+    const dy = flatPositions[i + 1] - center[1];
+    const dz = flatPositions[i + 2] - center[2];
+    boundsRadius = Math.max(boundsRadius, Math.hypot(dx, dy, dz));
+  }
+
   return {
     position: new Float32Array(flatPositions),
     indices: new Uint16Array(flatIndices),
     normal: new Float32Array(flatNormals),
     uv: new Float32Array(flatUVs),
-    center: pointCount ? [sumX / pointCount, sumY / pointCount, sumZ / pointCount] : [0, height, 0],
+    center,
+    boundsRadius,
   };
 };
 

@@ -19,6 +19,8 @@ export interface WallBuffer {
   twoSidedMiddle: boolean;
   repeatVertical: boolean;
   center: [number, number, number];
+  /** Max distance from center to any vertex; used for frustum culling. */
+  boundsRadius: number;
   /** Outward-facing unit normal for CPU back-face culling. */
   facingNormal: [number, number, number];
 }

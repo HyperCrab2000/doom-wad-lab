@@ -9,14 +9,28 @@ export interface MusNote {
   program: number;
 }
 
+export interface MusPitchBend {
+  channel: number;
+  tick: number;
+  /** MIDI pitch wheel value (0–16383, center 8192). */
+  value: number;
+}
+
 export interface MusSong {
   notes: MusNote[];
+  pitchBends: MusPitchBend[];
   durationTicks: number;
   ticksPerSecond: number;
 }
 
 const MUS_TICKS_PER_SECOND = 140;
 const DEFAULT_VELOCITY = 96;
+
+/** Convert a Doom MUS pitch byte to a 14-bit MIDI pitch wheel value. */
+export function musPitchByteToMidiWheel(byte: number): number {
+  const value = byte & 0xff;
+  return ((value >> 1) << 7) | ((value & 1) << 6);
+}
 
 const doom2MusicByMap: Record<string, string> = {
   MAP01: 'D_RUNNIN',
@@ -111,6 +125,7 @@ export function parseMus(buffer: ArrayBuffer): MusSong {
   const channelState = new Map<number, { volume: number; program: number; lastNote: number }>();
   const openNotes = new Map<string, { startTick: number; velocity: number; program: number }>();
   const notes: MusNote[] = [];
+  const pitchBends: MusPitchBend[] = [];
   let ended = false;
 
   while (!ended && offset < buffer.byteLength) {
@@ -144,9 +159,15 @@ export function parseMus(buffer: ArrayBuffer): MusSong {
           });
           break;
         }
-        case 2:
-          offset += 1; // pitch wheel, ignored by simple synth
+        case 2: {
+          const pitchByte = view.getUint8(offset++) & 0xff;
+          pitchBends.push({
+            channel,
+            tick,
+            value: musPitchByteToMidiWheel(pitchByte),
+          });
           break;
+        }
         case 3:
           offset += 1; // system event, ignored for now
           break;
@@ -189,6 +210,7 @@ export function parseMus(buffer: ArrayBuffer): MusSong {
 
   return {
     notes,
+    pitchBends,
     durationTicks: Math.max(tick, ...notes.map((note) => note.startTick + note.durationTicks), 1),
     ticksPerSecond: MUS_TICKS_PER_SECOND,
   };

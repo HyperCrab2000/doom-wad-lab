@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { Wad } from '@/wad/interfaces/Wad';
 import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
-import { getGenmidiFromWad, getMusicLump, getMusicLumpCandidatesForMap, getMusicLumpForMap, parseMus } from './doomMusic';
+import { getGenmidiFromWad, getMusicLump, getMusicLumpCandidatesForMap, getMusicLumpForMap, musPitchByteToMidiWheel, parseMus } from './doomMusic';
 
 describe('Doom music lookup', () => {
   it('maps Doom episode maps and Doom II maps to stock music lumps', () => {
@@ -84,7 +84,43 @@ describe('MUS parser', () => {
 
     expect(parseMus(padded.buffer).notes).toHaveLength(1);
   });
+
+  it('parses pitch wheel events into MIDI wheel values', () => {
+    const song = parseMus(createMusWithPitchBend());
+
+    expect(song.pitchBends).toHaveLength(1);
+    expect(song.pitchBends[0]).toMatchObject({
+      channel: 0,
+      tick: 0,
+      value: musPitchByteToMidiWheel(140),
+    });
+  });
+
+  it('maps MUS pitch byte 128 to MIDI pitch wheel center', () => {
+    expect(musPitchByteToMidiWheel(128)).toBe(8192);
+  });
 });
+
+function createMusWithPitchBend(): ArrayBuffer {
+  const headerSize = 16;
+  const events = [
+    0xa0, // pitch wheel, channel 0, last in group
+    140,
+    0, // delta
+    0xd0, // score end (type 5)
+  ];
+  const buffer = new ArrayBuffer(headerSize + events.length);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, 'MUS\u001a');
+  view.setUint16(4, events.length, true);
+  view.setUint16(6, headerSize, true);
+  view.setUint16(8, 1, true);
+  view.setUint16(10, 0, true);
+  view.setUint16(12, 0, true);
+  view.setUint16(14, 0, true);
+  events.forEach((event, index) => view.setUint8(headerSize + index, event));
+  return buffer;
+}
 
 function createSimpleMus(): ArrayBuffer {
   const headerSize = 16;

@@ -10,4 +10,5 @@ export interface FlatBuffer {
   normal: Buffer;
   uv: Buffer;
   center: [number, number, number];
+  boundsRadius: number;
 }

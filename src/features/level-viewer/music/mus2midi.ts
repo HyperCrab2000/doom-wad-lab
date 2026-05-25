@@ -9,7 +9,8 @@ const DOOM_MIDI_BPM = 120;
 type MidiEvent =
   | { tick: number; kind: 'pc'; channel: number; program: number }
   | { tick: number; kind: 'on'; channel: number; note: number; velocity: number }
-  | { tick: number; kind: 'off'; channel: number; note: number };
+  | { tick: number; kind: 'off'; channel: number; note: number }
+  | { tick: number; kind: 'pitch'; channel: number; value: number };
 
 export function musSongToMidi(song: MusSong): BasicMIDI {
   const builder = new MIDIBuilder({
@@ -51,6 +52,15 @@ export function musSongToMidi(song: MusSong): BasicMIDI {
     });
   }
 
+  for (const bend of song.pitchBends) {
+    events.push({
+      tick: bend.tick,
+      kind: 'pitch',
+      channel: bend.channel,
+      value: bend.value,
+    });
+  }
+
   events.sort((a, b) => a.tick - b.tick);
 
   for (const event of events) {
@@ -63,6 +73,9 @@ export function musSongToMidi(song: MusSong): BasicMIDI {
         break;
       case 'off':
         builder.noteOff(event.tick, 0, event.channel, event.note);
+        break;
+      case 'pitch':
+        builder.pitchWheel(event.tick, 0, event.channel, event.value);
         break;
     }
   }

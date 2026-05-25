@@ -88,10 +88,10 @@ input {
 .app-shell {
   display: flex;
   flex-direction: column;
-  width: min(1500px, calc(100vw - 16px));
+  width: min(1500px, calc(100vw - 12px));
   height: 100vh;
   margin: 0 auto;
-  padding: 0.45rem 0 0.35rem;
+  padding: 0.45rem 0 0.25rem;
   overflow: hidden;
 }
 
@@ -102,21 +102,38 @@ input {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.65rem 1rem;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
   flex-shrink: 0;
-  margin-bottom: 0.45rem;
-  padding: 0.55rem 0.75rem;
-  overflow: hidden;
-  border: 3px solid #202020;
+  margin-bottom: 0.25rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.7rem;
+  overflow: visible;
+  border: 2px solid #202020;
   background:
     linear-gradient(90deg, rgba(8, 8, 8, 0.98), rgba(60, 0, 0, 0.76)),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 6px);
   box-shadow:
-    inset 0 0 0 2px #000,
-    0 8px 24px rgba(0, 0, 0, 0.45);
+    inset 0 0 0 1px #000,
+    0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hero-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.05rem;
+  min-width: 0;
 }
 
 .hero-copy {
@@ -137,74 +154,43 @@ input {
 
 .doom-wordmark {
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
   align-items: center;
-  gap: 0.45rem 0.65rem;
+  gap: 0.35rem;
   margin: 0;
-  line-height: 1;
-  text-transform: uppercase;
+  padding: 0.1rem 0;
+  line-height: 0;
+  overflow: visible;
 }
 
-.doom-wordmark-main {
-  position: relative;
-  display: inline-block;
-  color: #707070;
-  font-family: Impact, "Arial Black", Haettenschweiler, "Arial Narrow", sans-serif;
-  font-size: clamp(1.85rem, 3.6vw, 2.65rem);
-  font-weight: 900;
-  letter-spacing: 0.01em;
-  transform: scaleX(0.88) scaleY(1.24);
-  transform-origin: left center;
-  -webkit-text-stroke: 2px #080808;
-  text-shadow:
-    1px 1px 0 #2b2b2b,
-    2px 2px 0 #222,
-    3px 3px 0 #1a1a1a,
-    4px 4px 0 #420000,
-    5px 5px 0 #360000,
-    6px 6px 0 #280000;
-}
-
-.doom-wordmark-main::before {
-  content: "DOOM";
-  position: absolute;
-  inset: 0;
-  color: transparent;
-  background: linear-gradient(
-    180deg,
-    #f5f5f5 0%,
-    #d8d8d8 12%,
-    #a8a8a8 38%,
-    #787878 62%,
-    #505050 82%,
-    #686868 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  pointer-events: none;
+.doom-wordmark-logo {
+  display: block;
+  flex-shrink: 0;
+  width: auto;
+  height: 2.35rem;
+  max-width: 5.5rem;
+  object-fit: contain;
+  object-position: left center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .doom-wordmark-sub {
-  display: inline-block;
-  padding: 0.18rem 0.4rem 0.12rem;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  padding: 0.2rem 0.38rem 0.16rem;
   color: #fff;
   background: linear-gradient(180deg, var(--doom-red) 0%, var(--doom-red-dark) 100%);
   border: 2px solid #230000;
   font-family: Impact, "Arial Black", "Arial Narrow", sans-serif;
-  font-size: clamp(0.72rem, 1.4vw, 1rem);
+  font-size: 0.72rem;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-shadow: 1px 1px 0 #000;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 2px 0 #080000;
-}
-
-.doom-wordmark-logo {
-  display: block;
-  width: auto;
-  height: clamp(1.35rem, 2.4vw, 1.75rem);
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
 .hero-tagline,
@@ -213,7 +199,7 @@ input {
   margin: 0;
   color: #b8b8b8;
   font-family: "Arial Narrow", Arial, sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   line-height: 1.25;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -223,13 +209,14 @@ input {
 
 .mode-tabs {
   display: flex;
-  gap: 0.35rem;
-  align-self: center;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .mode-tabs button {
-  padding: 0.4rem 0.65rem;
-  font-size: 0.75rem;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.72rem;
 }
 
 .mode-tabs button.active,
@@ -251,6 +238,44 @@ input {
   background: #050505;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 0.72rem;
+}
+
+.music-status--inline {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-left: 0;
+  padding: 0.22rem 0.38rem;
+  color: #d8d8d8;
+  border: 1px solid #2a2a2a;
+  background: #050505;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  max-width: min(28rem, 42vw);
+}
+
+.music-status--inline strong {
+  color: #fff;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
+}
+
+.music-viz {
+  display: block;
+  flex-shrink: 0;
+  width: 88px;
+  height: 20px;
+  border: 1px solid #2a2a2a;
+  background: #030303;
+  box-shadow:
+    inset 0 0 0 1px #000,
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .music-status--compact {
@@ -295,21 +320,116 @@ input {
 .level-viewer {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.28rem;
   height: 100%;
   min-height: 0;
-  padding: 0.45rem;
+  padding: 0.3rem;
   overflow: hidden;
 }
 
 .voxel-viewer {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.28rem;
   height: 100%;
   min-height: 0;
-  padding: 0.45rem;
+  padding: 0.3rem;
   overflow: hidden;
+}
+
+.voxel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0.22rem 0.3rem;
+  border: 1px solid #252525;
+  background: #050505;
+}
+
+.voxel-toolbar .doom-button {
+  padding: 0.32rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.voxel-toolbar .doom-field--inline select {
+  min-width: 9rem;
+  max-width: 14rem;
+}
+
+.voxel-toolbar .doom-field--file input[type='file'] {
+  max-width: 9.5rem;
+  padding: 0.22rem 0.35rem;
+  font-size: 0.68rem;
+}
+
+.doom-check--compact {
+  min-height: 0;
+  padding: 0.22rem 0.4rem;
+  gap: 0.35rem;
+  border-width: 1px;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
+.voxel-status--inline {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voxel-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.voxel-preview-card {
+  margin: 0;
+  padding: 0.3rem;
+  border: 2px solid #202020;
+  background: #030303;
+}
+
+.voxel-preview-card__caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+  margin: 0 0 0.35rem;
+  color: #fff;
+  font-family: Impact, "Arial Black", "Arial Narrow", sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.voxel-preview-card__caption span {
+  color: #9a9a9a;
+  font-family: "Arial Narrow", Arial, sans-serif;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-shadow: none;
+}
+
+.voxel-preview-card canvas {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
 }
 
 .level-controls {
@@ -320,25 +440,65 @@ input {
   flex-shrink: 0;
 }
 
-.level-toolbar,
-.voxel-toolbar {
+.level-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: end;
-  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.5rem;
+  flex-shrink: 0;
+  padding: 0.28rem 0.35rem;
+  border: 1px solid #252525;
+  background: #050505;
+}
+
+.level-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
   min-width: 0;
+}
+
+.level-toolbar__group--end {
+  margin-left: auto;
+}
+
+.music-status--inline button {
+  padding: 0.28rem 0.45rem;
+  font-size: 0.64rem;
+  flex-shrink: 0;
+}
+
+.music-status--inline span {
+  color: #ff3030;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.doom-field--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.doom-field--inline span {
+  margin: 0;
+}
+
+.doom-field--inline select {
+  min-width: 7.5rem;
 }
 
 .doom-field {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.2rem;
 }
 
 .doom-field span {
   color: #ffffff;
   font-family: Impact, "Arial Black", "Arial Narrow", sans-serif;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -346,7 +506,7 @@ input {
 }
 
 .doom-field select {
-  min-width: 150px;
+  min-width: 120px;
 }
 
 .doom-field.compact input {
@@ -426,22 +586,82 @@ input {
 
 .doom-loader {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
   flex-shrink: 0;
-  padding: 0.45rem 0.55rem;
+  padding: 0.3rem 0.4rem;
   color: #fff;
-  border: 2px solid #262626;
+  border: 1px solid #262626;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.98), rgba(5, 5, 5, 0.98)),
     repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 4px);
   font-family: "Courier New", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   image-rendering: pixelated;
 }
 
-.doom-loader--compact.ready,
-.doom-loader--compact.cache-hit {
-  gap: 0.35rem;
+.doom-loader--compact.is-settled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.55rem;
+  padding: 0.22rem 0.35rem;
+}
+
+.doom-loader--compact.is-settled::before {
+  display: inline-block;
+  margin-bottom: 0;
+}
+
+.doom-loader--compact.is-settled .loader-header {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
+.doom-loader--compact.is-settled .loader-status-line {
+  flex-basis: 100%;
+  min-height: auto;
+  padding-top: 0;
+}
+
+.doom-loader--compact.is-settled .loader-title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.55rem;
+}
+
+.doom-loader--compact.is-settled .loader-kicker {
+  margin-right: 0;
+}
+
+.doom-loader--compact.is-settled .loader-header h2 {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.doom-loader--compact.is-settled .wad-stats--inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  padding: 0;
+  border-top: none;
+}
+
+.doom-loader--compact.is-settled .cache-badge {
+  padding: 0.18rem 0.35rem;
+  font-size: 0.64rem;
+}
+
+.level-toolbar .doom-button {
+  padding: 0.32rem 0.55rem;
+  font-size: 0.74rem;
+}
+
+.level-toolbar select {
+  min-height: 1.75rem;
+  padding: 0.22rem 0.4rem;
+  font-size: 0.78rem;
 }
 
 .doom-loader--compact.ready .loader-header h2,
@@ -459,15 +679,16 @@ input {
 
 .doom-loader::before {
   content: "DOOM WAD STARTUP";
-  display: block;
+  display: inline-block;
   width: fit-content;
-  padding: 0.1rem 0.35rem;
+  padding: 0.08rem 0.3rem;
   color: #fff;
   background: var(--doom-red);
-  box-shadow: 8px 0 0 #7b0000, 16px 0 0 #4c0000;
-  font-size: 0.62rem;
+  box-shadow: 6px 0 0 #7b0000, 12px 0 0 #4c0000;
+  font-size: 0.58rem;
   font-weight: 900;
   letter-spacing: 0.06em;
+  line-height: 1.2;
 }
 
 .doom-loader--compact.ready::before,
@@ -477,30 +698,40 @@ input {
 
 .loader-header {
   display: flex;
-  gap: 1rem;
+  gap: 0.65rem;
+  align-items: flex-start;
   justify-content: space-between;
 }
 
+.loader-title-group {
+  min-width: 0;
+}
+
 .loader-header h2 {
-  margin: 0.1rem 0 0;
+  margin: 0.05rem 0 0;
   color: #fff;
   text-transform: uppercase;
+  font-size: 0.82rem;
+  line-height: 1.15;
 }
 
 .loader-header p {
-  margin: 0.3rem 0 0;
+  margin: 0.15rem 0 0;
   color: #dcdcdc;
+  font-size: 0.66rem;
 }
 
 .cache-badge {
   align-self: start;
-  padding: 0.35rem 0.55rem;
+  flex-shrink: 0;
+  padding: 0.22rem 0.4rem;
   color: #ffffff;
-  border: 2px solid #9f0000;
+  border: 1px solid #9f0000;
   background: #300;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 900;
+  line-height: 1.2;
 }
 
 .doom-loader.error .cache-badge {
@@ -658,6 +889,17 @@ input {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+.game-stage .game-card {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.game-stage .game-card__viewport {
+  min-height: 0;
+  height: 100%;
 }
 
 .level-viewer--playing .game-stage {
@@ -862,8 +1104,9 @@ input {
 .doom-level-transition {
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 6;
   pointer-events: none;
+  background: #584848;
 }
 
 .doom-level-transition__buffer {
@@ -909,8 +1152,12 @@ input {
 
 @media (max-width: 980px) {
   .hero {
-    grid-template-columns: 1fr;
-    align-items: start;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-brand {
+    flex-wrap: wrap;
   }
 
   .hero-tagline,
@@ -925,6 +1172,25 @@ input {
 
   .mode-tabs button {
     flex: 1;
+  }
+
+  .level-toolbar {
+    align-items: stretch;
+  }
+
+  .voxel-toolbar {
+    align-items: stretch;
+  }
+
+  .voxel-status--inline {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .music-status--inline {
+    margin-left: 0;
+    width: 100%;
+    flex-wrap: wrap;
   }
 
   .canvas-grid {

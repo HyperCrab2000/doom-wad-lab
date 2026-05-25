@@ -77,7 +77,8 @@ export function findCrossedWalkLines(
 }
 
 /**
- * Doom P_PointOnLineSide: front side when cross product (v2-v1) x (p-v1) > 0.
+ * Doom P_PointOnLineSide (p_maputl.c): front side when
+ * `(y - v1.y) * (v2.x - v1.x) < (x - v1.x) * (v2.y - v1.y)`.
  * P_UseLines skips the back side.
  */
 export function isOnFrontSide(
@@ -87,8 +88,9 @@ export function isOnFrontSide(
 ): boolean {
   const dx = v2.x - v1.x;
   const dy = v2.y - v1.y;
-  const cross = dx * (position.y - v1.y) - dy * (position.x - v1.x);
-  return cross > 0;
+  const left = dy * (position.x - v1.x);
+  const right = (position.y - v1.y) * dx;
+  return right < left;
 }
 
 /** Doom P_AproxDistance check used by P_UseLines. */

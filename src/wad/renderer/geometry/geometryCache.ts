@@ -21,9 +21,19 @@ export function buildWallRangesByLine(
   walls: WallObject[],
   lineCount: number
 ): Array<{ start: number; count: number }> {
+  return buildWallRangesFromWallBuffers(
+    walls.map((wall) => ({ lineIndex: wall.lineIndex ?? -1 })),
+    lineCount
+  );
+}
+
+export function buildWallRangesFromWallBuffers(
+  walls: ReadonlyArray<{ lineIndex: number }>,
+  lineCount: number
+): Array<{ start: number; count: number }> {
   const ranges = Array.from({ length: lineCount }, () => ({ start: -1, count: 0 }));
   walls.forEach((wall, wallIndex) => {
-    const lineIndex = wall.lineIndex ?? -1;
+    const lineIndex = wall.lineIndex;
     if (lineIndex < 0) return;
     const range = ranges[lineIndex];
     if (range.start < 0) {

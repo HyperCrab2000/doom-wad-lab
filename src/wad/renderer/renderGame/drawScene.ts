@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix';
+import { mat4, vec4 } from 'gl-matrix';
 import { ShaderProgram } from 'apl-easy-gl';
 import { Wad } from '@/wad/interfaces/Wad';
 import { WadMap } from '@/wad/interfaces/WadMap';
@@ -15,12 +15,15 @@ import { RenderableThing } from './renderableThings';
 import {
   buildPotentiallyVisibleSectors,
   findCameraSectorIndex,
+  getLineSectorIndices,
   isDrawVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
+  FRUSTUM_BOUNDS_MARGIN,
   FRUSTUM_CULL_RADIUS,
   VISIBILITY_DISTANCE_MARGIN,
+  WALL_FACING_CULL_DISTANCE,
 } from '@/wad/constants/RenderInfo';
 import { extractFrustumPlanes, isSphereInFrustum } from '@/wad/renderer/utils/frustumCull';
 import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
@@ -28,6 +31,13 @@ import {
   computeDynamicLightAt,
   computeNearestLightUniforms,
 } from '@/wad/renderer/utils/precomputedLights';
+import {
+  getFloorLiquidDrawUniforms,
+  getTextureSurfaceGlow,
+  getThingEmissiveUniforms,
+  normalizeFlatName,
+  type PointLight,
+} from '@/wad/renderer/renderGame/sectorLighting';
 import { ThingKind } from '@/wad/constants/ThingTypes';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
@@ -137,7 +147,7 @@ export function drawScene(params: DrawSceneParams) {
   wallShader.setUniforms({ modelViewProj: modelViewProjMatrix, uCameraPos: cameraPos });
 
   const drawWall = (wall: MapBuffers['walls'][number]) => {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) return;
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes, map)) return;
 
     let textureName = wall.texName;
     const animatedTexture = wad.animatedTextures[textureName];
@@ -145,11 +155,17 @@ export function drawScene(params: DrawSceneParams) {
       textureName = animatedTexture[animateWallIndex % animatedTexture.length];
     }
 
+    const wallTexture =
+      textures.walls[textureName] ??
+      textures.walls[textureName.toUpperCase()] ??
+      textures.walls[wall.texName];
+    if (!wallTexture) return;
+
     const surfaceGlow = getTextureSurfaceGlow(textureName);
     const reliefKey = textureName.toUpperCase();
 
     wallShader.setUniforms({
-      tex: textures.walls[textureName],
+      tex: wallTexture,
       heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
       lightIntensity: wall.sector.lightIntensity,
       shouldClip: wadAssets.texturesByName[textureName].transparent,
@@ -181,7 +197,7 @@ export function drawScene(params: DrawSceneParams) {
 
   const transparentWalls: Array<{ wall: MapBuffers['walls'][number]; distanceSq: number }> = [];
   for (const wall of buffers.transparentWalls) {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) continue;
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes, map)) continue;
     transparentWalls.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
   }
   transparentWalls.sort((a, b) => b.distanceSq - a.distanceSq);
@@ -254,7 +270,7 @@ export function drawScene(params: DrawSceneParams) {
   thingShader.setAttributes({ aPosition: buffers.thing.position, aUv: buffers.thing.uv });
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.depthMask(false);
+  gl.depthMask(true);
   gl.disable(gl.CULL_FACE);
 
   const spriteThings: Array<{ entry: RenderableThing; distanceSq: number }> = [];
@@ -306,6 +322,11 @@ export function drawScene(params: DrawSceneParams) {
 
     mat4.identity(modelMatrix);
     mat4.translate(modelMatrix, modelMatrix, [thingObj.x, thingYPos, -thingObj.y]);
+
+    mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
+    mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
+    const centerClip = vec4.transformMat4(vec4.create(), [0, 0, 0, 1], modelViewProjMatrix);
+
     mat4.rotateY(modelMatrix, modelMatrix, -angle({ x: dx, y: dy }));
     mat4.scale(modelMatrix, modelMatrix, [1.0, thingSprite.sprite.height, thingSprite.sprite.width]);
 
@@ -318,6 +339,8 @@ export function drawScene(params: DrawSceneParams) {
     thingShader.setUniforms({
       shouldMirror: thingSprite.mirror,
       modelViewProj: modelViewProjMatrix,
+      centerClipZ: centerClip[2],
+      centerClipW: centerClip[3],
       tex: textures.things[thingSprite.sprite.name],
       lightIntensity: thingSector.lightIntensity,
       fogColor: thingSector.fogColor ?? [0.025, 0.022, 0.02],
@@ -368,7 +391,7 @@ function shouldDrawFlat(
     flat.center[0],
     flat.center[1],
     flat.center[2],
-    FRUSTUM_CULL_RADIUS
+    Math.max(FRUSTUM_CULL_RADIUS, flat.boundsRadius)
   );
 }
 
@@ -377,8 +400,10 @@ function shouldDrawWall(
   cameraPos: [number, number, number],
   visibleSectors: Set<number> | null,
   cameraSectorIndex: number,
-  frustumPlanes: ReturnType<typeof extractFrustumPlanes>
+  frustumPlanes: ReturnType<typeof extractFrustumPlanes>,
+  map: WadMap
 ): boolean {
+  const lineSectors = getLineSectorIndices(map, wall.lineIndex);
   if (
     !isDrawVisible(
       wall.center,
@@ -387,7 +412,8 @@ function shouldDrawWall(
       visibleSectors,
       wall.sectorIndex,
       cameraSectorIndex,
-      false
+      false,
+      lineSectors
     )
   ) {
     return false;
@@ -397,21 +423,26 @@ function shouldDrawWall(
     const toCameraX = cameraPos[0] - wall.center[0];
     const toCameraY = cameraPos[1] - wall.center[1];
     const toCameraZ = cameraPos[2] - wall.center[2];
-    const facing =
-      toCameraX * wall.facingNormal[0] +
-      toCameraY * wall.facingNormal[1] +
-      toCameraZ * wall.facingNormal[2];
-    if (facing <= 0) {
-      return false;
+    const distanceSq = toCameraX * toCameraX + toCameraY * toCameraY + toCameraZ * toCameraZ;
+    if (distanceSq > WALL_FACING_CULL_DISTANCE * WALL_FACING_CULL_DISTANCE) {
+      const facing =
+        toCameraX * wall.facingNormal[0] +
+        toCameraY * wall.facingNormal[1] +
+        toCameraZ * wall.facingNormal[2];
+      if (facing <= 0) {
+        return false;
+      }
     }
   }
 
+  const frustumRadius =
+    Math.max(FRUSTUM_CULL_RADIUS, wall.boundsRadius + FRUSTUM_BOUNDS_MARGIN);
   return isSphereInFrustum(
     frustumPlanes,
     wall.center[0],
     wall.center[1],
     wall.center[2],
-    FRUSTUM_CULL_RADIUS
+    frustumRadius
   );
 }
 
@@ -455,8 +486,14 @@ function drawFlat(
     ctx.textures.heightFlatLoaded
   );
 
+  const flatTexture =
+    ctx.textures.flats[flatName] ??
+    ctx.textures.flats[flatName.toUpperCase()] ??
+    ctx.textures.flats[flat.flatName];
+  if (!flatTexture) return;
+
   ctx.flatShader.setUniforms({
-    tex: ctx.textures.flats[flatName],
+    tex: flatTexture,
     heightTex:
       ctx.textures.heightFlats[flatReliefKey] ??
       ctx.textures.heightFlats[flatName] ??

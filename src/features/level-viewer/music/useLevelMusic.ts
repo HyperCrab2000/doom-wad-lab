@@ -12,6 +12,7 @@ import { WebAudioMusPlayer } from './webAudioMusPlayer';
 
 export interface LevelMusicState {
   enabled: boolean;
+  playing: boolean;
   isPrepared: boolean;
   status: string;
   currentLump: string | null;
@@ -26,6 +27,7 @@ export function useLevelMusic(
   wadPath: string | null
 ): LevelMusicState {
   const [enabled, setEnabled] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [isPrepared, setIsPrepared] = useState(false);
   const [status, setStatus] = useState('Music off');
   const [currentLump, setCurrentLump] = useState<string | null>(null);
@@ -112,7 +114,9 @@ export function useLevelMusic(
       setStatus(`Playing ${lump.name}`);
       player.unlockAudio();
       await player.play(lump.data, cacheKey);
+      setPlaying(true);
     } catch (error) {
+      setPlaying(false);
       setStatus(error instanceof Error ? error.message : `Could not play ${lump.name}`);
     }
   }, []);
@@ -125,6 +129,7 @@ export function useLevelMusic(
 
     if (trackChanged) {
       playerRef.current?.stop();
+      setPlaying(false);
       lastTrackRef.current = { wad, mapName, wadPath };
     }
 
@@ -169,6 +174,7 @@ export function useLevelMusic(
 
   const stop = useCallback(() => {
     setEnabled(false);
+    setPlaying(false);
     playerRef.current?.stop();
     updateReadyStatus(wadRef.current, mapRef.current);
   }, [updateReadyStatus]);
@@ -176,6 +182,7 @@ export function useLevelMusic(
   const toggle = useCallback(() => {
     if (enabledRef.current) {
       setEnabled(false);
+      setPlaying(false);
       playerRef.current?.stop();
       updateReadyStatus(wadRef.current, mapRef.current);
       return;
@@ -188,6 +195,7 @@ export function useLevelMusic(
 
   return {
     enabled,
+    playing,
     isPrepared,
     status,
     currentLump,

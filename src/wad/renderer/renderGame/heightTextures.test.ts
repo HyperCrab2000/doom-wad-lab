@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasHeightVariation, heightPixelsFromRgba, propagateWallHeightRelief, getWallReliefStrength, getFlatReliefStrength } from './heightTextures';
+import { hasHeightVariation, heightPixelsFromRgba, propagateWallHeightRelief, propagateFlatHeightRelief, getWallReliefStrength, getFlatReliefStrength } from './heightTextures';
 import type { HeightTextureSet } from './heightTextures';
 
 describe('heightTextures', () => {
@@ -55,6 +55,28 @@ describe('heightTextures', () => {
     expect(set.walls.STARTAN3).toBe(donor);
     expect(set.reliefWalls.has('STARTAN3')).toBe(true);
     expect(set.loadedWalls.has('STARTAN3')).toBe(true);
+  });
+
+  it('propagates flat height relief across animated flat groups', () => {
+    const donor = {} as WebGLTexture;
+    const set: HeightTextureSet = {
+      walls: {},
+      flats: { FLOOR4_8: donor },
+      fallback: {} as WebGLTexture,
+      loadedWalls: new Set(),
+      loadedFlats: new Set(['FLOOR4_8']),
+      reliefWalls: new Set(),
+      reliefFlats: new Set(['FLOOR4_8']),
+    };
+
+    propagateFlatHeightRelief(set, {
+      FLOOR4_8: ['FLOOR4_8', 'FLOOR5_1'],
+      FLOOR5_1: ['FLOOR4_8', 'FLOOR5_1'],
+    });
+
+    expect(set.flats.FLOOR5_1).toBe(donor);
+    expect(set.reliefFlats.has('FLOOR5_1')).toBe(true);
+    expect(set.loadedFlats.has('FLOOR5_1')).toBe(true);
   });
 
   it('uses stronger relief for voxel height maps than procedural fallbacks', () => {

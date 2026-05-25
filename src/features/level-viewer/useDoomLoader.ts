@@ -7,8 +7,7 @@ import {
   getCachedWad,
   setCachedWad,
 } from './wadCache';
-import { getMusicLump } from './music/doomMusic';
-import { clearMusicPreloadCache, musicCacheKey, preloadMusicLump } from './music/musicPreload';
+import { clearMusicPreloadCache } from './music/musicPreload';
 import { getSoundfontEngine } from './music/soundfontEngine';
 import { clearMapLoadCache } from '@/wad/renderer/renderGame/mapLoadCache';
 import { clearWadAssetsCache } from '@/wad/renderer/drawAssets/wadAssetsCache';
@@ -96,19 +95,12 @@ export const useDoomLoader = ({
     setMapLoadState('loading');
     setStatus((prev) => createLaunchingStatus(prev, selectedMap));
 
-    const musicLump = getMusicLump(wad, selectedMap);
-    const musicKey = musicLump ? musicCacheKey(wadPath, musicLump.name) : null;
-
     void getSoundfontEngine().catch(() => {
       /* Music preload is best-effort; useLevelMusic surfaces errors. */
     });
 
-    void Promise.all([
-      game.load(wad, map, selectedMap, wadPath),
-      musicLump && musicKey
-        ? preloadMusicLump(musicLump.data, musicKey)
-        : Promise.resolve(),
-    ])
+    game
+      .load(wad, map, selectedMap, wadPath)
       .then(() => {
         if (!cancelled) {
           setMapLoadState('ready');

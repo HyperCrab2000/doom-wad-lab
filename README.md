@@ -1,37 +1,93 @@
 # Doom WAD Lab
 
-Recovered from `gl-doom-redo`, with the working Doom/Doom II WAD level renderer and Slab6/KVX voxel loader kept together in one Vite app.
+Browser **WebGL2** renderer for classic Doom / Doom II **IWAD** maps, plus a **KVX voxel viewer** for Voxel Doom models.
 
-## Run
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
+![Vitest](https://img.shields.io/badge/tests-128_passing-6E9F18?logo=vitest&logoColor=white)
+![WebGL2](https://img.shields.io/badge/WebGL2-renderer-990000?logo=webgl&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+## Live demo
+
+Production (after infra deploy):
+
+- https://wadlab.computingandtooting.com
+- https://wadlab.tootingandcomputing.com
+
+## Quick start
 
 ```sh
 npm install
 npm run dev
 ```
 
-The app has two modes:
+Open the dev server URL. Two modes:
 
-- `Level Viewer`: loads a WAD and lets you select maps for the WebGL level renderer.
-- `Voxel Viewer`: previews Doom things from the Voxel Doom `VOXELDEF` catalog using the Slab6/KVX loader, with rotating 3D voxels plus top/bottom/front/back/side projections.
+| Mode | Description |
+|------|-------------|
+| **Level Viewer** | Load a WAD, pick a map, walk around in WebGL2 |
+| **Voxel Viewer** | Preview Voxel Doom `.kvx` models (Three.js) |
+
+## Documentation
+
+**Full technical docs:** [**docs/README.md**](./docs/README.md)
+
+| Guide | Topic |
+|-------|--------|
+| [WAD processing](./docs/wad-processing.md) | Parse pipeline, workers, geometry, caches |
+| [MUS & music](./docs/mus-music.md) | MUS decode, MIDI conversion, SoundFont playback |
+| [Voxels](./docs/voxels.md) | KVX format, VOXELDEF, in-game meshes |
+| [Rendering](./docs/rendering.md) | WebGL2 vs original Doom, culling, sky |
+| [Visual enhancements](./docs/visual-enhancements.md) | Lighting, slime glow, POM, transitions |
+| [Performance](./docs/performance.md) | Workers, React, caching, preload |
+
+## Stack
+
+![Three.js](https://img.shields.io/badge/Three.js-r175-000000?logo=threedotjs&logoColor=white)
+![gl-matrix](https://img.shields.io/badge/gl--matrix-3.4-5C4EE5)
+![earcut](https://img.shields.io/badge/earcut-3.0-4CAF50)
+![SpessaSynth](https://img.shields.io/badge/spessasynth__core-4.3-8B5CF6)
+![apl--easy--gl](https://img.shields.io/badge/apl--easy--gl-0.4-FF6B35)
+![Matter.js](https://img.shields.io/badge/Matter.js-0.20-FF5722)
+
+| Package | Role |
+|---------|------|
+| [React 19](https://react.dev/) | UI — level viewer, loaders, transitions |
+| [Vite 6](https://vitejs.dev/) | Dev server & production build |
+| [apl-easy-gl](https://www.npmjs.com/package/apl-easy-gl) | WebGL2 helpers & shader programs |
+| [gl-matrix](https://glmatrix.net/) | Matrices & camera |
+| [three](https://threejs.org/) | Voxel Viewer 3D preview |
+| [spessasynth_core](https://www.npmjs.com/package/spessasynth_core) | MIDI + SoundFont synthesis |
+| [earcut](https://github.com/mapbox/earcut) | Polygon triangulation |
+| [Vitest](https://vitest.dev/) | Unit tests |
 
 ## Assets
 
-- Put `DOOM.WAD` and `DOOM2.WAD` in `public/wads/`.
-- Put Voxel Doom `.kvx` files in `public/voxels/`, for example `SARGA.kvx`, `SARGC.kvx`, or `HEADA.kvx`. The voxel UI already knows the expected filenames from `VOXELDEF` and will auto-load the selected model when the matching file exists.
-- A small recovered `test.wad` is copied into `public/wads/test.wad` so the app has a bundled WAD option.
+Place files under `public/`:
 
-The Voxel Doom metadata is preserved under `voxel_doom/`, but the actual `.kvx` model files were not present in the recovered source tree.
+```text
+public/wads/DOOM.WAD
+public/wads/DOOM2.WAD
+public/wads/test.wad          # bundled smoke-test WAD
+public/voxels/SARGA.kvx       # Voxel Doom models (optional)
+public/soundfont/TimGM6mb.sf2 # General MIDI SoundFont
+```
 
-The Slab6 viewer lives in `src/components/VoxelModelViewer.tsx`; the older standalone `rendererTest` copy was removed so there is only one working KVX viewer path.
+Voxel metadata is bundled under `voxel_doom/` (VOXELDEF + ZScript). Actual `.kvx` binaries are not in git — copy from a Voxel Doom install.
+
+## Controls (level viewer)
+
+- **WASD** — move
+- **Mouse** — look (click to capture)
+- **Tab** — automap
+- **E / Click** — use
+- **Esc** — release mouse
 
 ## Deploy
 
-Hosting uses **S3 + CloudFront + WAF** with **GitHub Actions OIDC** (no AWS keys stored in GitHub). See [`infra/README.md`](infra/README.md) for bootstrap and DNS details.
-
-Production URLs (after infra apply):
-
-- https://wadlab.computingandtooting.com
-- https://wadlab.tootingandcomputing.com
+Hosting uses **S3 + CloudFront + WAF** with **GitHub Actions OIDC**. See [infra/README.md](./infra/README.md).
 
 ## Checks
 
@@ -39,3 +95,7 @@ Production URLs (after infra apply):
 npm run build
 npm test
 ```
+
+## License
+
+MIT — see [LICENSE](./LICENSE) if present.

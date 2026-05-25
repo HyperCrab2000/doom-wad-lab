@@ -7,13 +7,11 @@ type AppMode = 'levels' | 'voxels';
 
 export const App = () => {
   const [mode, setMode] = useState<AppMode>('levels');
-  const [immersive, setImmersive] = useState(false);
 
   return (
-    <div className={`app-shell ${immersive ? 'app-shell--playing' : ''}`}>
-      <header className={`hero ${immersive ? 'hero--hidden' : ''}`}>
-        <div className="hero-copy">
-          <span className="eyebrow">TypeScript DOOM Clone</span>
+    <div className="app-shell">
+      <header className="hero">
+        <div className="hero-brand">
           <DoomHeaderLogo />
           <p className="hero-tagline">
             Browser WebGL2 renderer for IWAD maps — built with Node, drawn in the GPU.
@@ -39,11 +37,7 @@ export const App = () => {
       </header>
 
       <main className="app-main">
-        {mode === 'levels' ? (
-          <LevelViewer onImmersiveChange={setImmersive} />
-        ) : (
-          <VoxelModelViewer />
-        )}
+        {mode === 'levels' ? <LevelViewer /> : <VoxelModelViewer />}
       </main>
 
       <div id="fps-counter" className="fps-counter">
