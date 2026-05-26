@@ -10,8 +10,12 @@ import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
 import { doomPlayerControls, PlayerSnapshot } from '@/wad/renderer/controls/doomPlayerControls';
 import { invalidateBlockingSegmentCache } from '@/wad/renderer/controls/doomCollision';
-import { DoorSystem, DoorTriggerResult } from '@/wad/game/doorSystem';
-import { playDoorMotionSound, playDoorTriggerSounds } from '@/wad/game/doorSounds';
+import { MapActionController, MapActionResult } from '@/wad/game/mapActionController';
+import {
+  playDoorMotionSound,
+  playDoorTriggerSounds,
+  playMoverTriggerSounds,
+} from '@/wad/game/doorSounds';
 import { DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
 import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
 
@@ -19,7 +23,8 @@ let wadData: LoadedWadData | null = null;
 let currentMap: WadMap | null = null;
 let presentationVisible = false;
 let automapActive = false;
-let doorSystem: DoorSystem | null = null;
+let mapActions: MapActionController | null = null;
+let liquidWake: { x: number; z: number; strength: number; startedAt: number } | null = null;
 let sfxPlayer: DoomSfxPlayer | null = null;
 let playerControls: ReturnType<typeof doomPlayerControls> | null = null;
 
@@ -88,13 +93,14 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   let forceDoorGeometryRefresh = false;
 
   const refreshDoorGeometry = () => {
-    if (!wadData || !currentMap || !doorSystem) return;
-    if (!doorSystem.isDirty() && !forceDoorGeometryRefresh) return;
+    if (!wadData || !currentMap || !mapActions) return;
+    if (!mapActions.isDirty() && !forceDoorGeometryRefresh) return;
 
     invalidateBlockingSegmentCache();
 
-    const dirtySectors = doorSystem.getDirtySectors();
-    const hasActiveDoors = doorSystem.getActiveDoorCount() > 0;
+    const dirtySectors = mapActions.getDirtySectors();
+    const switchedLines = mapActions.getSwitchedLineIndices();
+    const hasActiveDoors = mapActions.getActiveMoverCount() > 0;
     let shouldUpload = forceDoorGeometryRefresh || hasActiveDoors;
 
     if (!shouldUpload) {
@@ -120,16 +126,22 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         currentMap,
         wadData.wallTexturesByName,
         wadData.buffers,
-        dirtySectors
+        dirtySectors,
+        switchedLines.size > 0 ? switchedLines : undefined
       );
     }
 
-    doorSystem.clearDirty();
+    mapActions.clearDirty();
+    mapActions.clearSwitchedLines();
   };
 
-  const handleDoorTrigger = (result: DoorTriggerResult) => {
+  const handleLineAction = (result: MapActionResult) => {
     if (wadData && sfxPlayer) {
-      playDoorTriggerSounds(wadData.wad, sfxPlayer, result);
+      if ('playOpen' in result) {
+        playDoorTriggerSounds(wadData.wad, sfxPlayer, result);
+      } else {
+        playMoverTriggerSounds(wadData.wad, sfxPlayer, result);
+      }
     }
     if (result.triggered) {
       forceDoorGeometryRefresh = true;
@@ -182,7 +194,8 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     return loadWad(gl, wad, gameMap, mapName, wadPath).then((loaded) => {
       wadData = loaded;
       currentMap = gameMap;
-      doorSystem = new DoorSystem(gameMap);
+      mapActions = new MapActionController(gameMap);
+      liquidWake = null;
       lastRefreshedCeilings.clear();
       forceDoorGeometryRefresh = false;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
@@ -202,10 +215,18 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         buffers: wadData.buffers,
         start: { x: playerStart.x, y: playerStart.y, angle: cameraAngle },
         isAutomapActive: () => automapActive,
-        onLiquidTransition: (event) => triggerPixelSplash(canvas, event.color, event.kind),
-        doorSystem,
-        onDoorUse: handleDoorTrigger,
-        onWalkDoor: handleDoorTrigger,
+        onLiquidTransition: (event) => {
+          if (event.kind === 'enter') {
+            liquidWake = {
+              x: event.worldX,
+              z: event.worldZ,
+              strength: 1,
+              startedAt: performance.now(),
+            };
+          }
+        },
+        mapActions,
+        onLineAction: handleLineAction,
       });
       unbindControls = playerControls.unbind;
 
@@ -229,24 +250,41 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
     updateCameraFromViewMatrix(viewMatrix, invViewMatrix, camera);
 
-    if (presentationVisible && wadData && currentMap && doorSystem) {
-      const doorMotion = doorSystem.tick(Math.min(dt / 1000, 0.05));
-      if (doorMotion.playOpen || doorMotion.playClose) {
+    if (presentationVisible && wadData && currentMap && mapActions) {
+      const motion = mapActions.tick(Math.min(dt / 1000, 0.05));
+      if (motion.playOpen || motion.playClose) {
         playDoorMotionSound(
           wadData.wad,
           sfxPlayer!,
-          doorMotion.sound ?? 'door',
-          doorMotion.playOpen ? 'open' : 'close'
+          motion.sound === 'blaze' ? 'blaze' : 'door',
+          motion.playOpen ? 'open' : 'close'
         );
       }
-      if (doorSystem.isDirty() || forceDoorGeometryRefresh) {
+      if (motion.playStart) {
+        playMoverTriggerSounds(wadData.wad, sfxPlayer!, {
+          triggered: true,
+          playSwitch: false,
+          playStart: true,
+          sound: motion.sound === 'lift' ? 'lift' : 'mover',
+        });
+      }
+      if (mapActions.isDirty() || forceDoorGeometryRefresh) {
         refreshDoorGeometry();
-      } else if (doorSystem.getActiveDoorCount() > 0) {
+      } else if (mapActions.getActiveMoverCount() > 0) {
         invalidateBlockingSegmentCache();
       }
     }
 
-    if (presentationVisible && wadData && currentMap && doorSystem && !automapActive) {
+    if (liquidWake) {
+      const age = (performance.now() - liquidWake.startedAt) / 1000;
+      if (age > 2.5) {
+        liquidWake = null;
+      } else {
+        liquidWake.strength = Math.max(0, 1 - age / 2.5);
+      }
+    }
+
+    if (presentationVisible && wadData && currentMap && mapActions && !automapActive) {
       const start = performance.now();
       drawScene({
         gl,
@@ -272,6 +310,14 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         renderableThings: wadData.renderableThings,
         voxelThingFrames: wadData.voxelThingFrames,
         pointLights: wadData.pointLights,
+        liquidWake: liquidWake
+          ? {
+              x: liquidWake.x,
+              z: liquidWake.z,
+              strength: liquidWake.strength,
+              ageSeconds: (performance.now() - liquidWake.startedAt) / 1000,
+            }
+          : null,
       });
 
       const end = performance.now();
@@ -287,34 +333,3 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
   return { load, setPresentationVisible, setAutomapActive, getPlayerState, waitForRenderedFrame };
 };
-
-function triggerPixelSplash(
-  canvas: HTMLCanvasElement,
-  color: [number, number, number],
-  kind: 'enter' | 'exit'
-) {
-  const host = canvas.parentElement;
-  if (!host) return;
-
-  host.classList.add('splash-host');
-  const splash = document.createElement('div');
-  splash.className = `pixel-splash ${kind}`;
-  splash.style.setProperty('--splash-color', rgbCss(color));
-
-  for (let i = 0; i < 18; i++) {
-    const pixel = document.createElement('i');
-    const x = (Math.random() - 0.5) * 170;
-    const y = -Math.random() * 90 - 12;
-    pixel.style.setProperty('--x', `${x}px`);
-    pixel.style.setProperty('--y', `${y}px`);
-    pixel.style.animationDelay = `${Math.random() * 80}ms`;
-    splash.appendChild(pixel);
-  }
-
-  host.appendChild(splash);
-  window.setTimeout(() => splash.remove(), 720);
-}
-
-function rgbCss(color: [number, number, number]) {
-  return `rgb(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)})`;
-}

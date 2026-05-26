@@ -18,6 +18,9 @@ uniform float liquidEmissive;
 uniform vec3 uCameraPos;
 uniform float heightStrength;
 uniform float timeSeconds;
+uniform vec2 liquidWakePos;
+uniform float liquidWakeStrength;
+uniform float liquidWakeAge;
 uniform int uPointLightCount;
 uniform vec3 uPointLightPosition0;
 uniform vec3 uPointLightPosition1;
@@ -100,6 +103,13 @@ void main() {
   if (liquidStrength > 0.0) {
     vec2 pixelUv = floor(vUv / 8.0);
     float ripple = 0.5 + 0.5 * sin(pixelUv.x * 0.65 + pixelUv.y * 0.37 + timeSeconds * 4.0);
+    if (liquidWakeStrength > 0.01) {
+      vec2 worldXZ = vec2(vWorldPos.x, vWorldPos.z);
+      float dist = distance(worldXZ, liquidWakePos);
+      float wake = liquidWakeStrength * exp(-liquidWakeAge * 1.8) * exp(-dist * 0.035);
+      float rings = sin(dist * 0.42 - liquidWakeAge * 14.0) * wake;
+      ripple = clamp(ripple + rings * 0.85, 0.0, 1.5);
+    }
 
     if (liquidEmissive > 0.01) {
       float liquidMix = liquidStrength * (0.22 + ripple * 0.24);

@@ -1,4 +1,13 @@
 import { getDoorSpecial } from '@/wad/game/lineSpecials';
+import { getFloorMoverSpecial } from '@/wad/game/floorMoverSpecials';
+
+function isUseActivatableSpecial(special: number): boolean {
+  const door = getDoorSpecial(special);
+  if (door?.activation === 'switch') return true;
+  const floor = getFloorMoverSpecial(special);
+  if (floor?.activation === 'switch') return true;
+  return false;
+}
 import { LineDef } from '@/wad/interfaces/LineDef';
 import { WadMap } from '@/wad/interfaces/WadMap';
 
@@ -27,9 +36,7 @@ export function findUseLine(
 
   for (let lineIndex = 0; lineIndex < map.LINEDEFS.length; lineIndex++) {
     const line = map.LINEDEFS[lineIndex];
-    if (!getDoorSpecial(line.special)) continue;
-    const def = getDoorSpecial(line.special)!;
-    if (def.activation !== 'switch') continue;
+    if (!isUseActivatableSpecial(line.special)) continue;
 
     const v1 = map.VERTEXES[line.v1];
     const v2 = map.VERTEXES[line.v2];
@@ -63,8 +70,9 @@ export function findCrossedWalkLines(
 
   for (let lineIndex = 0; lineIndex < map.LINEDEFS.length; lineIndex++) {
     const line = map.LINEDEFS[lineIndex];
-    const def = getDoorSpecial(line.special);
-    if (!def || def.activation !== 'walk') continue;
+    const door = getDoorSpecial(line.special);
+    const floor = getFloorMoverSpecial(line.special);
+    if (door?.activation !== 'walk' && floor?.activation !== 'walk') continue;
 
     const v1 = map.VERTEXES[line.v1];
     const v2 = map.VERTEXES[line.v2];

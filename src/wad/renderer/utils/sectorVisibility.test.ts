@@ -70,7 +70,7 @@ describe('sector visibility culling', () => {
     expect(visible.has(1)).toBe(false);
   });
 
-  it('includes vertically stacked sectors connected by a portal', () => {
+  it('includes sky-linked sectors connected by a portal', () => {
     const footprint = { minX: 100, maxX: 200, minY: 100, maxY: 200 };
     const visible = buildPortalVisibleSectors(
       {
@@ -78,7 +78,12 @@ describe('sector visibility culling', () => {
         sectorBounds: [footprint, footprint],
         sectorAdjacency: [[1], [0]],
       },
-      { SECTORS: [{}, {}] } as WadMap,
+      {
+        SECTORS: [
+          { ceilingpic: 'CEIL3_5', floorpic: 'FLOOR0_1' },
+          { ceilingpic: 'F_SKY1', floorpic: 'FLOOR0_1' },
+        ],
+      } as WadMap,
       150,
       150,
       0,
@@ -218,7 +223,9 @@ describe('sector visibility culling', () => {
     expect(buildSectorAdjacency(map)).toEqual([[], []]);
   });
 
-  it('limits portal traversal depth', () => {
+  it('limits portal traversal depth through sky sectors', () => {
+    const indoor = { ceilingpic: 'CEIL3_5', floorpic: 'FLOOR0_1' };
+    const outdoor = { ceilingpic: 'F_SKY1', floorpic: 'FLOOR0_1' };
     const index = {
       subsectorToSector: [],
       sectorBounds: [
@@ -231,7 +238,7 @@ describe('sector visibility culling', () => {
 
     const visible = buildPortalVisibleSectors(
       index,
-      { SECTORS: [{}, {}, {}] } as WadMap,
+      { SECTORS: [indoor, outdoor, indoor] } as WadMap,
       32,
       32,
       0,
@@ -312,7 +319,12 @@ describe('sector visibility culling', () => {
 
     const visible = buildPotentiallyVisibleSectors(
       index,
-      { SECTORS: [{}, {}] } as WadMap,
+      {
+        SECTORS: [
+          { ceilingpic: 'CEIL3_5', floorpic: 'FLOOR0_1' },
+          { ceilingpic: 'F_SKY1', floorpic: 'FLOOR0_1' },
+        ],
+      } as WadMap,
       32,
       32,
       0,

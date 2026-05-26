@@ -12,10 +12,7 @@ import {
 } from '@/wad/renderer/geometry/geometryCache';
 import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
 import { mapToWalls, mapToWallsForLine } from '@/wad/renderer/geometry/mapToWalls';
-import {
-  getFlatIndicesForSectors,
-  getLineIndicesForSectors,
-} from '@/wad/renderer/geometry/sectorLineIndex';
+import { getLineIndicesForSectors } from '@/wad/renderer/geometry/sectorLineIndex';
 import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
 
 function uploadBuffer(
@@ -194,25 +191,54 @@ function rebuildWallBuffers(
   return walls.map((wall) => createWallBufferFromObject(gl, wall, map, dynamic));
 }
 
-function refreshFlatsForSectors(
+function createFlatBufferFromObject(
+  gl: WebGL2RenderingContext,
+  flat: ReturnType<typeof mapToFlats>[number],
+  map: WadMap
+): MapBuffers['flats'][number] {
+  const sector = map.SECTORS[flat.sectorIndex] ?? flat.sector;
+  const position = createBuffer(gl, flat.position, 3);
+  const normal = createBuffer(gl, flat.normal, 3);
+  const uv = createBuffer(gl, flat.uv, 2);
+  const indices = createElementBuffer(gl, flat.indices, 1);
+  gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, flat.position, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, normal.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, flat.normal, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, uv.buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, flat.uv, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices.buffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, flat.indices, gl.DYNAMIC_DRAW);
+
+  return {
+    position,
+    normal,
+    uv,
+    indices,
+    flatName: flat.flatName,
+    sector,
+    sectorIndex: flat.sectorIndex,
+    center: flat.center,
+    boundsRadius: flat.boundsRadius,
+  };
+}
+
+/** Rebuild flat GPU buffers for dirty sectors (handles doors opening from zero height). */
+function syncFlatsForDirtySectors(
   gl: WebGL2RenderingContext,
   map: WadMap,
   buffers: MapBuffers,
   dirtySectors: ReadonlySet<number>
 ): void {
-  const flats = mapToFlats(map, buffers.sectorTriangles);
+  const dirty = new Set(dirtySectors);
+  const allFlats = mapToFlats(map, buffers.sectorTriangles);
 
-  for (const flatIndex of getFlatIndicesForSectors(buffers.flats, dirtySectors)) {
-    const flatBuffer = buffers.flats[flatIndex];
-    const flat = flats[flatIndex];
-    if (!flat || !flatBuffer) continue;
-    gl.bindBuffer(gl.ARRAY_BUFFER, flatBuffer.position);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, flat.position);
-    gl.bindBuffer(gl.ARRAY_BUFFER, flatBuffer.normal);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, flat.normal);
-    flatBuffer.center = flat.center;
-    flatBuffer.boundsRadius = flat.boundsRadius;
-    flatBuffer.sector = map.SECTORS[flat.sectorIndex] ?? flatBuffer.sector;
+  buffers.flats = buffers.flats.filter((flat) => !dirty.has(flat.sectorIndex));
+
+  for (const flat of allFlats) {
+    if (dirty.has(flat.sectorIndex)) {
+      buffers.flats.push(createFlatBufferFromObject(gl, flat, map));
+    }
   }
 
   buffers.sortedFlats = buildSortedFlats(buffers.flats);
@@ -247,9 +273,14 @@ function refreshPartial(
   texturesByName: Record<string, WallTexture>,
   buffers: MapBuffers,
   dirtySectors: ReadonlySet<number>,
-  options: { includeFlats?: boolean } = {}
+  options: { includeFlats?: boolean; extraLineIndices?: ReadonlySet<number> } = {}
 ): boolean {
   const lineIndices = getLineIndicesForSectors(map, dirtySectors);
+  if (options.extraLineIndices) {
+    for (const lineIndex of options.extraLineIndices) {
+      lineIndices.add(lineIndex);
+    }
+  }
   const defaultWall = 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : Object.keys(texturesByName)[0];
   const dynamic = gl.DYNAMIC_DRAW;
   let missingRange = false;
@@ -263,7 +294,7 @@ function refreshPartial(
   }
 
   if (options.includeFlats !== false) {
-    refreshFlatsForSectors(gl, map, buffers, dirtySectors);
+    syncFlatsForDirtySectors(gl, map, buffers, dirtySectors);
   }
 
   const lists = rebuildWallDrawLists(buffers.walls);
@@ -278,10 +309,12 @@ export function refreshDoorWallGeometry(
   map: WadMap,
   texturesByName: Record<string, WallTexture>,
   buffers: MapBuffers,
-  dirtySectors: ReadonlySet<number>
+  dirtySectors: ReadonlySet<number>,
+  extraLineIndices?: ReadonlySet<number>
 ): GeometryRefreshResult {
   const partialOk = refreshPartial(gl, map, texturesByName, buffers, dirtySectors, {
-    includeFlats: false,
+    includeFlats: true,
+    extraLineIndices,
   });
   if (partialOk) {
     return 'partial';

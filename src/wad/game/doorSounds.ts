@@ -1,5 +1,6 @@
 import { Wad } from '@/wad/interfaces/Wad';
 import { DoorSpecialDef, DoorTriggerResult } from '@/wad/game/lineSpecials';
+import { MoverTriggerResult } from '@/wad/game/floorMoverSystem';
 import { DOOM_DOOR_SOUNDS, DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
 
 export function playDoorTriggerSounds(
@@ -27,4 +28,18 @@ export function playDoorMotionSound(
       ? { open: DOOM_DOOR_SOUNDS.blazeOpen, close: DOOM_DOOR_SOUNDS.blazeClose }
       : { open: DOOM_DOOR_SOUNDS.doorOpen, close: DOOM_DOOR_SOUNDS.doorClose };
   sfx.play(wad, motion === 'open' ? names.open : names.close);
+}
+
+export function playMoverTriggerSounds(
+  wad: Wad,
+  sfx: DoomSfxPlayer,
+  result: MoverTriggerResult
+): void {
+  void sfx.resume();
+  if (result.playSwitch) {
+    sfx.play(wad, DOOM_DOOR_SOUNDS.switchOn);
+  }
+  if (result.playStart) {
+    sfx.play(wad, DOOM_DOOR_SOUNDS.doorOpen);
+  }
 }

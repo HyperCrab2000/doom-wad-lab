@@ -1,7 +1,12 @@
 import { Node } from '@/wad/interfaces/Node';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { Triangle } from '@/wad/interfaces/Triangle';
-import { skyFlats } from '@/wad/constants/WadInfo';
+import {
+  isSkySector,
+  MAX_SKY_PORTAL_CHAIN,
+} from '@/wad/renderer/utils/sectorSkyVisibility';
+
+export { isSkySector } from '@/wad/renderer/utils/sectorSkyVisibility';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
   MAX_PORTAL_TRAVERSAL_DEPTH,
@@ -127,14 +132,6 @@ export function buildSectorVisibilityIndex(map: WadMap): SectorVisibilityIndex |
   return { subsectorToSector, sectorBounds, sectorAdjacency: buildSectorAdjacency(map) };
 }
 
-export function isSkySector(map: WadMap, sectorIndex: number): boolean {
-  const sector = map.SECTORS[sectorIndex];
-  if (!sector) return false;
-  return (
-    skyFlats.indexOf(sector.ceilingpic) >= 0 || skyFlats.indexOf(sector.floorpic) >= 0
-  );
-}
-
 export function buildSectorAdjacency(map: WadMap): number[][] {
   const adjacency = map.SECTORS.map(() => new Set<number>());
 
@@ -228,12 +225,12 @@ export function buildPortalVisibleSectors(
 
   const maxRadiusSq = maxRadius * maxRadius;
   const cameraInSky = isSkySector(map, cameraSectorIndex);
-  const queue: Array<{ sectorIndex: number; depth: number }> = [
-    { sectorIndex: cameraSectorIndex, depth: 0 },
+  const queue: Array<{ sectorIndex: number; depth: number; skyChain: number }> = [
+    { sectorIndex: cameraSectorIndex, depth: 0, skyChain: cameraInSky ? 0 : -1 },
   ];
 
   while (queue.length > 0) {
-    const { sectorIndex, depth } = queue.shift()!;
+    const { sectorIndex, depth, skyChain } = queue.shift()!;
     if (visible.has(sectorIndex)) continue;
 
     const bounds = index.sectorBounds[sectorIndex];
@@ -251,7 +248,17 @@ export function buildPortalVisibleSectors(
     for (const neighbor of index.sectorAdjacency[sectorIndex] ?? []) {
       if (visible.has(neighbor)) continue;
 
-      if (!canTraversePortal(map, cameraSectorIndex, cameraInSky, sectorIndex, neighbor)) {
+      const nextSkyChain = advanceSkyChain(map, sectorIndex, neighbor, skyChain);
+      if (
+        !canTraversePortal(
+          map,
+          cameraSectorIndex,
+          cameraInSky,
+          sectorIndex,
+          neighbor,
+          nextSkyChain
+        )
+      ) {
         continue;
       }
 
@@ -262,7 +269,7 @@ export function buildPortalVisibleSectors(
       ) {
         continue;
       }
-      queue.push({ sectorIndex: neighbor, depth: depth + 1 });
+      queue.push({ sectorIndex: neighbor, depth: depth + 1, skyChain: nextSkyChain });
     }
   }
 
@@ -274,12 +281,25 @@ export function buildPortalVisibleSectors(
  * should be reachable. This prevents distant indoor areas from leaking into
  * sky views through the outdoor sector graph (E1M1 start window, etc.).
  */
+function advanceSkyChain(
+  map: WadMap,
+  fromSectorIndex: number,
+  toSectorIndex: number,
+  skyChain: number
+): number {
+  if (!isSkySector(map, toSectorIndex)) return skyChain;
+  if (fromSectorIndex === toSectorIndex) return skyChain;
+  if (!isSkySector(map, fromSectorIndex)) return 0;
+  return skyChain < 0 ? 0 : skyChain + 1;
+}
+
 function canTraversePortal(
   map: WadMap,
   cameraSectorIndex: number,
   cameraInSky: boolean,
   fromSectorIndex: number,
-  toSectorIndex: number
+  toSectorIndex: number,
+  skyChain: number
 ): boolean {
   if (cameraInSky) {
     return true;
@@ -292,16 +312,18 @@ function canTraversePortal(
   const toIsSky = isSkySector(map, toSectorIndex);
   const fromIsSky = isSkySector(map, fromSectorIndex);
 
-  // Direct portal from the camera room (stacked floors, adjacent rooms).
+  // From the camera room only expose outdoor sky portals — not every adjacent indoor sector.
   if (fromSectorIndex === cameraSectorIndex) {
-    return true;
+    return toIsSky;
   }
 
   if (toIsSky) {
+    if (fromIsSky) {
+      return skyChain >= 0 && skyChain < MAX_SKY_PORTAL_CHAIN;
+    }
     return true;
   }
 
-  // Do not walk from outdoor sky into distant indoor areas.
   if (fromIsSky) {
     return false;
   }

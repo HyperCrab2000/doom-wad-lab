@@ -180,7 +180,7 @@ export class DoorSystem {
     if (direction === 'down') {
       if (door.action === 'openWaitClose') {
         this.doors.delete(door.sectorIndex);
-        return null;
+        return 'close';
       }
       if (door.action === 'closeWaitOpen') {
         door.direction = 'wait';

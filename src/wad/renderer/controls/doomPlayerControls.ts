@@ -23,7 +23,7 @@ import {
   moveCircleAgainstObstacles,
 } from './doomCollision';
 import { writePlayerViewMatrix } from './playerView';
-import { DoorSystem, DoorTriggerResult } from '@/wad/game/doorSystem';
+import { MapActionController, MapActionResult } from '@/wad/game/mapActionController';
 import { findCrossedWalkLines, findUseLine } from '@/wad/game/useLines';
 import { findSectorAt as findSectorAtPosition } from '@/wad/renderer/utils/sectorLookup';
 
@@ -38,10 +38,11 @@ interface DoomPlayerControlsOptions {
     kind: 'enter' | 'exit';
     liquidKind: NonNullable<Sector['liquidKind']>;
     color: [number, number, number];
+    worldX: number;
+    worldZ: number;
   }) => void;
-  doorSystem?: DoorSystem;
-  onDoorUse?: (result: DoorTriggerResult) => void;
-  onWalkDoor?: (result: DoorTriggerResult) => void;
+  mapActions?: MapActionController;
+  onLineAction?: (result: MapActionResult) => void;
 }
 
 interface PlayerState {
@@ -84,9 +85,8 @@ export function doomPlayerControls({
   buffers,
   start,
   onLiquidTransition,
-  doorSystem,
-  onDoorUse,
-  onWalkDoor,
+  mapActions,
+  onLineAction,
   isAutomapActive,
 }: DoomPlayerControlsOptions): DoomPlayerControlsHandle {
   const startSector = findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, start);
@@ -161,15 +161,15 @@ export function doomPlayerControls({
   const USE_SWITCH_DEBOUNCE_MS = 400;
 
   const tryUseSwitch = (): boolean => {
-    if (!doorSystem) return false;
+    if (!mapActions) return false;
     const now = performance.now();
     if (now - lastUseSwitchAt < USE_SWITCH_DEBOUNCE_MS) return false;
     const target = findUseLine(map, { x: state.x, y: state.y }, { yaw: state.yaw });
     if (!target) return false;
-    const result = doorSystem.tryUseLine(target.lineIndex, target.line);
+    const result = mapActions.tryUseLine(target.lineIndex, target.line);
     if (result.triggered) {
       lastUseSwitchAt = now;
-      onDoorUse?.(result);
+      onLineAction?.(result);
     }
     return result.triggered;
   };
@@ -226,12 +226,16 @@ export function doomPlayerControls({
             kind: 'enter',
             liquidKind: nextLiquidKind,
             color: nextSector.liquidColor ?? [0.18, 0.45, 0.95],
+            worldX: state.x,
+            worldZ: -state.y,
           });
         } else if (currentLiquidKind) {
           onLiquidTransition?.({
             kind: 'exit',
             liquidKind: currentLiquidKind,
             color: previousSector?.liquidColor ?? [0.18, 0.45, 0.95],
+            worldX: state.x,
+            worldZ: -state.y,
           });
         }
         currentLiquidKind = nextLiquidKind;
@@ -261,11 +265,11 @@ export function doomPlayerControls({
       }
     }
 
-    if (doorSystem && (previousPosition.x !== state.x || previousPosition.y !== state.y)) {
+    if (mapActions && (previousPosition.x !== state.x || previousPosition.y !== state.y)) {
       for (const crossed of findCrossedWalkLines(map, previousPosition, { x: state.x, y: state.y })) {
-        const result = doorSystem.tryWalkLine(crossed.lineIndex, crossed.line);
+        const result = mapActions.tryWalkLine(crossed.lineIndex, crossed.line);
         if (result.triggered) {
-          onWalkDoor?.(result);
+          onLineAction?.(result);
         }
       }
     }

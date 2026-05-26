@@ -26,6 +26,7 @@ Technical documentation for the browser-based Doom / Doom II level renderer and 
 | [**Visual enhancements**](./visual-enhancements.md) | Sector lighting, slime glow, POM relief, voxels, point lights, transitions |
 | [**Performance**](./performance.md) | Workers, React patterns, map/WAD caches, preload, level transitions |
 | [**Project history**](./project-history.md) | Fork lineage, `.idea` local history, phased evolution Mar 2025 → present |
+| [**Line specials**](./line-specials.md) | Doors, switches, lifts, floors — activation and runtime movers |
 
 ## Repository layout (high level)
 

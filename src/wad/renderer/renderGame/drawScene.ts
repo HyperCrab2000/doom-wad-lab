@@ -18,6 +18,8 @@ import {
   getLineSectorIndices,
   isDrawVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
+import { shouldRenderFullscreenSkybox } from '@/wad/renderer/utils/sectorSkyVisibility';
+import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
   FRUSTUM_BOUNDS_MARGIN,
@@ -78,6 +80,8 @@ export interface DrawSceneParams {
   renderableThings: RenderableThing[];
   voxelThingFrames: VoxelThingFrameMap;
   pointLights: PointLight[];
+  /** World XZ of a recent liquid entry for surface ripples (optional). */
+  liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
 }
 
 export function drawScene(params: DrawSceneParams) {
@@ -86,16 +90,10 @@ export function drawScene(params: DrawSceneParams) {
     modelViewProjMatrix, cameraPos, textures, currentSky, buffers,
     wad, map, wadAssets, sortedFramesByThingName,
     animateFlatIndex, animateWallIndex, animateSpriteIndex, timeSeconds, skyboxBuffers,
-    renderableThings, pointLights,
+    renderableThings, pointLights, liquidWake,
   } = params;
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  const skyAngles = getViewAnglesFromViewMatrix(viewMatrix);
-  const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
-  if (skyTexture) {
-    drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, skyAngles.yaw, skyAngles.pitch);
-  }
 
   mat4.identity(modelMatrix);
   mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
@@ -116,6 +114,15 @@ export function drawScene(params: DrawSceneParams) {
           cameraSectorIndex
         )
       : null;
+
+  const skyAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
+  if (
+    skyTexture &&
+    shouldRenderFullscreenSkybox(map, cameraSectorIndex, visibleSectors)
+  ) {
+    drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, skyAngles.yaw, skyAngles.pitch);
+  }
 
   const frustumPlanes = extractFrustumPlanes(modelViewProjMatrix);
 
@@ -138,6 +145,7 @@ export function drawScene(params: DrawSceneParams) {
       timeSeconds,
       pointLights,
       cameraPos,
+      liquidWake: params.liquidWake,
     });
   }
   gl.enable(gl.CULL_FACE);
@@ -167,7 +175,7 @@ export function drawScene(params: DrawSceneParams) {
     wallShader.setUniforms({
       tex: wallTexture,
       heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
-      lightIntensity: wall.sector.lightIntensity,
+      lightIntensity: getEffectiveSectorLightLevel(wall.sector, timeSeconds) / 255,
       shouldClip: wadAssets.texturesByName[textureName].transparent,
       repeatVertical: wall.repeatVertical,
       ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
@@ -456,6 +464,7 @@ function drawFlat(
     timeSeconds: number;
     pointLights: PointLight[];
     cameraPos: [number, number, number];
+    liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
   }
 ) {
   let flatName = flat.flatName;
@@ -498,7 +507,8 @@ function drawFlat(
       ctx.textures.heightFlats[flatReliefKey] ??
       ctx.textures.heightFlats[flatName] ??
       ctx.textures.heightFallback,
-    lightIntensity: flat.sector.lightIntensity,
+    lightIntensity:
+      getEffectiveSectorLightLevel(flat.sector, ctx.timeSeconds) / 255,
     ambientColor: finalAmbient,
     glowColor:
       surfaceGlow?.color ??
@@ -517,6 +527,11 @@ function drawFlat(
     uCameraPos: ctx.cameraPos,
     heightStrength,
     timeSeconds: ctx.timeSeconds,
+    liquidWakePos: ctx.liquidWake
+      ? [ctx.liquidWake.x, ctx.liquidWake.z]
+      : [0, 0],
+    liquidWakeStrength: ctx.liquidWake?.strength ?? 0,
+    liquidWakeAge: ctx.liquidWake?.ageSeconds ?? 0,
   });
 
   ctx.flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });
