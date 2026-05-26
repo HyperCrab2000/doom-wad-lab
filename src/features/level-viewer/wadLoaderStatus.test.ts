@@ -3,7 +3,10 @@ import { Wad } from '@/wad/interfaces/Wad';
 import {
   createErrorStatus,
   createLaunchingStatus,
+  createMapLoadErrorStatus,
   createMapReadyStatus,
+  createOpeningStatus,
+  createReadingStatus,
   createReadyStatus,
   initialWadLoadStatus,
 } from './wadLoaderStatus';
@@ -72,6 +75,34 @@ describe('wad loader status', () => {
     expect(status.state).toBe('error');
     expect(status.error).toBe('missing wad');
     expect(status.steps).toHaveLength(initialWadLoadStatus.steps.length);
+  });
+
+  it('reports opening and reading progress for a WAD path', () => {
+    const opening = createOpeningStatus('/wads/DOOM2.WAD');
+    expect(opening.state).toBe('loading');
+    expect(opening.detail).toBe('/wads/DOOM2.WAD');
+    expect(opening.steps.find((step) => step.label === 'Z_Init')?.active).toBe(true);
+    expect(opening.steps.find((step) => step.label === 'W_Init')?.message).toContain('DOOM2.WAD');
+
+    const reading = createReadingStatus(opening);
+    expect(reading.title).toBe('Reading bytes');
+    expect(reading.steps.find((step) => step.label === 'Z_Init')?.complete).toBe(true);
+    expect(reading.steps.find((step) => step.label === 'W_Init')?.message).toContain('lump directory');
+  });
+
+  it('summarizes cached WAD loads and map failures', () => {
+    const cached = createReadyStatus(wad, true, 999);
+    expect(cached.state).toBe('cache-hit');
+    expect(cached.steps.find((step) => step.label === 'W_Init')?.message).toContain('cached');
+
+    const mapError = createMapLoadErrorStatus(new Error('BSP corrupt'), 'MAP99');
+    expect(mapError.state).toBe('error');
+    expect(mapError.error).toBe('BSP corrupt');
+    expect(mapError.steps.find((step) => step.label === 'R_Init')?.message).toContain('failed');
+
+    const generic = createMapLoadErrorStatus('timeout', 'MAP01');
+    expect(generic.detail).toBe('Could not load MAP01');
+    expect(createErrorStatus('network', '/wads/x.wad').error).toBe('network');
   });
 });
 

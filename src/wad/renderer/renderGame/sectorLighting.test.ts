@@ -6,12 +6,15 @@ import {
   applySectorFloorLighting,
   classifyFlatLiquid,
   createThingPointLights,
+  getFlatAmbientTint,
   getFlatFogAndGlow,
   getFloorLiquidDrawUniforms,
   getLiquidSurface,
   getSectorVisibilityDistance,
   getTextureSurfaceGlow,
+  getThingEmissiveUniforms,
   getThingLight,
+  normalizeFlatName,
 } from './sectorLighting';
 import {
   computeDynamicLightAt,
@@ -156,6 +159,37 @@ describe('sector lighting heuristics', () => {
     expect(getSectorVisibilityDistance(makeSector(32))).toBeLessThan(
       getSectorVisibilityDistance(makeSector(224))
     );
+  });
+
+  it('normalizes flat names and exposes emissive uniforms for lamps', () => {
+    expect(normalizeFlatName('  fwater2 ')).toBe('FWATER2');
+    expect(getFlatAmbientTint('BLOOD1')?.[0]).toBeGreaterThan(0.5);
+    expect(getFlatFogAndGlow('BLOOD1').lightBoost).toBeGreaterThan(1);
+    expect(getFlatFogAndGlow('FIRELAVA').glowColor[0]).toBeGreaterThan(0.5);
+
+    const torch = thing(46);
+    const emissive = getThingEmissiveUniforms(torch);
+    expect(emissive.emissiveStrength).toBeGreaterThan(0);
+    expect(emissive.emissiveTopExtent).toBeGreaterThan(0);
+    expect(getThingEmissiveUniforms(thing(1)).emissiveStrength).toBe(0);
+  });
+
+  it('boosts light on fire flats without assigning a liquid kind', () => {
+    const sector = makeSector();
+    applySectorFloorLighting(sector, 'FIREWARP', [0.5, 0.5, 0.5]);
+
+    expect(sector.liquidKind).toBeUndefined();
+    expect(sector.lightIntensity).toBeGreaterThan(1);
+  });
+
+  it('clears liquid fields for non-liquid floors', () => {
+    const sector = makeSector();
+    sector.liquidKind = 'lava';
+    applySectorFloorLighting(sector, 'FLOOR0_1', [0.4, 0.4, 0.4]);
+
+    expect(sector.liquidKind).toBeUndefined();
+    expect(sector.liquidColor).toBeUndefined();
+    expect(sector.glowColor).toEqual([0, 0, 0]);
   });
 });
 

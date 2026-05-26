@@ -32,8 +32,14 @@ jobs:
           mkdir -p public/soundfonts
           curl -fsSL -o public/soundfonts/TimGM6mb.sf2 "$SOUNDFONT_URL"
 
-      - name: Run tests
-        run: npm test
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Unit test coverage (≥90%)
+        run: npm run test:coverage
+
+      - name: Integration tests
+        run: npm run test:integration
 
       - name: Build
         run: npm run build

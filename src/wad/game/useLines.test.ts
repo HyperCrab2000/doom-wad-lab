@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { doomUseDistance, findUseLine, isOnFrontSide } from '@/wad/game/useLines';
+import {
+  doomUseDistance,
+  findCrossedWalkLines,
+  findUseLine,
+  isOnFrontSide,
+  USE_RANGE,
+} from '@/wad/game/useLines';
 import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
 import { LineDef } from '@/wad/interfaces/LineDef';
 import { WadMap } from '@/wad/interfaces/WadMap';
@@ -22,6 +28,33 @@ describe('findUseLine', () => {
     const map = createSwitchMap();
     const target = findUseLine(map, { x: 32, y: -16 }, { yaw: Math.PI });
     expect(target?.lineIndex).toBe(0);
+  });
+
+  it('prefers the nearer switch that is within the view cone', () => {
+    const map = createSwitchMap();
+    map.VERTEXES.push({ x: 128, y: 0 });
+    map.LINEDEFS.push(switchLine(1, 0, 1, 2));
+
+    const target = findUseLine(map, { x: 96, y: -16 }, { yaw: 0 });
+    expect(target?.lineIndex).toBe(1);
+  });
+
+  it('ignores switch lines beyond USERANGE', () => {
+    const map = createSwitchMap();
+    expect(findUseLine(map, { x: 32, y: -(USE_RANGE + 32) })).toBeNull();
+  });
+});
+
+describe('findCrossedWalkLines', () => {
+  it('detects walk-over door lines crossed between two positions', () => {
+    const map = createWalkMap();
+    const crossed = findCrossedWalkLines(map, { x: 32, y: 32 }, { x: 32, y: -32 });
+    expect(crossed.map((entry) => entry.lineIndex)).toEqual([0]);
+  });
+
+  it('returns empty when movement does not cross a walk line', () => {
+    const map = createWalkMap();
+    expect(findCrossedWalkLines(map, { x: -32, y: 32 }, { x: -32, y: -32 })).toEqual([]);
   });
 });
 
@@ -84,6 +117,24 @@ function createSwitchMap(): WadMap {
     SECTORS: [
       { floorheight: 0, ceilingheight: 128, floorpic: 'FLOOR0_1', ceilingpic: 'CEIL1_1', lightlevel: 255, type: 0, tag: 0 },
       { floorheight: 0, ceilingheight: 96, floorpic: 'FLOOR0_1', ceilingpic: 'CEIL1_1', lightlevel: 255, type: 0, tag: 0 },
+    ],
+  } as unknown as WadMap;
+}
+
+function createWalkMap(): WadMap {
+  return {
+    VERTEXES: [
+      { x: 0, y: 0 },
+      { x: 64, y: 0 },
+    ],
+    LINEDEFS: [switchLine(2, 5)],
+    SIDEDEFS: [
+      { sector: 0, xOffset: 0, yOffset: 0, upperTexture: '-', lowerTexture: '-', middleTexture: '-' },
+      { sector: 1, xOffset: 0, yOffset: 0, upperTexture: '-', lowerTexture: '-', middleTexture: 'DOOR3' },
+    ],
+    SECTORS: [
+      { floorheight: 0, ceilingheight: 128, floorpic: 'FLOOR0_1', ceilingpic: 'CEIL1_1', lightlevel: 255, type: 0, tag: 0 },
+      { floorheight: 0, ceilingheight: 96, floorpic: 'FLOOR0_1', ceilingpic: 'CEIL1_1', lightlevel: 255, type: 0, tag: 5 },
     ],
   } as unknown as WadMap;
 }

@@ -12,7 +12,10 @@ import { buildWallRangesByLine } from '@/wad/renderer/geometry/geometryCache';
 import { mapToWallsForLine } from '@/wad/renderer/geometry/mapToWalls';
 import { getLineIndicesForSectors } from '@/wad/renderer/geometry/sectorLineIndex';
 import { uploadCpuGeometry } from '@/wad/renderer/geometry/createBuffers';
-import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
+import {
+  refreshDoorWallGeometry,
+  refreshMapGeometry,
+} from '@/wad/renderer/geometry/refreshMapGeometry';
 
 function crusherDoorMap(): WadMap {
   const doorSector = {
@@ -186,6 +189,107 @@ describe('door runtime integration', () => {
     }
 
     expect(missingRange).toBe(false);
+  });
+});
+
+describe('refreshMapGeometry', () => {
+  it('returns partial refresh for a small dirty-sector set', () => {
+    const map = crusherDoorMap();
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+
+    const result = refreshMapGeometry(gl, map, texturesByName, buffers, new Set([1]));
+    expect(result).toBe('partial');
+    expect(buffers.opaqueWalls.length + buffers.transparentWalls.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to a full refresh when too many sectors are dirty', () => {
+    const map = crusherDoorMap();
+    while (map.SECTORS.length < 50) {
+      map.SECTORS.push({ ...map.SECTORS[0] });
+    }
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+
+    const dirty = new Set(Array.from({ length: 15 }, (_, index) => index));
+    expect(refreshMapGeometry(gl, map, texturesByName, buffers, dirty)).toBe('full');
+  });
+
+  it('updates flats and removes wall buffers when a door line becomes empty', () => {
+    const map = crusherDoorMap();
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    const initialWalls = buffers.walls.length;
+    expect(buffers.flats.length).toBeGreaterThan(0);
+
+    map.SECTORS[1].ceilingheight = 88;
+    refreshMapGeometry(gl, map, texturesByName, buffers, new Set([0, 1]));
+
+    expect(buffers.walls.length).toBeLessThan(initialWalls);
+    expect(buffers.sortedFlats.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to full refresh when a dirty line has no wall range', () => {
+    const map = crusherDoorMap();
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    buffers.wallRangesByLine[0] = { start: -1, count: 0 };
+
+    expect(refreshMapGeometry(gl, map, texturesByName, buffers, new Set([1]))).toBe('full');
+  });
+
+  it('rebuilds all wall buffers when the cached wall count is stale', () => {
+    const map = crusherDoorMap();
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    buffers.walls.pop();
+
+    expect(refreshMapGeometry(gl, map, texturesByName, buffers)).toBe('full');
+    expect(buffers.walls.length).toBe(geometry.walls.length);
+  });
+
+  it('reuses buffer uploads when geometry size is unchanged', () => {
+    const map = crusherDoorMap();
+    const texturesByName = {
+      BIGDOOR2: { name: 'BIGDOOR2', width: 128, height: 128, transparent: false },
+      BLAKWAL1: { name: 'BLAKWAL1', width: 64, height: 128, transparent: false },
+    };
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    const positionBuffer = buffers.walls[0].position.buffer;
+    const before = new Float32Array(gl.getBufferData(positionBuffer)!);
+
+    map.SECTORS[1].ceilingheight = 40;
+    refreshDoorWallGeometry(gl, map, texturesByName, buffers, new Set([1]));
+
+    const after = new Float32Array(gl.getBufferData(positionBuffer)!);
+    expect(after.some((value, index) => value !== before[index])).toBe(true);
   });
 });
 
