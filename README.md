@@ -42,6 +42,7 @@ Open the dev server URL. Two modes:
 | [Rendering](./docs/rendering.md) | WebGL2 vs original Doom, culling, sky |
 | [Visual enhancements](./docs/visual-enhancements.md) | Lighting, slime glow, POM, transitions |
 | [Performance](./docs/performance.md) | Workers, React, caching, preload |
+| [Project history](./docs/project-history.md) | How the app evolved from gl-doom-redo to production |
 
 ## Stack
 

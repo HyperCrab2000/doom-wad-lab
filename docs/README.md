@@ -25,6 +25,7 @@ Technical documentation for the browser-based Doom / Doom II level renderer and 
 | [**Rendering**](./rendering.md) | WebGL2 pipeline vs original Doom software renderer, culling, sky, draw order |
 | [**Visual enhancements**](./visual-enhancements.md) | Sector lighting, slime glow, POM relief, voxels, point lights, transitions |
 | [**Performance**](./performance.md) | Workers, React patterns, map/WAD caches, preload, level transitions |
+| [**Project history**](./project-history.md) | Fork lineage, `.idea` local history, phased evolution Mar 2025 → present |
 
 ## Repository layout (high level)
 
