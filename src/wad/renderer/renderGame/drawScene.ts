@@ -13,11 +13,11 @@ import { RuntimeVoxelMesh, VoxelThingFrameMap } from './voxelThingMeshes';
 import { hasVoxelDefinitionForSprite } from '@/wad/voxels/voxelCatalog';
 import { RenderableThing } from './renderableThings';
 import {
-  buildPotentiallyVisibleSectors,
   findCameraSectorIndex,
-  getLineSectorIndices,
   isDrawVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
+import { PointLightGrid } from '@/wad/renderer/utils/pointLightGrid';
+import { VisibleSectorCache } from '@/wad/renderer/utils/visibleSectorCache';
 import { shouldRenderFullscreenSkybox } from '@/wad/renderer/utils/sectorSkyVisibility';
 import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import {
@@ -29,10 +29,7 @@ import {
 } from '@/wad/constants/RenderInfo';
 import { extractFrustumPlanes, isSphereInFrustum } from '@/wad/renderer/utils/frustumCull';
 import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
-import {
-  computeDynamicLightAt,
-  computeNearestLightUniforms,
-} from '@/wad/renderer/utils/precomputedLights';
+import { computeDynamicLightAt } from '@/wad/renderer/utils/precomputedLights';
 import {
   getFloorLiquidDrawUniforms,
   getTextureSurfaceGlow,
@@ -43,6 +40,57 @@ import {
 import { ThingKind } from '@/wad/constants/ThingTypes';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
+
+const visibleSectorCache = new VisibleSectorCache();
+const pointLightGrid = new PointLightGrid();
+let cachedMap: WadMap | null = null;
+
+const scratchModelMatrix = mat4.create();
+const scratchModelViewMatrix = mat4.create();
+const scratchModelViewProjMatrix = mat4.create();
+const scratchClip = vec4.create();
+
+const transparentWallPool: Array<{ wall: MapBuffers['walls'][number]; distanceSq: number }> =
+  [];
+const spriteThingPool: Array<{ entry: RenderableThing; distanceSq: number }> = [];
+
+const sectorLightCache = new Map<number, number>();
+const LIGHT_BUCKET_HZ = 20;
+
+function getCachedSectorLight(
+  sectorIndex: number,
+  sector: Sector,
+  timeSeconds: number
+): number {
+  const bucket = (timeSeconds * LIGHT_BUCKET_HZ) | 0;
+  const key = sectorIndex * 10000 + bucket;
+  let level = sectorLightCache.get(key);
+  if (level === undefined) {
+    level = getEffectiveSectorLightLevel(sector, timeSeconds) / 255;
+    sectorLightCache.set(key, level);
+  }
+  return level;
+}
+
+function lightCellKey(center: [number, number, number]): string {
+  return `${center[0] >> 7},${center[1] >> 7},${center[2] >> 7}`;
+}
+
+let cachedPointLights: readonly PointLight[] | null = null;
+
+/** Call when map buffers are rebuilt so portal visibility and light caches reset. */
+export function invalidateDrawSceneCaches(): void {
+  cachedMap = null;
+  cachedPointLights = null;
+  visibleSectorCache.invalidate();
+  sectorLightCache.clear();
+  pointLightGrid.clear();
+}
+
+interface FlatDrawBatch {
+  batchKey: string;
+  lightKey: string;
+}
 
 export interface DrawSceneParams {
   gl: WebGL2RenderingContext;
@@ -95,25 +143,41 @@ export function drawScene(params: DrawSceneParams) {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+  if (map !== cachedMap) {
+    cachedMap = map;
+    visibleSectorCache.invalidate();
+    sectorLightCache.clear();
+  }
+
+  if (pointLights !== cachedPointLights) {
+    cachedPointLights = pointLights;
+    pointLightGrid.rebuild(pointLights);
+  }
+
   mat4.identity(modelMatrix);
   mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
   mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
 
   const cameraSectorIndex =
     buffers.triangleHash
-      ? findCameraSectorIndex(map, buffers.sectorTriangles, buffers.triangleHash, cameraPos)
+      ? findCameraSectorIndex(
+          map,
+          buffers.sectorTriangles,
+          buffers.triangleHash,
+          cameraPos,
+          buffers.sectorVisibility
+        )
       : -1;
 
-  const visibleSectors =
-    buffers.sectorVisibility
-      ? buildPotentiallyVisibleSectors(
-          buffers.sectorVisibility,
-          map,
-          cameraPos[0],
-          -cameraPos[2],
-          cameraSectorIndex
-        )
-      : null;
+  const visibleSectors = buffers.sectorVisibility
+    ? visibleSectorCache.getVisibleSectors(
+        buffers.sectorVisibility,
+        map,
+        cameraPos[0],
+        -cameraPos[2],
+        cameraSectorIndex
+      )
+    : null;
 
   const skyAngles = getViewAnglesFromViewMatrix(viewMatrix);
   const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
@@ -133,6 +197,7 @@ export function drawScene(params: DrawSceneParams) {
   gl.disable(gl.CULL_FACE);
   const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
 
+  const flatBatch: FlatDrawBatch = { batchKey: '', lightKey: '' };
   for (const flat of sortedFlats) {
     if (!shouldDrawFlat(flat, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) {
       continue;
@@ -143,10 +208,9 @@ export function drawScene(params: DrawSceneParams) {
       wad,
       animateFlatIndex,
       timeSeconds,
-      pointLights,
       cameraPos,
       liquidWake: params.liquidWake,
-    });
+    }, flatBatch);
   }
   gl.enable(gl.CULL_FACE);
 
@@ -154,8 +218,10 @@ export function drawScene(params: DrawSceneParams) {
   gl.useProgram(wallShader.program);
   wallShader.setUniforms({ modelViewProj: modelViewProjMatrix, uCameraPos: cameraPos });
 
+  let wallUniformBatchKey = '';
+  let wallLightKey = '';
   const drawWall = (wall: MapBuffers['walls'][number]) => {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes, map)) return;
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) return;
 
     let textureName = wall.texName;
     const animatedTexture = wad.animatedTextures[textureName];
@@ -169,51 +235,65 @@ export function drawScene(params: DrawSceneParams) {
       textures.walls[wall.texName];
     if (!wallTexture) return;
 
-    const surfaceGlow = getTextureSurfaceGlow(textureName);
-    const reliefKey = textureName.toUpperCase();
-
-    wallShader.setUniforms({
-      tex: wallTexture,
-      heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
-      lightIntensity: getEffectiveSectorLightLevel(wall.sector, timeSeconds) / 255,
-      shouldClip: wadAssets.texturesByName[textureName].transparent,
-      repeatVertical: wall.repeatVertical,
-      ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
-      fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
-      fogDensity: wall.sector.fogDensity ?? 0.25,
-      visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-      ...computeNearestLightUniforms(pointLights, wall.center),
-      reliefStrength: getWallReliefStrength(
-        textureName,
-        textures.reliefWalls,
-        textures.heightWallLoaded
-      ),
-      surfaceGlowColor: surfaceGlow?.color ?? [0, 0, 0],
-      surfaceGlowStrength: surfaceGlow?.strength ?? 0,
-      surfaceGlowPulse: surfaceGlow?.animated ? 1 : 0,
-      timeSeconds,
-    });
+    const batchKey = `${textureName}:${wall.sectorIndex}`;
+    const nextLightKey = lightCellKey(wall.center);
+    if (batchKey !== wallUniformBatchKey) {
+      wallUniformBatchKey = batchKey;
+      wallLightKey = '';
+      const surfaceGlow = getTextureSurfaceGlow(textureName);
+      const reliefKey = textureName.toUpperCase();
+      wallShader.setUniforms({
+        tex: wallTexture,
+        heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
+        lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds),
+        shouldClip: wadAssets.texturesByName[textureName].transparent,
+        repeatVertical: wall.repeatVertical,
+        ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
+        fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
+        fogDensity: wall.sector.fogDensity ?? 0.25,
+        visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
+        reliefStrength: getWallReliefStrength(
+          textureName,
+          textures.reliefWalls,
+          textures.heightWallLoaded
+        ),
+        surfaceGlowColor: surfaceGlow?.color ?? [0, 0, 0],
+        surfaceGlowStrength: surfaceGlow?.strength ?? 0,
+        surfaceGlowPulse: surfaceGlow?.animated ? 1 : 0,
+        timeSeconds,
+      });
+    }
+    if (nextLightKey !== wallLightKey) {
+      wallLightKey = nextLightKey;
+      wallShader.setUniforms(pointLightGrid.queryUniforms(wall.center));
+    }
     wallShader.setAttributes({ aPosition: wall.position, aUv: wall.uv, aNormal: wall.normal });
     wall.indices.draw();
   };
 
   gl.disable(gl.BLEND);
   gl.depthMask(true);
+  wallUniformBatchKey = '';
+  wallLightKey = '';
   for (const wall of buffers.opaqueWalls) {
     drawWall(wall);
   }
 
-  const transparentWalls: Array<{ wall: MapBuffers['walls'][number]; distanceSq: number }> = [];
+  transparentWallPool.length = 0;
   for (const wall of buffers.transparentWalls) {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes, map)) continue;
-    transparentWalls.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
+    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) continue;
+    transparentWallPool.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
   }
-  transparentWalls.sort((a, b) => b.distanceSq - a.distanceSq);
+  if (transparentWallPool.length > 1) {
+    transparentWallPool.sort((a, b) => b.distanceSq - a.distanceSq);
+  }
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  for (const entry of transparentWalls) {
+  wallUniformBatchKey = '';
+  wallLightKey = '';
+  for (const entry of transparentWallPool) {
     drawWall(entry.wall);
   }
   gl.depthMask(true);
@@ -227,7 +307,9 @@ export function drawScene(params: DrawSceneParams) {
   gl.depthMask(true);
   gl.disable(gl.CULL_FACE);
 
-  for (const { thingObj, thingIndex, thingType, thingSector, sectorIndex } of renderableThings) {
+  spriteThingPool.length = 0;
+  for (const entry of renderableThings) {
+    const { thingObj, thingIndex, thingType, thingSector, sectorIndex } = entry;
     if (visibleSectors && !visibleSectors.has(sectorIndex)) continue;
     const dx = thingObj.x - cameraPos[0];
     const dz = -thingObj.y - cameraPos[2];
@@ -248,28 +330,28 @@ export function drawScene(params: DrawSceneParams) {
     }
 
     const voxelFrames = params.voxelThingFrames.get(thingType.sprite);
-    const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % voxelFrames.length];
-    if (!voxelFrame?.mesh) {
+    const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % (voxelFrames?.length ?? 1)];
+    if (voxelFrame?.mesh) {
+      voxelThingsDrawn++;
+      renderVoxelThing({
+        gl,
+        shader: voxelShader,
+        mesh: voxelFrame.mesh,
+        thing: thingObj,
+        thingKind: thingType.kind,
+        sector: thingSector,
+        sectorIndex,
+        timeSeconds,
+        viewMatrix,
+        projectionMatrix,
+      });
+      continue;
+    }
+    if (hasVoxelDefinitionForSprite(thingType.sprite)) {
       voxelThingsPending++;
       continue;
     }
-
-    voxelThingsDrawn++;
-    renderVoxelThing({
-      gl,
-      shader: voxelShader,
-      mesh: voxelFrame.mesh,
-      thing: thingObj,
-      thingKind: thingType.kind,
-      sector: thingSector,
-      pointLights,
-      timeSeconds,
-      modelMatrix,
-      viewMatrix,
-      projectionMatrix,
-      modelViewMatrix,
-      modelViewProjMatrix,
-    });
+    spriteThingPool.push({ entry, distanceSq });
   }
   gl.enable(gl.CULL_FACE);
 
@@ -280,33 +362,11 @@ export function drawScene(params: DrawSceneParams) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(true);
   gl.disable(gl.CULL_FACE);
-
-  const spriteThings: Array<{ entry: RenderableThing; distanceSq: number }> = [];
-  for (const entry of renderableThings) {
-    if (visibleSectors && !visibleSectors.has(entry.sectorIndex)) continue;
-    if (hasVoxelDefinitionForSprite(entry.thingType.sprite)) continue;
-    const dx = entry.thingObj.x - cameraPos[0];
-    const dz = -entry.thingObj.y - cameraPos[2];
-    const distanceSq = dx * dx + dz * dz;
-    const visibility = entry.thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE;
-    const maxThingDist = visibility + VISIBILITY_DISTANCE_MARGIN;
-    if (distanceSq > maxThingDist * maxThingDist) continue;
-    if (
-      !isSphereInFrustum(
-        frustumPlanes,
-        entry.thingObj.x,
-        entry.thingSector.floorheight + 32,
-        -entry.thingObj.y,
-        FRUSTUM_CULL_RADIUS
-      )
-    ) {
-      continue;
-    }
-    spriteThings.push({ entry, distanceSq });
+  if (spriteThingPool.length > 1) {
+    spriteThingPool.sort((a, b) => b.distanceSq - a.distanceSq);
   }
-  spriteThings.sort((a, b) => b.distanceSq - a.distanceSq);
 
-  for (const { entry, distanceSq: _distanceSq } of spriteThings) {
+  for (const { entry } of spriteThingPool) {
     const { thingObj, thingIndex, thingType, thingSector } = entry;
     const dx = thingObj.x - cameraPos[0];
     const dy = -thingObj.y - cameraPos[2];
@@ -328,25 +388,31 @@ export function drawScene(params: DrawSceneParams) {
       ? thingSector.ceilingheight - thingSprite.sprite.height / 2
       : thingSector.floorheight + thingSprite.sprite.height / 2;
 
-    mat4.identity(modelMatrix);
-    mat4.translate(modelMatrix, modelMatrix, [thingObj.x, thingYPos, -thingObj.y]);
+    mat4.identity(scratchModelMatrix);
+    mat4.translate(scratchModelMatrix, scratchModelMatrix, [thingObj.x, thingYPos, -thingObj.y]);
 
-    mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
-    mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
-    const centerClip = vec4.transformMat4(vec4.create(), [0, 0, 0, 1], modelViewProjMatrix);
+    mat4.multiply(scratchModelViewMatrix, viewMatrix, scratchModelMatrix);
+    mat4.multiply(scratchModelViewProjMatrix, projectionMatrix, scratchModelViewMatrix);
+    vec4.set(scratchClip, 0, 0, 0, 1);
+    vec4.transformMat4(scratchClip, scratchClip, scratchModelViewProjMatrix);
+    const centerClip = scratchClip;
 
-    mat4.rotateY(modelMatrix, modelMatrix, -angle({ x: dx, y: dy }));
-    mat4.scale(modelMatrix, modelMatrix, [1.0, thingSprite.sprite.height, thingSprite.sprite.width]);
+    mat4.rotateY(scratchModelMatrix, scratchModelMatrix, -angle({ x: dx, y: dy }));
+    mat4.scale(scratchModelMatrix, scratchModelMatrix, [
+      1.0,
+      thingSprite.sprite.height,
+      thingSprite.sprite.width,
+    ]);
 
-    mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
-    mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
+    mat4.multiply(scratchModelViewMatrix, viewMatrix, scratchModelMatrix);
+    mat4.multiply(scratchModelViewProjMatrix, projectionMatrix, scratchModelViewMatrix);
 
     const thingWorldPos: [number, number, number] = [thingObj.x, thingYPos, -thingObj.y];
     const emissive = getThingEmissiveUniforms(thingObj);
 
     thingShader.setUniforms({
       shouldMirror: thingSprite.mirror,
-      modelViewProj: modelViewProjMatrix,
+      modelViewProj: scratchModelViewProjMatrix,
       centerClipZ: centerClip[2],
       centerClipW: centerClip[3],
       tex: textures.things[thingSprite.sprite.name],
@@ -408,10 +474,8 @@ function shouldDrawWall(
   cameraPos: [number, number, number],
   visibleSectors: Set<number> | null,
   cameraSectorIndex: number,
-  frustumPlanes: ReturnType<typeof extractFrustumPlanes>,
-  map: WadMap
+  frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
-  const lineSectors = getLineSectorIndices(map, wall.lineIndex);
   if (
     !isDrawVisible(
       wall.center,
@@ -421,7 +485,7 @@ function shouldDrawWall(
       wall.sectorIndex,
       cameraSectorIndex,
       false,
-      lineSectors
+      wall.portalSectors
     )
   ) {
     return false;
@@ -462,10 +526,10 @@ function drawFlat(
     wad: Wad;
     animateFlatIndex: number;
     timeSeconds: number;
-    pointLights: PointLight[];
     cameraPos: [number, number, number];
     liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
-  }
+  },
+  batch: FlatDrawBatch
 ) {
   let flatName = flat.flatName;
   const animatedFlat = ctx.wad.animatedFlats[flatName];
@@ -501,38 +565,46 @@ function drawFlat(
     ctx.textures.flats[flat.flatName];
   if (!flatTexture) return;
 
-  ctx.flatShader.setUniforms({
-    tex: flatTexture,
-    heightTex:
-      ctx.textures.heightFlats[flatReliefKey] ??
-      ctx.textures.heightFlats[flatName] ??
-      ctx.textures.heightFallback,
-    lightIntensity:
-      getEffectiveSectorLightLevel(flat.sector, ctx.timeSeconds) / 255,
-    ambientColor: finalAmbient,
-    glowColor:
-      surfaceGlow?.color ??
-      floorLiquid?.glowColor ??
-      (isFloorFlat ? (flat.sector.glowColor ?? [0, 0, 0]) : [0, 0, 0]),
-    glowStrength: surfaceGlow?.strength ?? (floorLiquid?.liquidEmissive ? 0.75 : 0.45),
-    glowPulse: surfaceGlow?.animated || (floorLiquid?.liquidEmissive ?? 0) > 0 ? 1 : 0,
-    glowHeight: surfaceGlow ? 512.0 : 36.0,
-    fogColor: flat.sector.fogColor ?? [0.025, 0.022, 0.02],
-    fogDensity: flat.sector.fogDensity ?? 0.25,
-    visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-    ...computeNearestLightUniforms(ctx.pointLights, flat.center),
-    liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
-    liquidStrength: floorLiquid?.liquidStrength ?? 0,
-    liquidEmissive: floorLiquid?.liquidEmissive ?? 0,
-    uCameraPos: ctx.cameraPos,
-    heightStrength,
-    timeSeconds: ctx.timeSeconds,
-    liquidWakePos: ctx.liquidWake
-      ? [ctx.liquidWake.x, ctx.liquidWake.z]
-      : [0, 0],
-    liquidWakeStrength: ctx.liquidWake?.strength ?? 0,
-    liquidWakeAge: ctx.liquidWake?.ageSeconds ?? 0,
-  });
+  const batchKey = `${flatName}:${flat.sectorIndex}`;
+  const nextLightKey = lightCellKey(flat.center);
+  if (batchKey !== batch.batchKey) {
+    batch.batchKey = batchKey;
+    batch.lightKey = '';
+    ctx.flatShader.setUniforms({
+      tex: flatTexture,
+      heightTex:
+        ctx.textures.heightFlats[flatReliefKey] ??
+        ctx.textures.heightFlats[flatName] ??
+        ctx.textures.heightFallback,
+      lightIntensity: getCachedSectorLight(flat.sectorIndex, flat.sector, ctx.timeSeconds),
+      ambientColor: finalAmbient,
+      glowColor:
+        surfaceGlow?.color ??
+        floorLiquid?.glowColor ??
+        (isFloorFlat ? (flat.sector.glowColor ?? [0, 0, 0]) : [0, 0, 0]),
+      glowStrength: surfaceGlow?.strength ?? (floorLiquid?.liquidEmissive ? 0.75 : 0.45),
+      glowPulse: surfaceGlow?.animated || (floorLiquid?.liquidEmissive ?? 0) > 0 ? 1 : 0,
+      glowHeight: surfaceGlow ? 512.0 : 36.0,
+      fogColor: flat.sector.fogColor ?? [0.025, 0.022, 0.02],
+      fogDensity: flat.sector.fogDensity ?? 0.25,
+      visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
+      liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
+      liquidStrength: floorLiquid?.liquidStrength ?? 0,
+      liquidEmissive: floorLiquid?.liquidEmissive ?? 0,
+      uCameraPos: ctx.cameraPos,
+      heightStrength,
+      timeSeconds: ctx.timeSeconds,
+      liquidWakePos: ctx.liquidWake
+        ? [ctx.liquidWake.x, ctx.liquidWake.z]
+        : [0, 0],
+      liquidWakeStrength: ctx.liquidWake?.strength ?? 0,
+      liquidWakeAge: ctx.liquidWake?.ageSeconds ?? 0,
+    });
+  }
+  if (nextLightKey !== batch.lightKey) {
+    batch.lightKey = nextLightKey;
+    ctx.flatShader.setUniforms(pointLightGrid.queryUniforms(flat.center));
+  }
 
   ctx.flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });
   flat.indices.draw();
@@ -545,13 +617,10 @@ function renderVoxelThing({
   thing,
   thingKind,
   sector,
-  pointLights,
+  sectorIndex,
   timeSeconds,
-  modelMatrix,
   viewMatrix,
   projectionMatrix,
-  modelViewMatrix,
-  modelViewProjMatrix,
 }: {
   gl: WebGL2RenderingContext;
   shader: ShaderProgram;
@@ -559,13 +628,10 @@ function renderVoxelThing({
   thing: Thing;
   thingKind: ThingKind | undefined;
   sector: Sector;
-  pointLights: PointLight[];
+  sectorIndex: number;
   timeSeconds: number;
-  modelMatrix: mat4;
   viewMatrix: mat4;
   projectionMatrix: mat4;
-  modelViewMatrix: mat4;
-  modelViewProjMatrix: mat4;
 }) {
   if (!mesh.vao) {
     mesh.vao = gl.createVertexArray();
@@ -593,20 +659,23 @@ function renderVoxelThing({
   const y = sector.floorheight + mesh.floorLift;
   const thingWorldPos: [number, number, number] = [thing.x, y, -thing.y];
 
-  mat4.identity(modelMatrix);
-  mat4.translate(modelMatrix, modelMatrix, [thing.x, y, -thing.y]);
-  mat4.rotateY(modelMatrix, modelMatrix, Math.PI / 2 - yaw);
-  mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
-  mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
+  mat4.identity(scratchModelMatrix);
+  mat4.translate(scratchModelMatrix, scratchModelMatrix, [thing.x, y, -thing.y]);
+  mat4.rotateY(scratchModelMatrix, scratchModelMatrix, Math.PI / 2 - yaw);
+  mat4.multiply(scratchModelViewMatrix, viewMatrix, scratchModelMatrix);
+  mat4.multiply(scratchModelViewProjMatrix, projectionMatrix, scratchModelViewMatrix);
 
   gl.useProgram(shader.program);
   shader.setUniforms({
-    modelViewProj: modelViewProjMatrix,
-    lightIntensity: Math.max(sector.lightIntensity ?? 0.5, 0.35),
+    modelViewProj: scratchModelViewProjMatrix,
+    lightIntensity: Math.max(
+      getCachedSectorLight(sectorIndex, sector, timeSeconds),
+      0.35
+    ),
     fogColor: sector.fogColor ?? [0.025, 0.022, 0.02],
     fogDensity: sector.fogDensity ?? 0.25,
     visibilityDistance: sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-    dynamicLight: computeDynamicLightAt(pointLights, thingWorldPos),
+    dynamicLight: pointLightGrid.queryDynamicLight(thingWorldPos),
   });
 
   gl.bindVertexArray(mesh.vao);

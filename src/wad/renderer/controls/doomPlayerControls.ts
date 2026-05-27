@@ -4,6 +4,7 @@ import {
   playerMaxStepHeight,
   playerRadius,
 } from '@/wad/constants/GameInfo';
+import { LineDef } from '@/wad/interfaces/LineDef';
 import { Sector } from '@/wad/interfaces/Sector';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
@@ -23,8 +24,12 @@ import {
   moveCircleAgainstObstacles,
 } from './doomCollision';
 import { writePlayerViewMatrix } from './playerView';
-import { MapActionController, MapActionResult } from '@/wad/game/mapActionController';
+import { MapActionController } from '@/wad/game/mapActionController';
+import type { MapActionResult } from '@/wad/game/mapActionTypes';
+import type { TeleportDestination } from '@/wad/game/teleportSystem';
+import { isSwitchActivatableSpecial } from '@/wad/game/lineSpecialActivation';
 import { findCrossedWalkLines, findUseLine } from '@/wad/game/useLines';
+import { getSectorPlayerEffects } from '@/wad/game/sectorSpecialRuntime';
 import { findSectorAt as findSectorAtPosition } from '@/wad/renderer/utils/sectorLookup';
 
 interface DoomPlayerControlsOptions {
@@ -43,6 +48,13 @@ interface DoomPlayerControlsOptions {
   }) => void;
   mapActions?: MapActionController;
   onLineAction?: (result: MapActionResult) => void;
+  onTeleport?: (destination: TeleportDestination) => void;
+  onSectorEffects?: (effects: ReturnType<typeof getSectorPlayerEffects>) => void;
+  /** Things that should not block movement (picked up items). */
+  skipBlockingThing?: (thing: Thing) => boolean;
+  onFire?: (state: PlayerSnapshot) => void;
+  onSelectWeaponSlot?: (slotIndex: number) => boolean;
+  onWeaponScroll?: (direction: 1 | -1) => boolean;
 }
 
 interface PlayerState {
@@ -65,9 +77,16 @@ export interface PlayerSnapshot {
   pitch: number;
 }
 
+export interface PlayerWorldState {
+  x: number;
+  y: number;
+  sector: Sector | null;
+}
+
 export interface DoomPlayerControlsHandle {
   unbind: () => void;
   getPlayerState: () => PlayerSnapshot;
+  getPlayerWorld: () => PlayerWorldState;
 }
 
 // Doom default movement is run speed; Shift is the walk/speed key (see p_user.c forwardmove).
@@ -87,7 +106,13 @@ export function doomPlayerControls({
   onLiquidTransition,
   mapActions,
   onLineAction,
+  onTeleport,
+  onSectorEffects,
   isAutomapActive,
+  skipBlockingThing,
+  onFire,
+  onSelectWeaponSlot,
+  onWeaponScroll,
 }: DoomPlayerControlsOptions): DoomPlayerControlsHandle {
   const startSector = findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, start);
   const state: PlayerState = {
@@ -118,6 +143,19 @@ export function doomPlayerControls({
       tryUseSwitch();
       return;
     }
+    const weaponSlot = weaponKeyToSlot(event.code);
+    if (weaponSlot != null) {
+      if (event.repeat) return;
+      event.preventDefault();
+      onSelectWeaponSlot?.(weaponSlot);
+      return;
+    }
+    if (event.code === 'KeyQ') {
+      if (event.repeat) return;
+      event.preventDefault();
+      onWeaponScroll?.(-1);
+      return;
+    }
     if (isMovementKey(event.code)) {
       event.preventDefault();
       keys.add(event.code);
@@ -133,20 +171,36 @@ export function doomPlayerControls({
   };
 
 
+  let primaryFireHeld = false;
+
   const mouseDown = (event: MouseEvent) => {
     if (isAutomapActive?.()) return;
     if (event.button !== 0) return;
     event.preventDefault();
     canvas.focus();
 
-    // Always attempt use on click — do not wait for pointer lock.
-    tryUseSwitch();
-
     if (document.pointerLockElement === canvas) {
+      primaryFireHeld = true;
+      fireWeapon();
       return;
     }
 
     void canvas.requestPointerLock().catch(() => {});
+  };
+
+  const mouseUp = (event: MouseEvent) => {
+    if (event.button === 0) {
+      primaryFireHeld = false;
+    }
+  };
+
+  const fireWeapon = () => {
+    onFire?.({
+      x: state.x,
+      y: state.y,
+      yaw: state.yaw,
+      pitch: state.pitch,
+    });
   };
 
   const mouseMove = (event: MouseEvent) => {
@@ -166,7 +220,9 @@ export function doomPlayerControls({
     if (now - lastUseSwitchAt < USE_SWITCH_DEBOUNCE_MS) return false;
     const target = findUseLine(map, { x: state.x, y: state.y }, { yaw: state.yaw });
     if (!target) return false;
-    const result = mapActions.tryUseLine(target.lineIndex, target.line);
+    const result = isSwitchActivatableSpecial(target.line.special)
+      ? mapActions.tryUseLine(target.lineIndex, target.line)
+      : mapActions.tryWalkLine(target.lineIndex, target.line, true);
     if (result.triggered) {
       lastUseSwitchAt = now;
       onLineAction?.(result);
@@ -186,7 +242,11 @@ export function doomPlayerControls({
     }
 
     const previousPosition = { x: state.x, y: state.y };
-    updateHorizontalVelocity(state, keys, dt);
+    const sectorFx = getSectorPlayerEffects(state.sector);
+    onSectorEffects?.(sectorFx);
+    state.vx += sectorFx.push.dx * dt;
+    state.vy += sectorFx.push.dy * dt;
+    updateHorizontalVelocity(state, keys, dt, sectorFx.frictionScale);
 
     const playerFeetZ = getPlayerFeetZ(state.sector, state.worldFeetZ, state.grounded);
     const floorZ = state.sector?.floorheight ?? playerFeetZ;
@@ -196,8 +256,12 @@ export function doomPlayerControls({
       playerFeetZ,
       state.sector ? map.SECTORS.indexOf(state.sector) : -1
     );
-    const blockingCircles = getBlockingCircles(map, playerFeetZ, (position) =>
-      findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, position)
+    const blockingCircles = getBlockingCircles(
+      map,
+      playerFeetZ,
+      (position) =>
+        findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, position),
+      skipBlockingThing
     );
     const moveAgainstObstacles = (
       position: { x: number; y: number },
@@ -266,15 +330,30 @@ export function doomPlayerControls({
     }
 
     if (mapActions && (previousPosition.x !== state.x || previousPosition.y !== state.y)) {
-      for (const crossed of findCrossedWalkLines(map, previousPosition, { x: state.x, y: state.y })) {
-        const result = mapActions.tryWalkLine(crossed.lineIndex, crossed.line);
+      const crossedLines = collectCrossedWalkLines(
+        map,
+        previousPosition,
+        { x: state.x, y: state.y },
+        playerRadius
+      );
+      for (const crossed of crossedLines) {
+        const result = mapActions.tryWalkLine(crossed.lineIndex, crossed.line, true);
         if (result.triggered) {
+          if (result.teleport) {
+            applyTeleport(state, result.teleport, map, buffers);
+            onTeleport?.(result.teleport);
+          }
           onLineAction?.(result);
         }
       }
     }
 
     updateVerticalMotion(state, dt);
+
+    if (primaryFireHeld && document.pointerLockElement === canvas) {
+      fireWeapon();
+    }
+
     updateViewMatrix(viewMatrix, state);
     animationFrame = requestAnimationFrame(tick);
   };
@@ -283,6 +362,7 @@ export function doomPlayerControls({
   animationFrame = requestAnimationFrame(tick);
 
   canvas.addEventListener('mousedown', mouseDown);
+  window.addEventListener('mouseup', mouseUp);
   window.addEventListener('mousemove', mouseMove);
   window.addEventListener('keydown', keyDown);
   window.addEventListener('keyup', keyUp);
@@ -295,6 +375,7 @@ export function doomPlayerControls({
         document.exitPointerLock();
       }
       canvas.removeEventListener('mousedown', mouseDown);
+      window.removeEventListener('mouseup', mouseUp);
       window.removeEventListener('mousemove', mouseMove);
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
@@ -304,6 +385,11 @@ export function doomPlayerControls({
       y: state.y,
       yaw: state.yaw,
       pitch: state.pitch,
+    }),
+    getPlayerWorld: (): PlayerWorldState => ({
+      x: state.x,
+      y: state.y,
+      sector: state.sector,
     }),
   };
 }
@@ -318,6 +404,27 @@ export function findSectorAt(
 
 function updateViewMatrix(viewMatrix: mat4, state: PlayerState) {
   writePlayerViewMatrix(viewMatrix, state);
+}
+
+function applyTeleport(
+  state: PlayerState,
+  destination: TeleportDestination,
+  map: WadMap,
+  buffers: MapBuffers
+): void {
+  state.x = destination.x;
+  state.y = destination.y;
+  state.yaw = destination.yaw;
+  state.vx = 0;
+  state.vy = 0;
+  state.verticalVelocity = 0;
+  state.grounded = true;
+  const sector =
+    destination.sectorIndex >= 0
+      ? map.SECTORS[destination.sectorIndex]
+      : findSectorAt(map, buffers, { x: destination.x, y: destination.y });
+  state.sector = sector;
+  state.worldFeetZ = sector?.floorheight ?? state.worldFeetZ;
 }
 
 function applySectorTransition(
@@ -340,7 +447,12 @@ function applySectorTransition(
   }
 }
 
-function updateHorizontalVelocity(state: PlayerState, keys: Set<string>, dt: number) {
+function updateHorizontalVelocity(
+  state: PlayerState,
+  keys: Set<string>,
+  dt: number,
+  frictionScale = 1
+) {
   const maxSpeed = isShiftHeld(keys) ? DOOM_WALK_SPEED : DOOM_RUN_SPEED;
   const desired = getDesiredVelocity(keys, state.yaw, 1);
   const hasInput = desired.x !== 0 || desired.y !== 0;
@@ -349,7 +461,7 @@ function updateHorizontalVelocity(state: PlayerState, keys: Set<string>, dt: num
     state.vx += desired.x * GROUND_ACCELERATION * dt;
     state.vy += desired.y * GROUND_ACCELERATION * dt;
   } else {
-    const friction = Math.max(0, 1 - GROUND_FRICTION * dt);
+    const friction = Math.max(0, 1 - GROUND_FRICTION * frictionScale * dt);
     state.vx *= friction;
     state.vy *= friction;
   }
@@ -398,3 +510,37 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Subdivide movement so thin walk triggers are not skipped at high speed. */
+function collectCrossedWalkLines(
+  map: WadMap,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  playerRadius: number
+): Array<{ lineIndex: number; line: LineDef }> {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dist = Math.hypot(dx, dy);
+  const maxStep = 16;
+  const steps = Math.max(1, Math.ceil(dist / maxStep));
+  const merged = new Map<number, { lineIndex: number; line: LineDef }>();
+
+  for (let step = 1; step <= steps; step++) {
+    const t0 = (step - 1) / steps;
+    const t1 = step / steps;
+    const segmentFrom = { x: from.x + dx * t0, y: from.y + dy * t0 };
+    const segmentTo = { x: from.x + dx * t1, y: from.y + dy * t1 };
+    for (const crossed of findCrossedWalkLines(map, segmentFrom, segmentTo, playerRadius)) {
+      merged.set(crossed.lineIndex, crossed);
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function weaponKeyToSlot(code: string): number | null {
+  if (code.startsWith('Digit')) {
+    const digit = Number(code.slice(5));
+    if (digit >= 1 && digit <= 8) return digit - 1;
+  }
+  return null;
+}

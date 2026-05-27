@@ -28,6 +28,7 @@ public/wads/*.wad
 public/soundfonts/*.sf2
 
 # Editor directories and files
+.cursor/
 .vscode/*
 !.vscode/extensions.json
 .idea

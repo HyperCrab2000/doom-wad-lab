@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
 import { getSectorLineGeometry } from '@/wad/renderer/geometry/getLineDefsBySector';
 import { sectorLinesToTriangles } from '@/wad/renderer/geometry/sectorLinesToTriangles';
-import { buildSectorTriangleHash, findSectorAt } from '@/wad/renderer/utils/sectorLookup';
+import {
+  buildSectorTriangleHash,
+  findSectorAt,
+  findSectorAtPoint,
+} from '@/wad/renderer/utils/sectorLookup';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { Triangle } from '@/wad/interfaces/Triangle';
 
@@ -41,6 +45,19 @@ describe('sectorLookup', () => {
 
     expect(hash.x.length).toBeGreaterThanOrEqual(4);
     expect(hash.y.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('findSectorAtPoint does not use nearest-sector fallback', () => {
+    const map = twoSectorMap();
+    const sectorTriangles = {
+      0: [triangle(0, 0, 64, 0, 64, 64)],
+      1: [triangle(64, 0, 128, 0, 128, 64)],
+    };
+    const hash = buildSectorTriangleHash(map, sectorTriangles);
+
+    expect(findSectorAtPoint(map, sectorTriangles, null, { x: 32, y: -16 })).toBeNull();
+    expect(findSectorAtPoint(map, sectorTriangles, hash, { x: 96, y: 16 })).toBe(map.SECTORS[1]);
+    expect(findSectorAt(map, sectorTriangles, null, { x: 32, y: -16 })).toBe(map.SECTORS[0]);
   });
 
   it('falls back to the nearest sector when the point is outside all triangles', () => {

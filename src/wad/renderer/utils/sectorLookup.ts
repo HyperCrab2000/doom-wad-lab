@@ -79,6 +79,33 @@ export function findSectorAt(
   return findNearestSector(map, position);
 }
 
+/** Point-in-sector test without linedef nearest fallback (used for camera sector). */
+export function findSectorAtPoint(
+  map: WadMap,
+  sectorTriangles: Record<number, Triangle[]>,
+  triangleHash: SectorTriangleHash | null,
+  position: Vertex
+): Sector | null {
+  if (triangleHash) {
+    const candidates = findTrianglesAtPosition(triangleHash, position);
+    for (const item of candidates.items) {
+      if (pointInTriangle(position, item.triangle)) {
+        return item.sector;
+      }
+    }
+  }
+
+  for (let sectorIndex = 0; sectorIndex < map.SECTORS.length; sectorIndex++) {
+    const triangles = sectorTriangles[sectorIndex];
+    if (!triangles) continue;
+    if (triangles.some((triangle) => pointInTriangle(position, triangle))) {
+      return map.SECTORS[sectorIndex];
+    }
+  }
+
+  return null;
+}
+
 function findNearestSector(map: WadMap, position: Vertex): Sector | null {
   let nearest: { sector: Sector; distance: number } | null = null;
 

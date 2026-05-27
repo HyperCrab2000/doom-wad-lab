@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { LevelViewer } from '@/features/level-viewer/LevelViewer';
 import { DoomHeaderLogo } from '@/features/level-viewer/DoomHeaderLogo';
-import { VoxelModelViewer } from '@/features/voxel-viewer/VoxelModelViewer';
+
+const VoxelModelViewer = lazy(() =>
+  import('@/features/voxel-viewer/VoxelModelViewer').then((module) => ({
+    default: module.VoxelModelViewer,
+  }))
+);
 
 type AppMode = 'levels' | 'voxels';
 
@@ -37,7 +42,13 @@ export const App = () => {
       </header>
 
       <main className="app-main">
-        {mode === 'levels' ? <LevelViewer /> : <VoxelModelViewer />}
+        {mode === 'levels' ? (
+          <LevelViewer />
+        ) : (
+          <Suspense fallback={<p className="viewer-loading">Loading voxel viewer…</p>}>
+            <VoxelModelViewer />
+          </Suspense>
+        )}
       </main>
 
       <div id="fps-counter" className="fps-counter">

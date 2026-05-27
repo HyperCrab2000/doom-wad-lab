@@ -44,6 +44,18 @@ export function buildWallRangesFromWallBuffers(
   return ranges;
 }
 
+/** Sort opaque walls to minimize texture and sector uniform changes each frame. */
+export function sortOpaqueWallsForDraw(walls: WallBuffer[]): WallBuffer[] {
+  return walls
+    .slice()
+    .sort(
+      (a, b) =>
+        a.texName.localeCompare(b.texName) ||
+        a.sectorIndex - b.sectorIndex ||
+        a.lineIndex - b.lineIndex
+    );
+}
+
 export function rebuildWallDrawLists(walls: WallBuffer[]): {
   opaqueWalls: WallBuffer[];
   transparentWalls: WallBuffer[];
@@ -57,5 +69,8 @@ export function rebuildWallDrawLists(walls: WallBuffer[]): {
       opaqueWalls.push(wall);
     }
   }
-  return { opaqueWalls, transparentWalls };
+  return {
+    opaqueWalls: sortOpaqueWallsForDraw(opaqueWalls),
+    transparentWalls,
+  };
 }

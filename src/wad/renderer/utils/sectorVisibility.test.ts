@@ -12,11 +12,13 @@ import {
   enrichSectorBoundsFromTriangles,
   finalizeSectorVisibilityIndex,
   findCameraSectorIndex,
+  findCameraSectorIndexFromBsp,
   findCameraSubsector,
   getLineSectorIndices,
   isDrawVisible,
   isSectorPotentiallyVisible,
   isSkySector,
+  sectorsSharePortalLine,
 } from './sectorVisibility';
 
 function emptyIndex(sectorCount: number, bounds: Array<{
@@ -136,18 +138,15 @@ describe('sector visibility culling', () => {
     ).toBe(false);
   });
 
-  it('does not leak distant indoor sectors into sky views from an indoor camera', () => {
+  it('floods through multiple indoor sectors from the camera room', () => {
     const indoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
-    const outdoor = { floorpic: 'FLOOR4_8', ceilingpic: 'F_SKY1', floorheight: 0, ceilingheight: 128 } as Sector;
-    const farIndoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
-
     const map = {
-      SECTORS: [indoor, outdoor, farIndoor],
+      SECTORS: [indoor, indoor, indoor],
       LINEDEFS: [
         { sidenum: [0, 1], v1: 0, v2: 1, flags: { blockAll: false } },
         { sidenum: [2, 3], v1: 2, v2: 3, flags: { blockAll: false } },
       ],
-      SIDEDEFS: [{ sector: 0 }, { sector: 1 }, { sector: 2 }, { sector: 1 }],
+      SIDEDEFS: [{ sector: 0 }, { sector: 1 }, { sector: 1 }, { sector: 2 }],
       VERTEXES: [
         { x: 0, y: 0 },
         { x: 64, y: 0 },
@@ -155,9 +154,6 @@ describe('sector visibility culling', () => {
         { x: 192, y: 0 },
       ],
     } as unknown as WadMap;
-
-    expect(isSkySector(map, 0)).toBe(false);
-    expect(isSkySector(map, 1)).toBe(true);
 
     const index = {
       subsectorToSector: [],
@@ -172,7 +168,90 @@ describe('sector visibility culling', () => {
     const visible = buildPortalVisibleSectors(index, map, 32, 32, 0, 512);
     expect(visible.has(0)).toBe(true);
     expect(visible.has(1)).toBe(true);
-    expect(visible.has(2)).toBe(false);
+    expect(visible.has(2)).toBe(true);
+  });
+
+  it('lets an outdoor camera see indoor sectors that share a portal with the camera sector', () => {
+    const indoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
+    const outdoor = { floorpic: 'FLOOR4_8', ceilingpic: 'F_SKY1', floorheight: 0, ceilingheight: 128 } as Sector;
+    const map = {
+      SECTORS: [outdoor, indoor],
+      LINEDEFS: [{ sidenum: [0, 1], v1: 0, v2: 1, flags: { blockAll: false } }],
+      SIDEDEFS: [{ sector: 0 }, { sector: 1 }],
+      VERTEXES: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+      ],
+    } as unknown as WadMap;
+
+    expect(sectorsSharePortalLine(map, 0, 1)).toBe(true);
+
+    const index = {
+      subsectorToSector: [],
+      sectorBounds: [
+        { minX: 0, maxX: 64, minY: 0, maxY: 64 },
+        { minX: 64, maxX: 128, minY: 0, maxY: 64 },
+      ],
+      sectorAdjacency: buildSectorAdjacency(map),
+    };
+
+    const visible = buildPortalVisibleSectors(index, map, 32, 32, 0, 512);
+    expect(visible.has(0)).toBe(true);
+    expect(visible.has(1)).toBe(true);
+  });
+
+  it('does not leak indoor sectors deep in the outdoor graph from an indoor camera', () => {
+    const indoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
+    const outdoor = { floorpic: 'FLOOR4_8', ceilingpic: 'F_SKY1', floorheight: 0, ceilingheight: 128 } as Sector;
+    const farIndoor = { floorpic: 'FLOOR4_8', ceilingpic: 'CEIL3_5', floorheight: 0, ceilingheight: 128 } as Sector;
+
+    const map = {
+      SECTORS: [indoor, outdoor, outdoor, outdoor, farIndoor],
+      LINEDEFS: [
+        { sidenum: [0, 1], v1: 0, v2: 1, flags: { blockAll: false } },
+        { sidenum: [2, 3], v1: 2, v2: 3, flags: { blockAll: false } },
+        { sidenum: [4, 5], v1: 4, v2: 5, flags: { blockAll: false } },
+        { sidenum: [6, 7], v1: 6, v2: 7, flags: { blockAll: false } },
+      ],
+      SIDEDEFS: [
+        { sector: 0 },
+        { sector: 1 },
+        { sector: 1 },
+        { sector: 2 },
+        { sector: 2 },
+        { sector: 3 },
+        { sector: 3 },
+        { sector: 4 },
+      ],
+      VERTEXES: [
+        { x: 0, y: 0 },
+        { x: 64, y: 0 },
+        { x: 128, y: 0 },
+        { x: 192, y: 0 },
+        { x: 256, y: 0 },
+        { x: 320, y: 0 },
+        { x: 384, y: 0 },
+        { x: 448, y: 0 },
+      ],
+    } as unknown as WadMap;
+
+    const index = {
+      subsectorToSector: [],
+      sectorBounds: Array.from({ length: 5 }, (_, i) => ({
+        minX: i * 64,
+        maxX: (i + 1) * 64,
+        minY: 0,
+        maxY: 64,
+      })),
+      sectorAdjacency: buildSectorAdjacency(map),
+    };
+
+    const visible = buildPortalVisibleSectors(index, map, 32, 32, 0, 512);
+    expect(visible.has(0)).toBe(true);
+    expect(visible.has(1)).toBe(true);
+    expect(visible.has(2)).toBe(true);
+    expect(visible.has(3)).toBe(true);
+    expect(visible.has(4)).toBe(false);
   });
 
   it('treats boundary walls as visible when either adjacent sector is visible', () => {
@@ -261,13 +340,16 @@ describe('sector visibility culling', () => {
     expect(index!.sectorAdjacency.length).toBe(map.SECTORS.length);
   });
 
-  it('finds the camera sector index in E1M1 using triangle lookup', () => {
+  it('finds the camera sector index in E1M1 via BSP subsector walk', () => {
     const map = loadE1M1();
     const index = buildSectorVisibilityIndex(map)!;
     const playerStart = map.THINGS.find((thing) => thing.type === 1);
     expect(playerStart).toBeTruthy();
 
-    const sectorIndex = findCameraSectorIndex(map, {}, null, [playerStart!.x, 41, -playerStart!.y]);
+    const cameraPos: [number, number, number] = [playerStart!.x, 41, -playerStart!.y];
+    const sectorIndex = findCameraSectorIndex(map, {}, null, cameraPos, index);
+    const fromBsp = findCameraSectorIndexFromBsp(map, index, cameraPos);
+    expect(fromBsp).toBe(sectorIndex);
     expect(sectorIndex).toBeGreaterThanOrEqual(0);
     expect(index.sectorBounds[sectorIndex]).not.toBeNull();
   });
@@ -296,6 +378,16 @@ describe('sector visibility culling', () => {
       512
     );
     expect(visible.size).toBe(0);
+  });
+
+  it('decodes real-map subsector child ids (int16 with 0x8000 flag)', () => {
+    const map = loadE1M1();
+    const playerStart = map.THINGS.find((thing) => thing.type === 1);
+    expect(playerStart).toBeTruthy();
+
+    const subsector = findCameraSubsector(map, playerStart!.x, -playerStart!.y);
+    expect(subsector).toBeGreaterThanOrEqual(0);
+    expect(subsector).toBeLessThan(map.SSECTORS.length);
   });
 
   it('walks the BSP to find the camera subsector', () => {

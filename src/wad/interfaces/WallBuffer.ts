@@ -23,4 +23,6 @@ export interface WallBuffer {
   boundsRadius: number;
   /** Outward-facing unit normal for CPU back-face culling. */
   facingNormal: [number, number, number];
+  /** Sectors on either side of the parent linedef (portal visibility). */
+  portalSectors: readonly number[];
 }

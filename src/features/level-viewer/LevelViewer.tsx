@@ -6,6 +6,12 @@ import { useDoomLoader } from './useDoomLoader';
 import { useLevelMusic } from './music/useLevelMusic';
 import { MusicVisualizer } from './music/MusicVisualizer';
 import { DoomLevelTransition } from './DoomLevelTransition';
+import { DoomIntermission } from './DoomIntermission';
+import { DoomHud } from './DoomHud';
+import {
+  getNextMapName,
+  type LevelStatsSnapshot,
+} from '@/wad/game/levelStats';
 import {
   AutomapCheatLevel,
   cycleAutomapCheat,
@@ -19,11 +25,15 @@ interface GameRenderer {
   setAutomapActive: ReturnType<typeof renderGame>['setAutomapActive'];
   getPlayerState: ReturnType<typeof renderGame>['getPlayerState'];
   waitForRenderedFrame: ReturnType<typeof renderGame>['waitForRenderedFrame'];
+  setOnLevelExit: ReturnType<typeof renderGame>['setOnLevelExit'];
+  getLevelStats: ReturnType<typeof renderGame>['getLevelStats'];
+  getHudState: ReturnType<typeof renderGame>['getHudState'];
 }
 
-type TransitionPhase = 'loading' | 'wiping' | 'playing';
+type TransitionPhase = 'loading' | 'static' | 'wiping' | 'intermission' | 'playing';
 
-const MIN_LOADING_SCREEN_MS = 450;
+const MIN_LOADING_SCREEN_MS = 2800;
+const MIN_STATIC_SCREEN_MS = 900;
 
 export const LevelViewer: React.FC<{
   onWadChange?: (wad: Wad | null) => void;
@@ -33,7 +43,10 @@ export const LevelViewer: React.FC<{
   const viewportRef = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<GameRenderer | null>(null);
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>('loading');
+  const [intermissionStats, setIntermissionStats] = useState<LevelStatsSnapshot | null>(null);
+  const [pendingNextMap, setPendingNextMap] = useState<string | null>(null);
   const loadStartedAtRef = useRef(0);
+  const staticStartedAtRef = useRef(0);
   const [automapActive, setAutomapActive] = useState(false);
   const [automapCheat, setAutomapCheat] = useState<AutomapCheatLevel>(0);
   const cheatBufferRef = useRef('');
@@ -67,13 +80,29 @@ export const LevelViewer: React.FC<{
 
   useEffect(() => {
     loadStartedAtRef.current = performance.now();
+    staticStartedAtRef.current = 0;
     setTransitionPhase('loading');
+    setIntermissionStats(null);
+    setPendingNextMap(null);
     setAutomapActive(false);
     setAutomapCheat(0);
     cheatBufferRef.current = '';
     game?.setAutomapActive(false);
     game?.setPresentationVisible(false);
   }, [selectedMap, wadPath, game]);
+
+  useEffect(() => {
+    if (!game) return;
+    game.setOnLevelExit(({ secret: _secret }) => {
+      music.stop();
+      game.setPresentationVisible(false);
+      setIntermissionStats(game.getLevelStats());
+      const next = selectedMap ? getNextMapName(mapNames, selectedMap) : null;
+      setPendingNextMap(next);
+      setTransitionPhase('intermission');
+    });
+    return () => game.setOnLevelExit(null);
+  }, [game, mapNames, music, selectedMap]);
 
   useEffect(() => {
     if (!levelDataReady || !wad || !selectedMap || !game) {
@@ -88,9 +117,22 @@ export const LevelViewer: React.FC<{
       if (remaining > 0) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
       }
+      if (cancelled) return;
+
+      staticStartedAtRef.current = performance.now();
+      setTransitionPhase('static');
+
+      const staticRemaining = MIN_STATIC_SCREEN_MS;
+      if (staticRemaining > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, staticRemaining));
+      }
+      if (cancelled) return;
 
       game.setPresentationVisible(true);
       await game.waitForRenderedFrame();
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
 
       if (!cancelled) {
         setTransitionPhase('wiping');
@@ -113,6 +155,15 @@ export const LevelViewer: React.FC<{
       music.play();
     }
   }, [music]);
+
+  const handleIntermissionContinue = useCallback(() => {
+    if (pendingNextMap) {
+      setSelectedMap(pendingNextMap);
+      return;
+    }
+    setTransitionPhase('playing');
+    game?.setPresentationVisible(true);
+  }, [game, pendingNextMap, setSelectedMap]);
 
   const toggleAutomap = useCallback(() => {
     setAutomapActive((active) => {
@@ -175,12 +226,21 @@ export const LevelViewer: React.FC<{
     return () => cancelAnimationFrame(frame);
   }, [automapActive, automapCheat, isPlaying, wad, selectedMap, game]);
 
-  const transitionPhaseProp = transitionPhase === 'wiping' ? 'wipe' : 'loading';
+  const transitionPhaseProp =
+    transitionPhase === 'wiping'
+      ? 'wipe'
+      : transitionPhase === 'static'
+        ? 'static'
+        : 'loading';
   const showTransition =
     Boolean(wad && selectedMap) &&
-    (mapLoadState === 'loading' || transitionPhase !== 'playing');
-  const hideGameCanvas = transitionPhase !== 'playing';
-
+    transitionPhase !== 'playing' &&
+    transitionPhase !== 'intermission' &&
+    (mapLoadState === 'loading' ||
+      transitionPhase === 'loading' ||
+      transitionPhase === 'static' ||
+      transitionPhase === 'wiping');
+  const showIntermission = transitionPhase === 'intermission' && Boolean(wad && intermissionStats);
   return (
     <section className="doom-panel level-viewer">
       <div className="level-toolbar">
@@ -226,7 +286,8 @@ export const LevelViewer: React.FC<{
         </button>
         </div>
 
-        <div className="level-toolbar__group level-toolbar__group--end">
+        <div className="level-toolbar__group level-toolbar__group--end level-toolbar__group--music">
+          <MusicVisualizer active={music.playing} />
           <button
             type="button"
             className={`doom-button music-toggle ${music.enabled ? 'active' : 'secondary'}`}
@@ -245,7 +306,6 @@ export const LevelViewer: React.FC<{
             >
               {music.enabled ? 'Stop' : 'Play'}
             </button>
-            {music.playing ? <MusicVisualizer active={music.playing} /> : null}
           </div>
         </div>
       </div>
@@ -253,10 +313,10 @@ export const LevelViewer: React.FC<{
       <DoomLoader status={status} wad={wad} mapLoading={mapLoadState === 'loading'} />
 
       <div className="game-stage">
-        <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
+        <figure className="canvas-card game-card">
           <figcaption className="game-card__caption">
             Renderer
-            <span>Tab automap · iddt map modes · WASD move · Click/E use · Esc release mouse</span>
+            <span>Tab automap · WASD · Click aim/fire · E use · 1–8 weapons · Q prev weapon</span>
           </figcaption>
           <div className="game-card__viewport" ref={viewportRef}>
             <canvas
@@ -279,12 +339,48 @@ export const LevelViewer: React.FC<{
               onSnapshotCaptured={handleSnapshotCaptured}
               onComplete={handleWipeComplete}
             />
+            <DoomIntermission
+              active={showIntermission}
+              wad={wad}
+              mapName={selectedMap}
+              nextMapName={pendingNextMap}
+              stats={intermissionStats ?? { totals: { monsters: 0, items: 0, secrets: 0 }, found: { monsters: 0, items: 0, secrets: 0 } }}
+              viewportRef={viewportRef}
+              onContinue={handleIntermissionContinue}
+            />
             {automapActive ? (
               <div className="automap-hud" aria-live="polite">
                 AUTOMAP
                 {automapCheat === 1 ? ' · ALL LINES' : automapCheat === 2 ? ' · ALL THINGS' : ''}
               </div>
             ) : null}
+            <DoomHud
+              active={isPlaying && !automapActive && !showTransition && !showIntermission}
+              wad={wad}
+              viewportRef={viewportRef}
+              getHudState={() => game?.getHudState() ?? {
+                health: 100,
+                healthCap: 100,
+                armor: 0,
+                armorCap: 100,
+                ammo: { bullets: 0, shells: 0, rockets: 0, cells: 0 },
+                maxAmmo: { bullets: 200, shells: 50, rockets: 50, cells: 300 },
+                weapon: 'pistol',
+                weapons: ['fist', 'pistol'],
+                keys: { blue: false, red: false, yellow: false },
+                alive: true,
+                message: null,
+                faceLump: 'STFSTF0',
+                powerups: {
+                  invuln: false,
+                  berserk: false,
+                  invis: false,
+                  radSuit: false,
+                  lightAmp: false,
+                  computerMap: false,
+                },
+              }}
+            />
           </div>
         </figure>
       </div>

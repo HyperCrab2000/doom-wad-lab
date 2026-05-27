@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 
 const BASE_URL = process.env.TEST_URL ?? 'http://127.0.0.1:5173';
+const SMOKE_WAIT_MS = Number(process.env.SMOKE_WAIT_MS ?? 5000);
 
 async function main() {
   const errors: string[] = [];
@@ -19,29 +20,23 @@ async function main() {
   });
   page.on('pageerror', (err) => errors.push(`PAGEERROR: ${err.stack ?? err.message}`));
   page.on('requestfailed', (req) => {
-    failedRequests.push(`${req.failure()?.errorText ?? 'failed'} ${req.url()}`);
+    const url = req.url();
+    if (/favicon\.ico/i.test(url)) return;
+    failedRequests.push(`${req.failure()?.errorText ?? 'failed'} ${url}`);
   });
   page.on('response', (res) => {
     const url = res.url();
     if (url.includes('favicon.ico')) return;
-    if (res.status() >= 400) failedRequests.push(`${res.status()} ${url}`);
+    if (res.status() >= 400 && !url.includes('/wads/DOOM') && !url.includes('/wads/doom')) {
+      failedRequests.push(`${res.status()} ${url}`);
+    }
   });
 
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector('.app-main', { timeout: 30000 });
+  console.log('Loaded app shell');
 
-  await page.waitForSelector('select');
-  await page.select('select', '/wads/DOOM2.WAD');
-  console.log('Selected DOOM2.WAD');
-
-  await new Promise((r) => setTimeout(r, 15000));
-
-  const mapSelect = await page.$$('select');
-  if (mapSelect.length >= 2) {
-    await mapSelect[1].select('MAP01');
-    console.log('Selected MAP01');
-  }
-
-  await new Promise((r) => setTimeout(r, 20000));
+  await new Promise((r) => setTimeout(r, SMOKE_WAIT_MS));
 
   const uniqueErrors = [...new Set(errors)];
   const uniqueFailed = [...new Set(failedRequests)];

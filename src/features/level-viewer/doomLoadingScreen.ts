@@ -28,16 +28,20 @@ export function titlepicScaleForCanvas(canvasWidth: number, picWidth = TITLEPIC_
   return Math.max(1, Math.floor(canvasWidth / picWidth));
 }
 
-function drawStcfnText(
-  ctx: CanvasRenderingContext2D,
+interface StcfnGlyph {
+  patch: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+}
+
+function collectStcfnGlyphs(
   wad: Wad,
   text: string,
-  centerX: number,
-  baselineY: number,
-  scale = 2
-): void {
-  const glyphs: Array<{ patch: CanvasRenderingContext2D; width: number }> = [];
+  scale: number
+): { glyphs: StcfnGlyph[]; totalWidth: number; maxHeight: number } {
+  const glyphs: StcfnGlyph[] = [];
   let totalWidth = 0;
+  let maxHeight = 0;
   const spacing = 1 * scale;
 
   for (const char of text) {
@@ -47,18 +51,141 @@ function drawStcfnText(
     if (!data) continue;
     const patch = drawPatch(data, wad.playpal);
     const width = patch.canvas.width * scale;
-    glyphs.push({ patch, width });
+    const height = patch.canvas.height * scale;
+    glyphs.push({ patch, width, height });
     totalWidth += width + spacing;
+    maxHeight = Math.max(maxHeight, height);
   }
 
   if (totalWidth > 0) totalWidth -= spacing;
+  return { glyphs, totalWidth, maxHeight };
+}
 
-  let x = centerX - totalWidth / 2;
-  for (const { patch, width } of glyphs) {
-    const h = patch.canvas.height * scale;
-    ctx.drawImage(patch.canvas, x, baselineY - h, width, h);
+function drawStcfnGlyphs(
+  ctx: CanvasRenderingContext2D,
+  glyphs: StcfnGlyph[],
+  startX: number,
+  baselineY: number,
+  spacing: number
+): void {
+  let x = startX;
+  for (const { patch, width, height } of glyphs) {
+    ctx.drawImage(patch.canvas, x, baselineY - height, width, height);
     x += width + spacing;
   }
+}
+
+function drawStcfnText(
+  ctx: CanvasRenderingContext2D,
+  wad: Wad,
+  text: string,
+  centerX: number,
+  baselineY: number,
+  scale = 2
+): boolean {
+  const spacing = 1 * scale;
+  const { glyphs, totalWidth } = collectStcfnGlyphs(wad, text, scale);
+  if (glyphs.length === 0) return false;
+
+  drawStcfnGlyphs(ctx, glyphs, centerX - totalWidth / 2, baselineY, spacing);
+  return true;
+}
+
+/** STCFN text with a fixed left edge and baseline (status bar). */
+export function drawStcfnTextAt(
+  ctx: CanvasRenderingContext2D,
+  wad: Wad,
+  text: string,
+  leftX: number,
+  baselineY: number,
+  scale = 2
+): boolean {
+  const spacing = 1 * scale;
+  const { glyphs } = collectStcfnGlyphs(wad, text, scale);
+  if (glyphs.length === 0) return false;
+  drawStcfnGlyphs(ctx, glyphs, leftX, baselineY, spacing);
+  return true;
+}
+
+/** STCFN text centered on the viewport (level transition overlay). */
+export function drawStcfnTextCentered(
+  ctx: CanvasRenderingContext2D,
+  wad: Wad,
+  text: string,
+  centerX: number,
+  centerY: number,
+  scale = 2
+): boolean {
+  const spacing = 1 * scale;
+  const { glyphs, totalWidth, maxHeight } = collectStcfnGlyphs(wad, text, scale);
+  if (glyphs.length === 0) return false;
+
+  const baselineY = centerY + maxHeight / 2;
+  drawStcfnGlyphs(ctx, glyphs, centerX - totalWidth / 2, baselineY, spacing);
+  return true;
+}
+
+function drawFallbackLoadingText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  centerY: number,
+  scale: number
+): void {
+  const size = Math.max(16, 8 * scale);
+  ctx.fillStyle = '#c41e1e';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = Math.max(2, scale);
+  ctx.font = `900 ${size}px Impact, "Arial Black", "Arial Narrow", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeText(text, centerX, centerY);
+  ctx.fillText(text, centerX, centerY);
+}
+
+/**
+ * Full-screen transition plate: brown backdrop + centered STCFN status text.
+ * Used on the game viewport while a map loads and during the melt wipe.
+ */
+/** TV-static overlay on the loading plate (vanilla load screen noise). */
+export function drawLoadingStaticNoise(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  intensity = 0.22
+): void {
+  const imageData = ctx.createImageData(width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const value = Math.random() * 255;
+    data[i] = value;
+    data[i + 1] = value;
+    data[i + 2] = value;
+    data[i + 3] = Math.floor(255 * intensity);
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+export function drawDoomTransitionScreen(
+  canvas: HTMLCanvasElement,
+  wad: Wad,
+  message = 'LOADING'
+): boolean {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.fillStyle = DOOM_LOAD_BROWN;
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = false;
+
+  const scale = Math.max(2, Math.min(5, Math.floor(Math.min(w, h) / 72)));
+  const drew = drawStcfnTextCentered(ctx, wad, message, w / 2, h / 2, scale);
+  if (!drew) {
+    drawFallbackLoadingText(ctx, message, w / 2, h / 2, scale);
+  }
+  return true;
 }
 
 /**
@@ -81,8 +208,7 @@ export function drawDoomLoadingScreen(
 
   const titleData = findLump(wad, 'TITLEPIC');
   if (!titleData) {
-    drawStcfnText(ctx, wad, message, w / 2, h - 24, 2);
-    return false;
+    return drawDoomTransitionScreen(canvas, wad, message.replace(/\.+$/, ''));
   }
 
   const title = drawPatch(titleData, wad.playpal);

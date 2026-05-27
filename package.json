@@ -11,8 +11,8 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:coverage": "vitest run --project unit --coverage",
-    "test:console": "tsx scripts/capture-console-errors.ts",
-    "test:music": "tsx scripts/test-opl3-browser.ts",
+    "test:console": "npx tsx scripts/capture-console-errors.ts",
+    "test:music": "npx tsx scripts/test-opl3-browser.ts",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\""
   },
@@ -58,6 +58,7 @@
     "puppeteer": "^24.4.0",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
+    "tsx": "^4.22.3",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
     "vite": "^6.2.3",

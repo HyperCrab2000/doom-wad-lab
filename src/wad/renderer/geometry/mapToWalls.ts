@@ -172,8 +172,27 @@ const createWall = (props: CreateWallProps): WallObject => {
   };
 };
 
+function extendLineEndpoints(v1: Vertex, v2: Vertex, overlap: number): { v1: Vertex; v2: Vertex } {
+  const dx = v2.x - v1.x;
+  const dy = v2.y - v1.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return { v1, v2 };
+  const nx = dx / len;
+  const ny = dy / len;
+  return {
+    v1: { x: v1.x - nx * overlap, y: v1.y - ny * overlap },
+    v2: { x: v2.x + nx * overlap, y: v2.y + ny * overlap },
+  };
+}
+
 /** Avoid upper/lower wall segments flickering on/off while door ceilings move. */
 const WALL_VISIBILITY_EPS = 1;
+
+/** Extend wall quads along the linedef to hide sub-texel gaps at corners (E1M2, etc.). */
+const LINE_ENDPOINT_OVERLAP = 0.75;
+
+/** Overlap upper/lower/mid wall bands at two-sided lines (door frames). */
+const WALL_JOINT_OVERLAP = 1;
 
 const resolveTexName = (str: string): string | undefined => {
   return str !== '-' ? str : undefined;
@@ -201,8 +220,9 @@ const procesSideDef = (
   inverse: boolean,
   defaultWall: string
 ): Array<WallObject> => {
-  const v1 = map.VERTEXES[lineDef.v1];
-  const v2 = map.VERTEXES[lineDef.v2];
+  const rawV1 = map.VERTEXES[lineDef.v1];
+  const rawV2 = map.VERTEXES[lineDef.v2];
+  const { v1, v2 } = extendLineEndpoints(rawV1, rawV2, LINE_ENDPOINT_OVERLAP);
   const side = map.SIDEDEFS[sideDef];
   const sector = map.SECTORS[side.sector];
   const sectorIndex = side.sector;
@@ -269,8 +289,10 @@ const procesSideDef = (
   const otherSide = map.SIDEDEFS[otherSideDef];
   const otherSector = map.SECTORS[otherSide.sector];
 
+  const hasMidTexture = Boolean(resolveTexName(side.midTexture));
+
   //TODO: if the sector ceiling height is lower than the other sector this ceiling is lower and there are no side-textures we need to place some sky
-  if (resolveTexName(side.midTexture)) {
+  if (hasMidTexture) {
     const midBottom = Math.max(sector.floorheight, otherSector.floorheight);
     const midTop = Math.min(sector.ceilingheight, otherSector.ceilingheight);
     if (midTop > midBottom + WALL_VISIBILITY_EPS) {
@@ -284,8 +306,8 @@ const procesSideDef = (
         ...createWall({
           v1,
           v2,
-          bottom: midBottom,
-          top: midTop,
+          bottom: midBottom - WALL_JOINT_OVERLAP,
+          top: midTop + WALL_JOINT_OVERLAP,
           inverse,
           side,
           texSize: texturesByName[side.midTexture],
@@ -327,7 +349,7 @@ const procesSideDef = (
           v1,
           v2,
           bottom: lowerWallBottom,
-          top: lowerWallTop,
+          top: lowerWallTop + (hasMidTexture ? WALL_JOINT_OVERLAP : 0),
           inverse,
           side,
           texSize: texturesByName[tex],
@@ -367,7 +389,7 @@ const procesSideDef = (
         ...createWall({
           v1,
           v2,
-          bottom: upperWallBottom,
+          bottom: upperWallBottom - (hasMidTexture ? WALL_JOINT_OVERLAP : 0),
           top: upperWallTop,
           inverse,
           side,

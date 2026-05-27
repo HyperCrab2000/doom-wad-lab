@@ -3,7 +3,7 @@
 ![Vite](https://img.shields.io/badge/Vite-HMR_+_build-646CFF?logo=vite&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-concurrent-61DAFB?logo=react&logoColor=white)
 ![Web Workers](https://img.shields.io/badge/Workers-3_pools-512BD4?logo=webassembly&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-128_tests-6E9F18?logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/Vitest-350+_tests-6E9F18?logo=vitest&logoColor=white)
 
 The app targets **smooth map loads** and **steady 60 FPS** in browser on large Doom II maps. Optimizations span **Node/build**, **Web Workers**, **GPU caching**, and **React lifecycle** design.
 
@@ -39,13 +39,13 @@ flowchart TB
 | **Vite 6** | Dev server, ESM bundling, `?raw` imports for VOXELDEF/ZScript |
 | **vite-plugin-string** | Inline GLSL as strings |
 | **TypeScript 5.8** | Path aliases `@/`, strict types for WAD structures |
-| **Vitest** | Unit tests under `src/` (128+ tests) |
+| **Vitest** | Unit tests under `src/` (350+ tests) + integration project |
 | **tsx / Puppeteer** | Optional browser scripts in `scripts/` |
 
 ### Build outputs
 
 - Workers emitted as separate chunks (`wadParse.worker`, `geometry.worker`, `kvx.worker`)
-- Single main bundle (~1.3 MB) — consider code-splitting for future optimization
+- **Level viewer** loads without Three.js; the voxel tab pulls lazy chunks `voxel-viewer` + `three` (`React.lazy` in `App.tsx`, `manualChunks` in `vite.config.ts`)
 
 ### CI
 
@@ -173,7 +173,8 @@ loading → wiping → playing
 - **Opaque vs transparent wall lists** — pre-split at buffer build
 - **Back-to-front** transparent pass only when needed
 - **Sector + frustum + distance** cull before draw
-- **Portal visibility** reduces overdraw on indoor maps
+- **Portal visibility** with cross-frame cache + precomputed `portalSectors` on walls
+- **Point light grid** + uniform batching for walls/flats
 - **WeakMap** geometry caches for KVX / height generation
 
 ## Runtime geometry refresh
@@ -215,11 +216,37 @@ resetSoundfontEngine(); // if applicable
 
 Use after asset updates or music parser fixes.
 
-## Future optimization ideas
+## Rendering optimizations (implemented)
 
-- Code-split Three.js (voxel viewer only)
-- `OffscreenCanvas` for worker-side GL upload (experimental)
-- BSP-based visibility instead of portal flood-fill
-- Instanced wall draws for fewer draw calls
+| Technique | What it does |
+|-----------|----------------|
+| **Lazy Three.js** | `VoxelModelViewer` is `React.lazy`-loaded; map mode never downloads `three` until the user opens the voxel tab. |
+| **BSP camera sector** | `findCameraSectorIndex` walks the map BSP (`findCameraSubsector` → `subsectorToSector`) before falling back to triangle hash lookup. Stable at sector boundaries; O(log n) per frame. |
+| **Wall draw sorting** | `sortOpaqueWallsForDraw` groups walls by texture + sector at buffer build time. |
+| **Uniform batching** | `drawScene` batches texture/sector/fog uniforms for walls and flats; point-light uniforms update only when the 128-unit spatial cell changes. |
+| **Point light grid** | `PointLightGrid` (384-unit cells) replaces O(lights × surfaces) nearest-light scans each frame. Rebuilt once per map load. |
+| **Visible sector cache** | `VisibleSectorCache` reuses portal BFS when the camera sector is unchanged and movement is under 96 map units. |
+| **Sector light cache** | Flickering sector light levels bucketed at 20 Hz per sector index — avoids recomputing animated light every draw. |
+| **Precomputed portal sectors** | Each `WallBuffer` stores `portalSectors` at build time so culling skips per-wall linedef lookups. |
+| **Single-pass things** | Voxels and billboards share one visibility/frustum loop over `renderableThings`. |
+| **Scratch matrices** | Sprites/voxels reuse module-level `mat4`/`vec4` scratch buffers — no per-sprite allocations. |
+| **Pooled sort buffers** | Transparent walls and sprites reuse pooled arrays instead of allocating each frame. |
+| **Door geometry throttle** | `refreshDoorGeometry` runs at most every ~48 ms unless a switch forces an immediate upload. |
+
+Portal **flood-fill** (`buildPotentiallyVisibleSectors`) remains the runtime PVS: it handles sky courtyards, windows, and Doom-style portal rules that vanilla BSP PVS tables do not encode in this renderer.
+
+## Deferred (why not yet)
+
+| Idea | Status | Rationale |
+|------|--------|-----------|
+| **OffscreenCanvas worker GL upload** | Not started | Browsers differ on `OffscreenCanvas` + WebGL2 in workers; buffer upload on the main thread is already fast once geometry is built in `geometry.worker`. High integration cost for uncertain gain. |
+| **Full BSP PVS replacing portal BFS** | Partial | BSP is used for **camera sector** and index build; replacing portal visibility with precomputed BSP leaves would need per-map PVS data and would regress outdoor/indoor portal cases we fixed with rule-based BFS. |
+| **Instanced wall draws** | Not started | Walls differ in height span, UV scale, middle textures, and per-wall point lights. True instancing needs a merged wall VBO + instance attributes; current sort + uniform batching is the low-risk win. |
+
+## Further ideas
+
+- Merge walls that share texture + sector into multi-quad VBOs (fewer `drawElements`, still one shader)
+- `requestIdleCallback` scheduling for non-critical KVX hydration (already background-loaded; tune priority)
+- Profile with WebGL timer queries on heavy maps (MAP07, MAP24) after changes
 
 See also: [WAD processing](./wad-processing.md), [Rendering](./rendering.md).

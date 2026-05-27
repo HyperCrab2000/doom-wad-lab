@@ -4,7 +4,7 @@ import { animatedFlatFps, animatedSpriteFps, animatedWallFps } from '@/wad/const
 import { mat4, vec3 } from 'gl-matrix';
 
 import { setupCamera, updateCameraFromViewMatrix } from './camera';
-import { drawScene } from './drawScene';
+import { drawScene, invalidateDrawSceneCaches } from './drawScene';
 import { LoadedWadData, loadWad } from './loadWad';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
@@ -18,6 +18,40 @@ import {
 } from '@/wad/game/doorSounds';
 import { DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
 import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
+import { getLineIndicesForSides } from '@/wad/renderer/geometry/sectorLineIndex';
+import { LevelStatsTracker } from '@/wad/game/levelStats';
+import {
+  createDefaultInventory,
+  applySectorEffects,
+  inventoryHudSnapshot,
+  type PlayerInventory,
+} from '@/wad/game/playerInventory';
+import { HudMessageQueue } from '@/wad/game/hudMessages';
+import { PickupTracker, tryPickups } from '@/wad/game/pickupSystem';
+import { getSectorPlayerEffects } from '@/wad/game/sectorSpecialRuntime';
+import { playerRadius } from '@/wad/constants/GameInfo';
+import {
+  createDefaultPowerups,
+  powerupsHudSnapshot,
+  resetPowerups,
+  tickPowerups,
+  type PlayerPowerups,
+} from '@/wad/game/playerPowerups';
+import { handlePlayerFire } from '@/wad/game/playerCombat';
+import { selectWeaponBySlot, cycleWeapon } from '@/wad/game/playerWeapons';
+import { getStatusFaceLump, PAIN_FACE_MS } from '@/wad/game/statusFace';
+
+function mergeLineIndexSets(
+  primary: ReadonlySet<number>,
+  extra?: ReadonlySet<number>
+): ReadonlySet<number> | undefined {
+  if (primary.size === 0 && (!extra || extra.size === 0)) return undefined;
+  if (!extra || extra.size === 0) return primary.size > 0 ? primary : undefined;
+  if (primary.size === 0) return extra;
+  const merged = new Set(primary);
+  for (const lineIndex of extra) merged.add(lineIndex);
+  return merged;
+}
 
 let wadData: LoadedWadData | null = null;
 let currentMap: WadMap | null = null;
@@ -53,7 +87,10 @@ function resizeCanvasToParent(canvas: HTMLCanvasElement, onResize: () => void): 
 }
 
 export const renderGame = (canvas: HTMLCanvasElement) => {
-  const gl = canvas.getContext('webgl2', { antialias: true }) as WebGL2RenderingContext;
+  const gl = canvas.getContext('webgl2', {
+    antialias: true,
+    preserveDrawingBuffer: true,
+  }) as WebGL2RenderingContext;
   if (!gl) throw new Error('WebGL2 not supported!');
 
   const {
@@ -89,45 +126,97 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
   const fpsCounter = document.getElementById("fps-counter") as HTMLDivElement | null;
   let lastFrameTime = performance.now();
-  const lastRefreshedCeilings = new Map<number, number>();
+  const lastRefreshedSectorHeights = new Map<number, { floor: number; ceiling: number }>();
   let forceDoorGeometryRefresh = false;
+  let lastGeometryRefreshAt = 0;
+  const levelStats = new LevelStatsTracker();
+  const playerInventory: PlayerInventory = createDefaultInventory();
+  const pickupTracker = new PickupTracker();
+  const hudMessages = new HudMessageQueue();
+  const playerPowerups: PlayerPowerups = createDefaultPowerups();
+  const fireState = { lastFireAt: 0 };
+  let painFaceUntil = 0;
+  let onLevelExit: ((info: { secret: boolean }) => void) | null = null;
+  const GEOMETRY_REFRESH_INTERVAL_MS = 48;
 
-  const refreshDoorGeometry = () => {
+  const handleFire = (snapshot: PlayerSnapshot) => {
+    if (!mapActions || !currentMap || !wadData || !sfxPlayer) return;
+    if (playerInventory.health <= 0) return;
+    const { sound } = handlePlayerFire({
+      map: currentMap,
+      mapActions,
+      inventory: playerInventory,
+      fireState,
+      x: snapshot.x,
+      y: snapshot.y,
+      yaw: snapshot.yaw,
+      onLineAction: handleLineAction,
+    });
+    if (sound) {
+      sfxPlayer.play(wadData.wad, sound, 0.7);
+    }
+  };
+
+  const refreshDoorGeometry = (immediate = false) => {
     if (!wadData || !currentMap || !mapActions) return;
     if (!mapActions.isDirty() && !forceDoorGeometryRefresh) return;
+
+    const now = performance.now();
+    if (
+      !immediate &&
+      !forceDoorGeometryRefresh &&
+      now - lastGeometryRefreshAt < GEOMETRY_REFRESH_INTERVAL_MS
+    ) {
+      if (mapActions.getActiveMoverCount() > 0) {
+        invalidateBlockingSegmentCache();
+      }
+      return;
+    }
 
     invalidateBlockingSegmentCache();
 
     const dirtySectors = mapActions.getDirtySectors();
     const switchedLines = mapActions.getSwitchedLineIndices();
-    const hasActiveDoors = mapActions.getActiveMoverCount() > 0;
-    let shouldUpload = forceDoorGeometryRefresh || hasActiveDoors;
+    const scrollSides = mapActions.scrolls.getDirtySides();
+    const scrollLines =
+      scrollSides.size > 0 ? getLineIndicesForSides(currentMap, scrollSides) : undefined;
+
+    let shouldUpload = forceDoorGeometryRefresh || (scrollLines?.size ?? 0) > 0;
 
     if (!shouldUpload) {
       for (const sectorIndex of dirtySectors) {
-        const ceiling = Math.floor(currentMap.SECTORS[sectorIndex]?.ceilingheight ?? 0);
-        if (lastRefreshedCeilings.get(sectorIndex) !== ceiling) {
-          lastRefreshedCeilings.set(sectorIndex, ceiling);
+        const sector = currentMap.SECTORS[sectorIndex];
+        if (!sector) continue;
+        const floor = Math.floor(sector.floorheight);
+        const ceiling = Math.floor(sector.ceilingheight);
+        const prev = lastRefreshedSectorHeights.get(sectorIndex);
+        if (!prev || prev.floor !== floor || prev.ceiling !== ceiling) {
+          lastRefreshedSectorHeights.set(sectorIndex, { floor, ceiling });
           shouldUpload = true;
         }
       }
     } else {
       for (const sectorIndex of dirtySectors) {
-        const ceiling = Math.floor(currentMap.SECTORS[sectorIndex]?.ceilingheight ?? 0);
-        lastRefreshedCeilings.set(sectorIndex, ceiling);
+        const sector = currentMap.SECTORS[sectorIndex];
+        if (!sector) continue;
+        lastRefreshedSectorHeights.set(sectorIndex, {
+          floor: Math.floor(sector.floorheight),
+          ceiling: Math.floor(sector.ceilingheight),
+        });
       }
     }
 
     forceDoorGeometryRefresh = false;
 
     if (shouldUpload) {
+      lastGeometryRefreshAt = now;
       refreshDoorWallGeometry(
         gl,
         currentMap,
         wadData.wallTexturesByName,
         wadData.buffers,
         dirtySectors,
-        switchedLines.size > 0 ? switchedLines : undefined
+        mergeLineIndexSets(switchedLines, scrollLines)
       );
     }
 
@@ -146,6 +235,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     if (result.triggered) {
       forceDoorGeometryRefresh = true;
       invalidateBlockingSegmentCache();
+      refreshDoorGeometry(true);
     }
   };
 
@@ -192,11 +282,29 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     presentationVisible = false;
     const gameMap = structuredClone(map);
     return loadWad(gl, wad, gameMap, mapName, wadPath).then((loaded) => {
+      invalidateDrawSceneCaches();
       wadData = loaded;
       currentMap = gameMap;
-      mapActions = new MapActionController(gameMap);
+      const freshInventory = createDefaultInventory();
+      playerInventory.health = freshInventory.health;
+      playerInventory.armor = freshInventory.armor;
+      playerInventory.armorType = freshInventory.armorType;
+      playerInventory.weapons = freshInventory.weapons;
+      playerInventory.selectedWeapon = freshInventory.selectedWeapon;
+      playerInventory.ammo = { ...freshInventory.ammo };
+      playerInventory.keys = { ...freshInventory.keys };
+      playerInventory.backpack = freshInventory.backpack;
+      pickupTracker.clear();
+      hudMessages.clear();
+      resetPowerups(playerPowerups);
+      fireState.lastFireAt = 0;
+      painFaceUntil = 0;
+      mapActions = new MapActionController(gameMap, {
+        getKeys: () => playerInventory.keys,
+      });
+      levelStats.reset(gameMap);
       liquidWake = null;
-      lastRefreshedCeilings.clear();
+      lastRefreshedSectorHeights.clear();
       forceDoorGeometryRefresh = false;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
 
@@ -227,6 +335,10 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         },
         mapActions,
         onLineAction: handleLineAction,
+        skipBlockingThing: (thing) => pickupTracker.isPicked(thing),
+        onFire: handleFire,
+        onSelectWeaponSlot: (slot) => selectWeaponBySlot(playerInventory, slot),
+        onWeaponScroll: (dir) => cycleWeapon(playerInventory, dir),
       });
       unbindControls = playerControls.unbind;
 
@@ -268,8 +380,64 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           sound: motion.sound === 'lift' ? 'lift' : 'mover',
         });
       }
+      const world = playerControls?.getPlayerWorld();
+      const dtSeconds = Math.min(dt / 1000, 0.05);
+      if (world?.sector) {
+        levelStats.updateFromPlayer(currentMap, world.sector, world.x, world.y);
+
+        tickPowerups(playerPowerups, now);
+
+        if (playerInventory.health > 0) {
+          const sectorFx = getSectorPlayerEffects(world.sector);
+          const healthBefore = playerInventory.health;
+          const died = applySectorEffects(
+            playerInventory,
+            sectorFx,
+            dtSeconds,
+            playerPowerups,
+            now
+          );
+          if (playerInventory.health < healthBefore) {
+            painFaceUntil = now + PAIN_FACE_MS;
+          }
+          if (died) {
+            hudMessages.push('You died.');
+          }
+        }
+
+        const pickup = tryPickups(
+          currentMap,
+          world.x,
+          world.y,
+          playerRadius,
+          playerInventory,
+          pickupTracker,
+          { powerups: playerPowerups }
+        );
+        if (pickup.message) {
+          hudMessages.push(pickup.message);
+        }
+        if (pickup.sfx && sfxPlayer && wadData) {
+          sfxPlayer.play(
+            wadData.wad,
+            pickup.sfx === 'weapon' ? 'DSWPNUP' : 'DSITEMUP',
+            0.75
+          );
+        }
+        if (pickup.thingIndex != null) {
+          levelStats.registerItemPickup(pickup.thingIndex);
+        }
+      }
+      hudMessages.tick(now);
+
+      if (mapActions.isExitRequested()) {
+        const secret = mapActions.exits.isSecretExit();
+        mapActions.exits.clearExitRequest();
+        onLevelExit?.({ secret });
+      }
+
       if (mapActions.isDirty() || forceDoorGeometryRefresh) {
-        refreshDoorGeometry();
+        refreshDoorGeometry(forceDoorGeometryRefresh);
       } else if (mapActions.getActiveMoverCount() > 0) {
         invalidateBlockingSegmentCache();
       }
@@ -307,7 +475,9 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         animateWallIndex,
         animateSpriteIndex,
         timeSeconds: time / 1000,
-        renderableThings: wadData.renderableThings,
+        renderableThings: wadData.renderableThings.filter(
+          (entry) => !pickupTracker.isPicked(entry.thingObj)
+        ),
         voxelThingFrames: wadData.voxelThingFrames,
         pointLights: wadData.pointLights,
         liquidWake: liquidWake
@@ -331,5 +501,34 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     }
   }
 
-  return { load, setPresentationVisible, setAutomapActive, getPlayerState, waitForRenderedFrame };
+  const setOnLevelExit = (callback: ((info: { secret: boolean }) => void) | null) => {
+    onLevelExit = callback;
+  };
+
+  const getHudState = () => {
+    const now = performance.now();
+    const snapshot = inventoryHudSnapshot(playerInventory);
+    return {
+      ...snapshot,
+      message: hudMessages.get(),
+      powerups: powerupsHudSnapshot(playerPowerups, now),
+      faceLump: getStatusFaceLump(snapshot.health, snapshot.alive, {
+        invulnerable: playerPowerups.invulnUntil > now,
+        berserk: playerPowerups.berserkUntil > now,
+        painUntil: painFaceUntil,
+        now,
+      }),
+    };
+  };
+
+  return {
+    load,
+    setPresentationVisible,
+    setAutomapActive,
+    getPlayerState,
+    waitForRenderedFrame,
+    setOnLevelExit,
+    getLevelStats: () => levelStats.snapshot(),
+    getHudState,
+  };
 };

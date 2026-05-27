@@ -135,7 +135,7 @@ describe('Doom collision rules', () => {
   it('treats monsters, barrels, and pickups as blocking thing kinds', () => {
     expect(isBlockingThingKind(ThingKind.Monster)).toBe(true);
     expect(isBlockingThingKind(ThingKind.Barrel)).toBe(true);
-    expect(isBlockingThingKind(ThingKind.Pickup)).toBe(true);
+    expect(isBlockingThingKind(ThingKind.Pickup)).toBe(false);
     expect(isBlockingThingKind(ThingKind.Special)).toBe(false);
     expect(isBlockingThingKind(ThingKind.Player)).toBe(false);
   });

@@ -9,11 +9,12 @@ import {
 } from '@/wad/renderer/renderGame/mapLoadCache';
 import {
   createMockWebGL2Context,
+  hasIntegrationIwad,
   loadWadForMap,
   resetIntegrationCaches,
 } from './helpers/wadFixtures';
 
-describe('map load cache integration', () => {
+describe.skipIf(!hasIntegrationIwad())('map load cache integration', () => {
   beforeEach(() => {
     resetIntegrationCaches();
   });

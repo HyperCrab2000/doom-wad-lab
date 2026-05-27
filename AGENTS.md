@@ -1,4 +1,8 @@
-# Agent Notes
+# Agent Notes — Doom WAD Lab only
+
+This repository is **Doom / Doom II IWAD tooling only** (WebGL viewer, line specials, MUS/SFX from WAD lumps).
+
+Do **not** add Yserbius, Twinion, MedievaLands, or `RESOURCE.*` game data here. That work belongs in **`yserbius_twinion_web`** (`/Users/williamfarmer/IdeaProjects/yserbius_twinion_web`).
 
 ## Door / switch USE fix (2026-05-25)
 

@@ -61,5 +61,22 @@ export default defineConfig({
     entries: ['index.html'],
     exclude: ['spessasynth_core'],
   },
-  assetsInclude: ['**/*.wad','**/*.kvx', '**/*.kvx?arrayBuffer']
+  assetsInclude: ['**/*.wad','**/*.kvx', '**/*.kvx?arrayBuffer'],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/three')) {
+            return 'three';
+          }
+          if (id.includes('node_modules/three/examples')) {
+            return 'three';
+          }
+          if (id.includes('/components/VoxelModelViewer') || id.includes('/features/voxel-viewer/')) {
+            return 'voxel-viewer';
+          }
+        },
+      },
+    },
+  },
 });

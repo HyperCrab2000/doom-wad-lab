@@ -9,8 +9,6 @@ export const DoomHeaderLogo: React.FC = () => (
       src={DOOM_LOGO_SRC}
       className="doom-wordmark-logo"
       alt=""
-      width={90}
-      height={60}
       decoding="async"
     />
     <span className="doom-wordmark-sub">JS</span>

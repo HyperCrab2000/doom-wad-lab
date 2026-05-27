@@ -2,6 +2,7 @@ import { getLineSector } from '@/wad/renderer/controls/doomCollision';
 import { LineDef } from '@/wad/interfaces/LineDef';
 import { Sector } from '@/wad/interfaces/Sector';
 import { WadMap } from '@/wad/interfaces/WadMap';
+import { getKeyedDoorColor, playerHasDoorKey, type PlayerKeyState } from './doorKeys';
 import {
   DOOR_SPEED_UNITS_PER_SEC,
   DoorAction,
@@ -44,7 +45,10 @@ export class DoorSystem {
   private dirty = false;
   private readonly dirtySectorIndices = new Set<number>();
 
-  constructor(private readonly map: WadMap) {}
+  constructor(
+    private readonly map: WadMap,
+    private readonly getKeys: () => PlayerKeyState | null = () => null
+  ) {}
 
   isDirty(): boolean {
     return this.dirty;
@@ -65,7 +69,10 @@ export class DoorSystem {
 
   tryUseLine(lineIndex: number, line: LineDef): DoorTriggerResult {
     const def = getDoorSpecial(line.special);
-    if (!def || def.activation !== 'switch') {
+    if (!def || (def.activation !== 'switch' && def.activation !== 'gun')) {
+      return emptyResult();
+    }
+    if (!playerHasDoorKey(this.getKeys(), getKeyedDoorColor(line.special))) {
       return emptyResult();
     }
     if (def.repeat === 'once' && this.usedOnceLines.has(lineIndex)) {
@@ -95,6 +102,9 @@ export class DoorSystem {
   tryWalkLine(lineIndex: number, line: LineDef): DoorTriggerResult {
     const def = getDoorSpecial(line.special);
     if (!def || def.activation !== 'walk') {
+      return emptyResult();
+    }
+    if (!playerHasDoorKey(this.getKeys(), getKeyedDoorColor(line.special))) {
       return emptyResult();
     }
     if (def.repeat === 'once' && this.usedOnceLines.has(lineIndex)) {

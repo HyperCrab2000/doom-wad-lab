@@ -14,6 +14,7 @@ import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
 import { mapToWalls, mapToWallsForLine } from '@/wad/renderer/geometry/mapToWalls';
 import { getLineIndicesForSectors } from '@/wad/renderer/geometry/sectorLineIndex';
 import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
+import { getLineSectorIndices } from '@/wad/renderer/utils/sectorVisibility';
 
 function uploadBuffer(
   gl: WebGL2RenderingContext,
@@ -88,6 +89,7 @@ function applyWallObject(
   wallBuffer.center = wall.center;
   wallBuffer.boundsRadius = wall.boundsRadius ?? FRUSTUM_CULL_RADIUS;
   wallBuffer.facingNormal = readWallFacingNormal(wall);
+  wallBuffer.portalSectors = getLineSectorIndices(map, wall.lineIndex ?? -1);
 }
 
 function createWallBufferFromObject(
@@ -130,6 +132,7 @@ function createWallBufferFromObject(
     center: wall.center,
     boundsRadius: wall.boundsRadius ?? FRUSTUM_CULL_RADIUS,
     facingNormal: readWallFacingNormal(wall),
+    portalSectors: getLineSectorIndices(map, wall.lineIndex ?? -1),
   };
 }
 

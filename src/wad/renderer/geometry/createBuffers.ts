@@ -14,8 +14,13 @@ import { buildMapGeometryCpu, CpuMapGeometry } from '@/wad/renderer/geometry/bui
 import { SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
 import { SectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
 import { buildMapGeometryInWorker } from '@/wad/renderer/workers/geometryWorkerClient';
-import { buildSortedFlats, buildWallRangesByLine } from '@/wad/renderer/geometry/geometryCache';
+import {
+  buildSortedFlats,
+  buildWallRangesByLine,
+  sortOpaqueWallsForDraw,
+} from '@/wad/renderer/geometry/geometryCache';
 import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
+import { getLineSectorIndices } from '@/wad/renderer/utils/sectorVisibility';
 
 export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
@@ -59,6 +64,7 @@ function uploadCpuGeometry(
       center: wall.center,
       boundsRadius: wall.boundsRadius ?? FRUSTUM_CULL_RADIUS,
       facingNormal: readWallFacingNormal(wall),
+      portalSectors: getLineSectorIndices(map, wall.lineIndex ?? -1),
     };
   });
 
@@ -84,7 +90,7 @@ function uploadCpuGeometry(
     sectorVisibility: null,
     flats: flatBuffers,
     walls: wallBuffers,
-    opaqueWalls: wallBuffers.filter((wall) => !wall.transparent),
+    opaqueWalls: sortOpaqueWallsForDraw(wallBuffers.filter((wall) => !wall.transparent)),
     transparentWalls: wallBuffers.filter((wall) => wall.transparent),
     sortedFlats: buildSortedFlats(flatBuffers),
     wallRangesByLine: buildWallRangesByLine(geometry.walls, map.LINEDEFS.length),

@@ -7,13 +7,14 @@ import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
 import { buildMapGeometryCpu } from '@/wad/renderer/geometry/buildMapGeometryCpu';
 import {
   buildMapTextureLookup,
+  hasIntegrationIwad,
   loadWadFixture,
   loadWadForMap,
   resolveIntegrationWad,
 } from './helpers/wadFixtures';
 
 describe('WAD pipeline integration', () => {
-  it('loads a repo WAD from disk, validates the header, and parses lump metadata', () => {
+  it.skipIf(!hasIntegrationIwad())('loads a repo WAD from disk, validates the header, and parses lump metadata', () => {
     const wadPath = resolveIntegrationWad();
     const bytes = readFileSync(wadPath);
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
@@ -37,7 +38,7 @@ describe('WAD pipeline integration', () => {
     expect(() => validateWadBuffer(buffer, placeholderPath)).toThrow(/too small/i);
   });
 
-  it('extracts MAP01 geometry with walls, flats, and sector triangles', () => {
+  it.skipIf(!hasIntegrationIwad())('extracts MAP01 geometry with walls, flats, and sector triangles', () => {
     const { wad, map } = loadWadForMap('MAP01');
     const geometry = buildMapGeometryCpu(map, buildMapTextureLookup(map, wad));
 
@@ -50,7 +51,7 @@ describe('WAD pipeline integration', () => {
     expect(geometry.walls.every((wall) => wall.position.length >= 12)).toBe(true);
   });
 
-  it('indexes music and palette lumps while walking the directory', () => {
+  it.skipIf(!hasIntegrationIwad())('indexes music and palette lumps while walking the directory', () => {
     const { wad } = loadWadFixture('public/wads/DOOM2.WAD', 'wads/DOOM2.WAD');
 
     expect(wad.lumpHash.D_RUNNIN?.byteLength ?? 0).toBeGreaterThan(1000);

@@ -2,6 +2,8 @@
 
 Technical documentation for the browser-based Doom / Doom II level renderer and KVX voxel viewer.
 
+This project is **Doom only**. Yserbius / Twinion work lives in `yserbius_twinion_web` (separate repo).
+
 ## Stack at a glance
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
@@ -26,7 +28,9 @@ Technical documentation for the browser-based Doom / Doom II level renderer and 
 | [**Visual enhancements**](./visual-enhancements.md) | Sector lighting, slime glow, POM relief, voxels, point lights, transitions |
 | [**Performance**](./performance.md) | Workers, React patterns, map/WAD caches, preload, level transitions |
 | [**Project history**](./project-history.md) | Fork lineage, `.idea` local history, phased evolution Mar 2025 → present |
-| [**Line specials**](./line-specials.md) | Doors, switches, lifts, floors — activation and runtime movers |
+| [**Line specials**](./line-specials.md) | Doors, switches, lifts, crushers, teleports, exits — activation and tests |
+| [**Game content**](./game-content.md) | Sounds, music, sprites, story text, thing catalog, WAD audit script |
+| [**CI/CD**](./ci.md) | GitHub Actions gates, smoke test, IWAD vs synthetic integration |
 
 ## Repository layout (high level)
 

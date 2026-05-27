@@ -183,18 +183,14 @@ export function invalidateBlockingSegmentCache(): void {
   cachedSectorIndex = -1;
 }
 
+/** Pickups, weapons, keys, and powerups are touch-only (vanilla MF_SPECIAL). */
 export function isBlockingThingKind(kind: ThingKind | undefined): boolean {
   return (
     kind === ThingKind.Monster ||
     kind === ThingKind.Boss ||
     kind === ThingKind.Barrel ||
     kind === ThingKind.Decoration ||
-    kind === ThingKind.Hazard ||
-    kind === ThingKind.Pickup ||
-    kind === ThingKind.Weapon ||
-    kind === ThingKind.Key ||
-    kind === ThingKind.Powerup ||
-    kind === ThingKind.Artifact
+    kind === ThingKind.Hazard
   );
 }
 
@@ -235,11 +231,13 @@ export function isBlockingThing(
 export function getBlockingCircles(
   map: WadMap,
   playerFeetZ: number,
-  resolveSectorAt: (position: Vertex) => Sector | null
+  resolveSectorAt: (position: Vertex) => Sector | null,
+  skipThing?: (thing: Thing) => boolean
 ): BlockingCircle[] {
   const circles: BlockingCircle[] = [];
 
   for (const thing of map.THINGS) {
+    if (skipThing?.(thing)) continue;
     const thingType = DOOM_THING_MAP_BY_ID[thing.type];
     const thingFloorZ = resolveSectorAt({ x: thing.x, y: thing.y })?.floorheight ?? 0;
     if (!isBlockingThing(thing, playerFeetZ, thingFloorZ)) continue;

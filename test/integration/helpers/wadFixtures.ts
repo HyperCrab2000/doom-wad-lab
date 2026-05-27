@@ -37,6 +37,15 @@ export function resolveWadFixture(...relativePaths: string[]): string {
   throw new Error(`No valid WAD fixture found. Tried: ${relativePaths.join(', ')}`);
 }
 
+export function hasIntegrationIwad(): boolean {
+  try {
+    resolveIntegrationWad();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveIntegrationWad(): string {
   return resolveWadFixture(...INTEGRATION_WAD_CANDIDATES);
 }

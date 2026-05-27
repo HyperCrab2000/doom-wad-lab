@@ -12,6 +12,7 @@ import { getSoundfontEngine } from './music/soundfontEngine';
 import { clearMapLoadCache } from '@/wad/renderer/renderGame/mapLoadCache';
 import { clearWadAssetsCache } from '@/wad/renderer/drawAssets/wadAssetsCache';
 import { clearHeightUrlMissCache } from '@/wad/renderer/renderGame/heightTextures';
+import { sortDoomMapNames } from '@/wad/game/levelStats';
 import {
   createErrorStatus,
   createLaunchingStatus,
@@ -40,7 +41,7 @@ export const useDoomLoader = ({
   const [status, setStatus] = useState(initialWadLoadStatus);
   const [mapLoadState, setMapLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
-  const mapNames = useMemo(() => (wad ? Object.keys(wad.maps) : []), [wad]);
+  const mapNames = useMemo(() => (wad ? sortDoomMapNames(Object.keys(wad.maps)) : []), [wad]);
 
   useEffect(() => {
     if (!wadPath || !game) return;

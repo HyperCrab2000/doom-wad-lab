@@ -7,9 +7,9 @@ import { musBufferToMidi, musSongToMidi } from '@/features/level-viewer/music/mu
 import { parseMus } from '@/features/level-viewer/music/doomMusic';
 import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
 import { validateWadBuffer } from '@/wad/loader/validateWadBuffer';
-import { loadWadForMap } from './helpers/wadFixtures';
+import { hasIntegrationIwad, loadWadForMap } from './helpers/wadFixtures';
 
-describe('music pipeline integration', () => {
+describe.skipIf(!hasIntegrationIwad())('music pipeline integration', () => {
   it('parses MAP01 MUS from DOOM2.WAD and converts it to MIDI', () => {
     const { wad } = loadWadForMap('MAP01');
     const lump = getMusicLump(wad, 'MAP01');
