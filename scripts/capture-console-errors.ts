@@ -8,7 +8,13 @@ async function main() {
   const warnings: string[] = [];
   const failedRequests: string[] = [];
 
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args:
+      process.env.CI === 'true'
+        ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        : [],
+  });
   const page = await browser.newPage();
 
   page.on('console', (msg) => {
