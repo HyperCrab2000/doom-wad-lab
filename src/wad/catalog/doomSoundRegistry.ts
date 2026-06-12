@@ -39,6 +39,7 @@ export const DOOM_SOUND_CATEGORIES = {
     'DSWPNUP',
     'DSPSTART',
     'DSPSTOP',
+    'DSSTNMOV',
     'DSSECRET',
     'DSBELL',
     'DSBOUNCE',

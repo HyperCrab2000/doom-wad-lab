@@ -4,7 +4,6 @@ import type { WadAssets } from '@/wad/renderer/drawAssets/drawWadAssets';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 import type { SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
 import type { SectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
-import { invalidateDrawSceneCaches } from '@/wad/renderer/renderGame/drawScene';
 
 export interface CachedMapGeometry {
   wadAssets: WadAssets;
@@ -33,8 +32,11 @@ export interface CachedMapGeometry {
 
 const mapLoadCache = new Map<string, Promise<CachedMapGeometry>>();
 
+/** Increment when baked geometry or GPU buffer layout changes. */
+const MAP_GEOMETRY_CACHE_VERSION = 11; // lower/upper wall joint overlap now unconditional
+
 export function mapLoadCacheKey(wadPath: string | null | undefined, mapName: string): string {
-  return `${wadPath ?? 'memory'}::${mapName}`;
+  return `v${MAP_GEOMETRY_CACHE_VERSION}::${wadPath ?? 'memory'}::${mapName}`;
 }
 
 export function getCachedMapLoad(key: string): Promise<CachedMapGeometry> | undefined {
@@ -49,5 +51,4 @@ export function setCachedMapLoad(key: string, promise: Promise<CachedMapGeometry
 
 export function clearMapLoadCache(): void {
   mapLoadCache.clear();
-  invalidateDrawSceneCaches();
 }

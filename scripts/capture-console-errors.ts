@@ -42,6 +42,37 @@ async function main() {
   await page.waitForSelector('.app-main', { timeout: 30000 });
   console.log('Loaded app shell');
 
+  if (process.env.SMOKE_GAME === '1') {
+    const wadSelect = await page.$('.level-toolbar select');
+    if (wadSelect) {
+      await wadSelect.select('/wads/DOOM.WAD');
+      await page.waitForFunction(
+        () => document.getElementById('fps-counter')?.textContent?.includes('FPS:'),
+        { timeout: 120000 }
+      );
+      const pixel = await page.evaluate(() => {
+        const game = document.querySelector('.game-canvas') as HTMLCanvasElement | null;
+        const gl = game?.getContext('webgl2');
+        if (!gl || !game || game.width < 1) return null;
+        const p = new Uint8Array(4);
+        gl.readPixels(
+          Math.floor(game.width / 2),
+          Math.floor(game.height / 2),
+          1,
+          1,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          p
+        );
+        return Array.from(p);
+      });
+      if (!pixel || (pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0)) {
+        errors.push('SMOKE_GAME: game canvas center pixel is black after load');
+      }
+      console.log('SMOKE_GAME pixel sample:', pixel);
+    }
+  }
+
   await new Promise((r) => setTimeout(r, SMOKE_WAIT_MS));
 
   const uniqueErrors = [...new Set(errors)];

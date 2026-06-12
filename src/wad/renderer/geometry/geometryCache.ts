@@ -17,6 +17,42 @@ export function buildSortedFlats(flats: FlatBuffer[]): FlatBuffer[] {
   });
 }
 
+export interface WallRangeSlice {
+  start: number;
+  count: number;
+}
+
+export interface WallRangesByLineAndSide {
+  side0: WallRangeSlice;
+  side1: WallRangeSlice;
+}
+
+export function buildWallRangesByLineAndSide(
+  walls: ReadonlyArray<{ lineIndex: number; sideDefIndex: number }>,
+  lineCount: number,
+  map: { LINEDEFS: Array<{ sidenum: [number, number] }> }
+): WallRangesByLineAndSide[] {
+  const emptySlice = (): WallRangeSlice => ({ start: -1, count: 0 });
+  const ranges = Array.from({ length: lineCount }, () => ({
+    side0: emptySlice(),
+    side1: emptySlice(),
+  }));
+
+  walls.forEach((wall, wallIndex) => {
+    const lineIndex = wall.lineIndex;
+    if (lineIndex < 0) return;
+    const line = map.LINEDEFS[lineIndex];
+    const useSide1 = line && line.sidenum[1] >= 0 && wall.sideDefIndex === line.sidenum[1];
+    const slice = useSide1 ? ranges[lineIndex]!.side1 : ranges[lineIndex]!.side0;
+    if (slice.start < 0) {
+      slice.start = wallIndex;
+    }
+    slice.count++;
+  });
+
+  return ranges;
+}
+
 export function buildWallRangesByLine(
   walls: WallObject[],
   lineCount: number

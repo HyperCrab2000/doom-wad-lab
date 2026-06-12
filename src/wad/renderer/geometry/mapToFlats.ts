@@ -5,7 +5,7 @@ import { Triangle } from '@/wad/interfaces/Triangle';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { vec3 } from 'gl-matrix';
 
-const createFlat = (
+export const createFlatMesh = (
   triangles: Array<Triangle>,
   height: number,
   reverseOrientation?: boolean
@@ -104,7 +104,7 @@ export const mapToFlats = (
           sector,
           sectorIndex,
           flatName: sector.floorpic,
-          ...createFlat(triangles, sector.floorheight, false),
+          ...createFlatMesh(triangles, sector.floorheight, false),
         });
       }
 
@@ -113,7 +113,7 @@ export const mapToFlats = (
           sector,
           sectorIndex,
           flatName: sector.ceilingpic,
-          ...createFlat(triangles, sector.ceilingheight, true),
+          ...createFlatMesh(triangles, sector.ceilingheight, true),
         });
       }
     }

@@ -15,6 +15,7 @@ export interface WallBuffer {
   sector: Sector;
   sectorIndex: number;
   lineIndex: number;
+  sideDefIndex: number;
   transparent: boolean;
   twoSidedMiddle: boolean;
   repeatVertical: boolean;

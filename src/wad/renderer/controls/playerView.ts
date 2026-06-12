@@ -49,3 +49,13 @@ function normalizeRadians(value: number): number {
   const fullTurn = Math.PI * 2;
   return ((value % fullTurn) + fullTurn) % fullTurn;
 }
+
+/** Rotate the top-down automap so player forward points up on screen. */
+export function automapRotationRadians(yaw: number): number {
+  return Math.PI / 2 - yaw;
+}
+
+/** BSP debug overlay — rotate the map so player forward points up (same as automap). */
+export function bspDebugMapRotationRadians(yaw: number): number {
+  return automapRotationRadians(yaw);
+}

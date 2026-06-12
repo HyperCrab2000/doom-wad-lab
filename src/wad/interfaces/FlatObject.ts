@@ -3,6 +3,8 @@ import { Sector } from '@/wad/interfaces/Sector';
 export interface FlatObject {
   sector: Sector;
   sectorIndex: number;
+  /** BSP subsector index when geometry is a subsector span (GZDoom `HWFlat`). */
+  subsectorIndex?: number;
   flatName: string;
   position: Float32Array;
   indices: Uint16Array;

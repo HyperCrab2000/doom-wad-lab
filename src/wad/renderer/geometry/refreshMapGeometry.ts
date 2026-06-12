@@ -7,6 +7,7 @@ import { WallObject } from '@/wad/interfaces/WallObject';
 import { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import {
   buildSortedFlats,
+  buildWallRangesByLineAndSide,
   buildWallRangesFromWallBuffers,
   rebuildWallDrawLists,
 } from '@/wad/renderer/geometry/geometryCache';
@@ -126,6 +127,7 @@ function createWallBufferFromObject(
     sector,
     sectorIndex,
     lineIndex: wall.lineIndex ?? -1,
+    sideDefIndex: wall.sideDefIndex ?? -1,
     transparent: Boolean(wall.transparent),
     twoSidedMiddle: Boolean(wall.twoSidedMiddle),
     repeatVertical: wall.repeatVertical !== false,
@@ -136,8 +138,17 @@ function createWallBufferFromObject(
   };
 }
 
-function rebuildWallRanges(buffers: MapBuffers, lineCount: number): void {
+function rebuildWallRanges(buffers: MapBuffers, map: WadMap): void {
+  const lineCount = map.LINEDEFS.length;
   buffers.wallRangesByLine = buildWallRangesFromWallBuffers(buffers.walls, lineCount);
+  buffers.wallRangesByLineAndSide = buildWallRangesByLineAndSide(
+    buffers.walls.map((wall) => ({
+      lineIndex: wall.lineIndex,
+      sideDefIndex: wall.sideDefIndex,
+    })),
+    lineCount,
+    map
+  );
 }
 
 function replaceLineWalls(
@@ -158,7 +169,7 @@ function replaceLineWalls(
       deleteWallBuffer(gl, buffers.walls[i]);
     }
     buffers.walls.splice(range.start, range.count);
-    rebuildWallRanges(buffers, map.LINEDEFS.length);
+    rebuildWallRanges(buffers, map);
     return 'spliced';
   }
 
@@ -174,7 +185,7 @@ function replaceLineWalls(
   }
   const replacement = newWalls.map((wall) => createWallBufferFromObject(gl, wall, map, dynamic));
   buffers.walls.splice(range.start, range.count, ...replacement);
-  rebuildWallRanges(buffers, map.LINEDEFS.length);
+  rebuildWallRanges(buffers, map);
   return 'spliced';
 }
 
@@ -264,7 +275,7 @@ function refreshFull(
     });
   }
 
-  rebuildWallRanges(buffers, map.LINEDEFS.length);
+  rebuildWallRanges(buffers, map);
   const lists = rebuildWallDrawLists(buffers.walls);
   buffers.opaqueWalls = lists.opaqueWalls;
   buffers.transparentWalls = lists.transparentWalls;

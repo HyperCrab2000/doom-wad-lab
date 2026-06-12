@@ -6,48 +6,45 @@ import { useDoomLoader } from './useDoomLoader';
 import { useLevelMusic } from './music/useLevelMusic';
 import { MusicVisualizer } from './music/MusicVisualizer';
 import { DoomLevelTransition } from './DoomLevelTransition';
-import { DoomIntermission } from './DoomIntermission';
-import { DoomHud } from './DoomHud';
-import {
-  getNextMapName,
-  type LevelStatsSnapshot,
-} from '@/wad/game/levelStats';
 import {
   AutomapCheatLevel,
   cycleAutomapCheat,
   drawAutomap,
 } from '@/wad/renderer/automap/automap';
+import { drawBspDebugView } from '@/wad/renderer/bsp/bspDebugView';
+import { buildBspRenderIndex } from '@/wad/renderer/bsp/bspRenderIndex';
 import { appendCheatChar, cheatTriggered } from '@/wad/game/doomCheats';
+import { ViewportLabelGrid } from './ViewportLabelGrid';
 
 interface GameRenderer {
   load: ReturnType<typeof renderGame>['load'];
   setPresentationVisible: ReturnType<typeof renderGame>['setPresentationVisible'];
   setAutomapActive: ReturnType<typeof renderGame>['setAutomapActive'];
+  setBspDebugActive: ReturnType<typeof renderGame>['setBspDebugActive'];
   getPlayerState: ReturnType<typeof renderGame>['getPlayerState'];
+  getBspTraceYaw: ReturnType<typeof renderGame>['getBspTraceYaw'];
   waitForRenderedFrame: ReturnType<typeof renderGame>['waitForRenderedFrame'];
-  setOnLevelExit: ReturnType<typeof renderGame>['setOnLevelExit'];
-  getLevelStats: ReturnType<typeof renderGame>['getLevelStats'];
-  getHudState: ReturnType<typeof renderGame>['getHudState'];
 }
 
-type TransitionPhase = 'loading' | 'static' | 'wiping' | 'intermission' | 'playing';
+type TransitionPhase = 'loading' | 'wiping' | 'playing';
 
-const MIN_LOADING_SCREEN_MS = 2800;
-const MIN_STATIC_SCREEN_MS = 900;
+const MIN_LOADING_SCREEN_MS = 450;
 
 export const LevelViewer: React.FC<{
   onWadChange?: (wad: Wad | null) => void;
 }> = ({ onWadChange }) => {
   const automapCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bspDebugCanvasRef = useRef<HTMLCanvasElement>(null);
   const gameCanvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [game, setGame] = useState<GameRenderer | null>(null);
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>('loading');
-  const [intermissionStats, setIntermissionStats] = useState<LevelStatsSnapshot | null>(null);
-  const [pendingNextMap, setPendingNextMap] = useState<string | null>(null);
   const loadStartedAtRef = useRef(0);
-  const staticStartedAtRef = useRef(0);
   const [automapActive, setAutomapActive] = useState(false);
+  const [bspDebugActive, setBspDebugActive] = useState(false);
+  const [labelGridActive, setLabelGridActive] = useState(
+    () => new URLSearchParams(window.location.search).has('labels')
+  );
   const [automapCheat, setAutomapCheat] = useState<AutomapCheatLevel>(0);
   const cheatBufferRef = useRef('');
 
@@ -69,6 +66,11 @@ export const LevelViewer: React.FC<{
     refreshWad,
     clearCache,
   } = useDoomLoader({ game });
+
+  useEffect(() => {
+    if (!game || wadPath) return;
+    setWadPath(WAD_OPTIONS[0]?.path ?? '/wads/DOOM.WAD');
+  }, [game, wadPath, setWadPath]);
   const music = useLevelMusic(wad, selectedMap, wadPath);
 
   useEffect(() => {
@@ -80,29 +82,15 @@ export const LevelViewer: React.FC<{
 
   useEffect(() => {
     loadStartedAtRef.current = performance.now();
-    staticStartedAtRef.current = 0;
     setTransitionPhase('loading');
-    setIntermissionStats(null);
-    setPendingNextMap(null);
     setAutomapActive(false);
+    setBspDebugActive(false);
     setAutomapCheat(0);
     cheatBufferRef.current = '';
     game?.setAutomapActive(false);
+    game?.setBspDebugActive(false);
     game?.setPresentationVisible(false);
   }, [selectedMap, wadPath, game]);
-
-  useEffect(() => {
-    if (!game) return;
-    game.setOnLevelExit(({ secret: _secret }) => {
-      music.stop();
-      game.setPresentationVisible(false);
-      setIntermissionStats(game.getLevelStats());
-      const next = selectedMap ? getNextMapName(mapNames, selectedMap) : null;
-      setPendingNextMap(next);
-      setTransitionPhase('intermission');
-    });
-    return () => game.setOnLevelExit(null);
-  }, [game, mapNames, music, selectedMap]);
 
   useEffect(() => {
     if (!levelDataReady || !wad || !selectedMap || !game) {
@@ -117,22 +105,9 @@ export const LevelViewer: React.FC<{
       if (remaining > 0) {
         await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
       }
-      if (cancelled) return;
-
-      staticStartedAtRef.current = performance.now();
-      setTransitionPhase('static');
-
-      const staticRemaining = MIN_STATIC_SCREEN_MS;
-      if (staticRemaining > 0) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, staticRemaining));
-      }
-      if (cancelled) return;
 
       game.setPresentationVisible(true);
       await game.waitForRenderedFrame();
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      });
 
       if (!cancelled) {
         setTransitionPhase('wiping');
@@ -156,19 +131,26 @@ export const LevelViewer: React.FC<{
     }
   }, [music]);
 
-  const handleIntermissionContinue = useCallback(() => {
-    if (pendingNextMap) {
-      setSelectedMap(pendingNextMap);
-      return;
-    }
-    setTransitionPhase('playing');
-    game?.setPresentationVisible(true);
-  }, [game, pendingNextMap, setSelectedMap]);
-
   const toggleAutomap = useCallback(() => {
     setAutomapActive((active) => {
       const next = !active;
       game?.setAutomapActive(next);
+      if (next) {
+        setBspDebugActive(false);
+        game?.setBspDebugActive(false);
+      }
+      return next;
+    });
+  }, [game]);
+
+  const toggleBspDebug = useCallback(() => {
+    setBspDebugActive((active) => {
+      const next = !active;
+      game?.setBspDebugActive(next);
+      if (next) {
+        setAutomapActive(false);
+        game?.setAutomapActive(false);
+      }
       return next;
     });
   }, [game]);
@@ -189,6 +171,18 @@ export const LevelViewer: React.FC<{
         return;
       }
 
+      if (event.code === 'KeyV') {
+        event.preventDefault();
+        toggleBspDebug();
+        return;
+      }
+
+      if (event.code === 'KeyL') {
+        event.preventDefault();
+        setLabelGridActive((active) => !active);
+        return;
+      }
+
       if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
         const tag = (event.target as HTMLElement | null)?.tagName;
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -204,7 +198,34 @@ export const LevelViewer: React.FC<{
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isPlaying, toggleAutomap, triggerIddt]);
+  }, [isPlaying, toggleAutomap, toggleBspDebug, triggerIddt]);
+
+  useEffect(() => {
+    if (!bspDebugActive || !isPlaying || !wad || !selectedMap || !game) return;
+
+    const map = wad.maps[selectedMap];
+    if (!map) return;
+
+    const index = buildBspRenderIndex(map);
+    if (!index) return;
+
+    let frame = 0;
+    const drawFrame = () => {
+      const canvas = bspDebugCanvasRef.current;
+      const player = game.getPlayerState();
+      if (canvas && player) {
+        drawBspDebugView(canvas, map, {
+          player,
+          index,
+          traceYaw: game.getBspTraceYaw(),
+        });
+      }
+      frame = requestAnimationFrame(drawFrame);
+    };
+
+    frame = requestAnimationFrame(drawFrame);
+    return () => cancelAnimationFrame(frame);
+  }, [bspDebugActive, isPlaying, wad, selectedMap, game]);
 
   useEffect(() => {
     if (!automapActive || !isPlaying || !wad || !selectedMap || !game) return;
@@ -226,68 +247,70 @@ export const LevelViewer: React.FC<{
     return () => cancelAnimationFrame(frame);
   }, [automapActive, automapCheat, isPlaying, wad, selectedMap, game]);
 
-  const transitionPhaseProp =
-    transitionPhase === 'wiping'
-      ? 'wipe'
-      : transitionPhase === 'static'
-        ? 'static'
-        : 'loading';
+  const transitionPhaseProp = transitionPhase === 'wiping' ? 'wipe' : 'loading';
   const showTransition =
     Boolean(wad && selectedMap) &&
-    transitionPhase !== 'playing' &&
-    transitionPhase !== 'intermission' &&
-    (mapLoadState === 'loading' ||
-      transitionPhase === 'loading' ||
-      transitionPhase === 'static' ||
-      transitionPhase === 'wiping');
-  const showIntermission = transitionPhase === 'intermission' && Boolean(wad && intermissionStats);
+    (mapLoadState === 'loading' || transitionPhase !== 'playing');
+  const hideGameCanvas = transitionPhase !== 'playing';
+
   return (
-    <section className="doom-panel level-viewer">
+    <section
+      className="doom-panel level-viewer"
+      data-map-load-state={mapLoadState}
+      data-is-playing={isPlaying ? 'true' : 'false'}
+    >
       <div className="level-toolbar">
-        <div className="level-toolbar__group">
-          <label className="doom-field doom-field--inline">
-            <span>IWAD</span>
-            <select onChange={(e) => setWadPath(e.target.value)} defaultValue="">
-            <option value="" disabled>
-              Select a WAD
-            </option>
-            {WAD_OPTIONS.map((wadOption) => (
-              <option key={wadOption.id} value={wadOption.path}>
-                {wadOption.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="doom-field doom-field--inline">
-          <span>Map</span>
-          <select
-            value={selectedMap}
-            onChange={(e) => setSelectedMap(e.target.value)}
-            disabled={mapNames.length === 0}
-          >
-            {mapNames.length === 0 ? (
-              <option value="">No maps loaded</option>
-            ) : (
-              mapNames.map((mapName) => (
-                <option key={mapName} value={mapName}>
-                  {mapName}
+        <div className="level-toolbar__group level-toolbar__group--wad">
+          <div className="level-toolbar__selectors">
+            <label className="doom-field doom-field--inline">
+              <span>IWAD</span>
+              <select
+                value={wadPath ?? ''}
+                onChange={(e) => setWadPath(e.target.value || null)}
+              >
+                <option value="" disabled>
+                  Select a WAD
                 </option>
-              ))
-            )}
-          </select>
-        </label>
+                {WAD_OPTIONS.map((wadOption) => (
+                  <option key={wadOption.id} value={wadOption.path}>
+                    {wadOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-        <button type="button" className="doom-button" onClick={refreshWad} disabled={!wad}>
-          Refresh WAD
-        </button>
-        <button type="button" className="doom-button secondary" onClick={clearCache}>
-          Clear Cache
-        </button>
+            <label className="doom-field doom-field--inline">
+              <span>Map</span>
+              <select
+                value={selectedMap}
+                onChange={(e) => setSelectedMap(e.target.value)}
+                disabled={mapNames.length === 0}
+              >
+                {mapNames.length === 0 ? (
+                  <option value="">No maps loaded</option>
+                ) : (
+                  mapNames.map((mapName) => (
+                    <option key={mapName} value={mapName}>
+                      {mapName}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+
+            <div className="level-toolbar__wad-actions">
+              <button type="button" className="doom-button" onClick={refreshWad} disabled={!wad}>
+                Refresh WAD
+              </button>
+              <button type="button" className="doom-button secondary" onClick={clearCache}>
+                Clear Cache
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="level-toolbar__group level-toolbar__group--end level-toolbar__group--music">
-          <MusicVisualizer active={music.playing} />
+        <div className="level-toolbar__group level-toolbar__group--end level-toolbar__music">
+          {music.enabled ? <MusicVisualizer active={music.playing} /> : null}
           <button
             type="button"
             className={`doom-button music-toggle ${music.enabled ? 'active' : 'secondary'}`}
@@ -313,21 +336,26 @@ export const LevelViewer: React.FC<{
       <DoomLoader status={status} wad={wad} mapLoading={mapLoadState === 'loading'} />
 
       <div className="game-stage">
-        <figure className="canvas-card game-card">
+        <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
           <figcaption className="game-card__caption">
-            Renderer
-            <span>Tab automap · WASD · Click aim/fire · E use · 1–8 weapons · Q prev weapon</span>
+            Renderer · BSP sight (GZDoom)
+            <span>Tab automap · V BSP debug · L label grid · iddt · WASD · Click/E use · Esc release mouse · Clear Cache if stale</span>
           </figcaption>
           <div className="game-card__viewport" ref={viewportRef}>
             <canvas
               ref={gameCanvasRef}
-              className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''}`}
+              className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''} ${bspDebugActive ? 'game-canvas--bsp-debug' : ''}`}
               tabIndex={0}
             />
             <canvas
               ref={automapCanvasRef}
               className={`automap-canvas ${automapActive ? 'automap-canvas--active' : ''}`}
               aria-hidden={!automapActive}
+            />
+            <canvas
+              ref={bspDebugCanvasRef}
+              className={`bsp-debug-canvas ${bspDebugActive ? 'bsp-debug-canvas--active' : ''}`}
+              aria-hidden={!bspDebugActive}
             />
             <DoomLevelTransition
               active={showTransition}
@@ -339,48 +367,23 @@ export const LevelViewer: React.FC<{
               onSnapshotCaptured={handleSnapshotCaptured}
               onComplete={handleWipeComplete}
             />
-            <DoomIntermission
-              active={showIntermission}
-              wad={wad}
-              mapName={selectedMap}
-              nextMapName={pendingNextMap}
-              stats={intermissionStats ?? { totals: { monsters: 0, items: 0, secrets: 0 }, found: { monsters: 0, items: 0, secrets: 0 } }}
-              viewportRef={viewportRef}
-              onContinue={handleIntermissionContinue}
-            />
             {automapActive ? (
               <div className="automap-hud" aria-live="polite">
                 AUTOMAP
                 {automapCheat === 1 ? ' · ALL LINES' : automapCheat === 2 ? ' · ALL THINGS' : ''}
               </div>
             ) : null}
-            <DoomHud
-              active={isPlaying && !automapActive && !showTransition && !showIntermission}
-              wad={wad}
-              viewportRef={viewportRef}
-              getHudState={() => game?.getHudState() ?? {
-                health: 100,
-                healthCap: 100,
-                armor: 0,
-                armorCap: 100,
-                ammo: { bullets: 0, shells: 0, rockets: 0, cells: 0 },
-                maxAmmo: { bullets: 200, shells: 50, rockets: 50, cells: 300 },
-                weapon: 'pistol',
-                weapons: ['fist', 'pistol'],
-                keys: { blue: false, red: false, yellow: false },
-                alive: true,
-                message: null,
-                faceLump: 'STFSTF0',
-                powerups: {
-                  invuln: false,
-                  berserk: false,
-                  invis: false,
-                  radSuit: false,
-                  lightAmp: false,
-                  computerMap: false,
-                },
-              }}
-            />
+            {bspDebugActive ? (
+              <div className="bsp-debug-hud" aria-live="polite">
+                BSP VISIBILITY · 3D wireframe + 2D seg trace · green=visible · red=clip · yellow=backface
+              </div>
+            ) : null}
+            <ViewportLabelGrid active={labelGridActive && isPlaying} />
+            {labelGridActive && isPlaying ? (
+              <div className="label-grid-hud" aria-live="polite">
+                LABEL GRID · A–I · press L to hide
+              </div>
+            ) : null}
           </div>
         </figure>
       </div>

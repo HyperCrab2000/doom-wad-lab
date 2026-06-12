@@ -14,9 +14,12 @@ import { buildMapGeometryCpu, CpuMapGeometry } from '@/wad/renderer/geometry/bui
 import { SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
 import { SectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
 import { buildMapGeometryInWorker } from '@/wad/renderer/workers/geometryWorkerClient';
+import { buildBspRenderIndex, type BspRenderIndex } from '@/wad/renderer/bsp/bspRenderIndex';
+import { mapToSubsectorFlats } from '@/wad/renderer/geometry/mapToSubsectorFlats';
 import {
   buildSortedFlats,
   buildWallRangesByLine,
+  buildWallRangesByLineAndSide,
   sortOpaqueWallsForDraw,
 } from '@/wad/renderer/geometry/geometryCache';
 import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
@@ -26,7 +29,9 @@ export interface MapBuffers {
   sectorTriangles: Record<number, Array<Triangle>>;
   triangleHash: SectorTriangleHash | null;
   sectorVisibility: SectorVisibilityIndex | null;
+  bspRenderIndex: BspRenderIndex | null;
   flats: Array<FlatBuffer>;
+  subsectorFlats: Array<FlatBuffer>;
   walls: Array<WallBuffer>;
   opaqueWalls: Array<WallBuffer>;
   transparentWalls: Array<WallBuffer>;
@@ -34,6 +39,10 @@ export interface MapBuffers {
   sortedFlats: Array<FlatBuffer>;
   /** wall index ranges per linedef for partial door updates. */
   wallRangesByLine: Array<{ start: number; count: number }>;
+  wallRangesByLineAndSide: Array<{
+    side0: { start: number; count: number };
+    side1: { start: number; count: number };
+  }>;
   thing: ThingBuffer;
 }
 
@@ -58,6 +67,7 @@ function uploadCpuGeometry(
       sector,
       sectorIndex,
       lineIndex: wall.lineIndex ?? -1,
+      sideDefIndex: wall.sideDefIndex ?? -1,
       transparent: Boolean(wall.transparent),
       twoSidedMiddle: Boolean(wall.twoSidedMiddle),
       repeatVertical: wall.repeatVertical !== false,
@@ -84,16 +94,48 @@ function uploadCpuGeometry(
     };
   });
 
+  const bspRenderIndex = buildBspRenderIndex(map);
+  const subsectorFlatObjects = bspRenderIndex ? mapToSubsectorFlats(map, bspRenderIndex) : [];
+  const subsectorFlatBuffers = subsectorFlatObjects.map((flat) => {
+    const sectorIndex = flat.sectorIndex;
+    const sector = map.SECTORS[sectorIndex] ?? flat.sector;
+    return {
+      position: createBuffer(gl, flat.position, 3),
+      normal: createBuffer(gl, flat.normal, 3),
+      uv: createBuffer(gl, flat.uv, 2),
+      indices: createElementBuffer(gl, flat.indices, 1),
+      flatName: flat.flatName,
+      sector,
+      sectorIndex,
+      subsectorIndex: flat.subsectorIndex,
+      center: flat.center,
+      boundsRadius: flat.boundsRadius,
+    };
+  });
+
+  const wallRangesByLine = buildWallRangesByLine(geometry.walls, map.LINEDEFS.length);
+  const wallRangesByLineAndSide = buildWallRangesByLineAndSide(
+    geometry.walls.map((wall) => ({
+      lineIndex: wall.lineIndex ?? -1,
+      sideDefIndex: wall.sideDefIndex ?? -1,
+    })),
+    map.LINEDEFS.length,
+    map
+  );
+
   return {
     sectorTriangles: geometry.sectorTriangles,
     triangleHash: null,
     sectorVisibility: null,
+    bspRenderIndex,
     flats: flatBuffers,
+    subsectorFlats: subsectorFlatBuffers,
     walls: wallBuffers,
     opaqueWalls: sortOpaqueWallsForDraw(wallBuffers.filter((wall) => !wall.transparent)),
     transparentWalls: wallBuffers.filter((wall) => wall.transparent),
     sortedFlats: buildSortedFlats(flatBuffers),
-    wallRangesByLine: buildWallRangesByLine(geometry.walls, map.LINEDEFS.length),
+    wallRangesByLine,
+    wallRangesByLineAndSide,
     thing: createThing(gl),
   };
 }

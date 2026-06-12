@@ -9,9 +9,9 @@ import {
 
 describe('mapLoadCache', () => {
   it('builds stable cache keys from wad path and map name', () => {
-    expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1')).toBe('/wads/DOOM.WAD::E1M1');
-    expect(mapLoadCacheKey(null, 'MAP01')).toBe('memory::MAP01');
-    expect(mapLoadCacheKey(undefined, 'MAP01')).toBe('memory::MAP01');
+    expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1')).toBe('v10::/wads/DOOM.WAD::E1M1');
+    expect(mapLoadCacheKey(null, 'MAP01')).toBe('v10::memory::MAP01');
+    expect(mapLoadCacheKey(undefined, 'MAP01')).toBe('v10::memory::MAP01');
   });
 
   it('stores and retrieves cached map load promises', async () => {

@@ -9,16 +9,18 @@ import {
 export { isSkySector } from '@/wad/renderer/utils/sectorSkyVisibility';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
-  INDOOR_CAMERA_MAX_SKY_INDOOR_DEPTH,
+  MAX_INDOOR_PORTAL_DEPTH,
   MAX_PORTAL_TRAVERSAL_DEPTH,
   PORTAL_VISIBILITY_RADIUS,
   VISIBILITY_DISTANCE_MARGIN,
 } from '@/wad/constants/RenderInfo';
 import { findSectorAtPoint, SectorTriangleHash } from '@/wad/renderer/utils/sectorLookup';
-
-const SUBSECTOR_FLAG = 0x8000;
-/** Doom stores subsector ids in the high bit; mask must be 0x7fff (`~0x8000` is wrong in JS). */
-const SUBSECTOR_INDEX_MASK = SUBSECTOR_FLAG - 1;
+import {
+  childIsSubsector,
+  childSubsectorIndex,
+  normalizeBspChild,
+  pointOnSide,
+} from '@/wad/renderer/bsp/bspRenderIndex';
 
 export interface SectorVisibilityIndex {
   subsectorToSector: number[];
@@ -154,26 +156,21 @@ export function buildSectorAdjacency(map: WadMap): number[][] {
 export function findCameraSubsector(map: WadMap, x: number, y: number): number {
   const nodes = map.NODES as Node[] | undefined;
   if (!nodes?.length) return -1;
-  return walkSubsector(nodes, x, y, nodes.length - 1);
+  return walkSubsector(nodes, x, y, normalizeBspChild(nodes.length - 1));
 }
 
 function walkSubsector(nodes: Node[], x: number, y: number, nodeIndex: number): number {
-  if ((nodeIndex & SUBSECTOR_FLAG) !== 0) {
-    return nodeIndex & SUBSECTOR_INDEX_MASK;
+  if (childIsSubsector(nodeIndex)) {
+    return childSubsectorIndex(nodeIndex);
   }
-  if (nodeIndex < 0 || nodeIndex >= nodes.length) {
+  const normalizedIndex = normalizeBspChild(nodeIndex);
+  if (normalizedIndex < 0 || normalizedIndex >= nodes.length) {
     return -1;
   }
 
-  const node = nodes[nodeIndex];
-  const dx = x - node.x;
-  const dy = y - node.y;
-  const side = dx * node.dy - dy * node.dx;
-
-  if (side <= 0) {
-    return walkSubsector(nodes, x, y, node.children[0]);
-  }
-  return walkSubsector(nodes, x, y, node.children[1]);
+  const node = nodes[normalizedIndex];
+  const side = pointOnSide(x, y, node);
+  return walkSubsector(nodes, x, y, normalizeBspChild(node.children[side]));
 }
 
 /** Resolve camera sector via BSP subsector walk (fast, matches vanilla). */
@@ -196,17 +193,22 @@ export function findCameraSectorIndex(
   cameraPos: [number, number, number],
   visibilityIndex?: SectorVisibilityIndex | null
 ): number {
-  const fromBsp = findCameraSectorIndexFromBsp(map, visibilityIndex, cameraPos);
-  if (fromBsp >= 0) return fromBsp;
+  const hasTriangleGeometry =
+    triangleHash != null || Object.keys(sectorTriangles).length > 0;
+  if (hasTriangleGeometry) {
+    const sector = findSectorAtPoint(map, sectorTriangles, triangleHash, {
+      x: cameraPos[0],
+      y: -cameraPos[2],
+    });
+    if (sector) {
+      const sectorIndex = map.SECTORS.indexOf(sector);
+      if (sectorIndex >= 0) {
+        return sectorIndex;
+      }
+    }
+  }
 
-  const sector = findSectorAtPoint(map, sectorTriangles, triangleHash, {
-    x: cameraPos[0],
-    y: -cameraPos[2],
-  });
-  if (!sector) return -1;
-
-  const sectorIndex = map.SECTORS.indexOf(sector);
-  return sectorIndex >= 0 ? sectorIndex : -1;
+  return findCameraSectorIndexFromBsp(map, visibilityIndex, cameraPos);
 }
 
 export function buildPotentiallyVisibleSectors(
@@ -230,7 +232,9 @@ export function buildPotentiallyVisibleSectors(
 
 /**
  * Flood-fill sectors reachable from the camera through two-sided portals.
- * Unlike the old bounding-circle pass, this skips sectors hidden behind one-sided walls.
+ * Sky sectors are grouped into islands (separate courtyards / outdoor areas).
+ * You only see another outdoor area if you reach it through a connected portal —
+ * never by walking the indoor graph into a different sky island.
  */
 export function buildPortalVisibleSectors(
   index: SectorVisibilityIndex,
@@ -238,7 +242,7 @@ export function buildPortalVisibleSectors(
   cameraX: number,
   cameraY: number,
   cameraSectorIndex: number,
-  maxRadius = PORTAL_VISIBILITY_RADIUS,
+  _maxRadius = PORTAL_VISIBILITY_RADIUS,
   maxDepth = MAX_PORTAL_TRAVERSAL_DEPTH
 ): Set<number> {
   const visible = new Set<number>();
@@ -246,14 +250,28 @@ export function buildPortalVisibleSectors(
     return visible;
   }
 
+  const skyIslandIds = buildSkyIslandIds(map, index);
   const cameraInSky = isSkySector(map, cameraSectorIndex);
-  const queue: Array<{ sectorIndex: number; depth: number; skyChain: number }> = [
-    { sectorIndex: cameraSectorIndex, depth: 0, skyChain: cameraInSky ? 0 : -1 },
-  ];
+  const cameraSkyContext = cameraInSky ? skyIslandIds[cameraSectorIndex] : null;
+
+  const queue: Array<{
+    sectorIndex: number;
+    depth: number;
+    skyChain: number;
+    skyContext: number | null;
+    indoorDepth: number;
+  }> = [{
+    sectorIndex: cameraSectorIndex,
+    depth: 0,
+    skyChain: cameraInSky ? 0 : -1,
+    skyContext: cameraSkyContext,
+    indoorDepth: 0,
+  }];
+
   let queueHead = 0;
 
   while (queueHead < queue.length) {
-    const { sectorIndex, depth, skyChain } = queue[queueHead++]!;
+    const { sectorIndex, depth, skyChain, skyContext, indoorDepth } = queue[queueHead++]!;
     if (visible.has(sectorIndex)) continue;
 
     visible.add(sectorIndex);
@@ -262,26 +280,78 @@ export function buildPortalVisibleSectors(
     for (const neighbor of index.sectorAdjacency[sectorIndex] ?? []) {
       if (visible.has(neighbor)) continue;
 
+      const fromIsSky = isSkySector(map, sectorIndex);
+      const toIsSky = isSkySector(map, neighbor);
+      const nextIndoorDepth =
+        !fromIsSky && !toIsSky
+          ? indoorDepth + 1
+          : fromIsSky && !toIsSky
+            ? 0
+            : indoorDepth;
+
       const nextSkyChain = advanceSkyChain(map, sectorIndex, neighbor, skyChain);
       if (
         !canTraversePortal(
+          index,
           map,
+          skyIslandIds,
           cameraSectorIndex,
           cameraInSky,
           sectorIndex,
           neighbor,
           nextSkyChain,
-          depth
+          skyContext,
+          indoorDepth
         )
       ) {
         continue;
       }
 
-      queue.push({ sectorIndex: neighbor, depth: depth + 1, skyChain: nextSkyChain });
+      let nextContext = skyContext;
+      if (toIsSky && !fromIsSky) {
+        nextContext = skyIslandIds[neighbor];
+      } else if (fromIsSky && !toIsSky) {
+        nextContext = skyIslandIds[sectorIndex];
+      }
+
+      queue.push({
+        sectorIndex: neighbor,
+        depth: depth + 1,
+        skyChain: nextSkyChain,
+        skyContext: nextContext,
+        indoorDepth: nextIndoorDepth,
+      });
     }
   }
 
   return visible;
+}
+
+/** Connected components of sky sectors (each courtyard / outdoor cell is its own island). */
+function buildSkyIslandIds(map: WadMap, index: SectorVisibilityIndex): Int32Array {
+  const ids = new Int32Array(map.SECTORS.length);
+  ids.fill(-1);
+  let nextId = 0;
+
+  for (let sectorIndex = 0; sectorIndex < map.SECTORS.length; sectorIndex++) {
+    if (!isSkySector(map, sectorIndex) || ids[sectorIndex] >= 0) continue;
+
+    const stack = [sectorIndex];
+    ids[sectorIndex] = nextId;
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      for (const neighbor of index.sectorAdjacency[current] ?? []) {
+        if (!isSkySector(map, neighbor) || ids[neighbor] >= 0) continue;
+        ids[neighbor] = nextId;
+        stack.push(neighbor);
+      }
+    }
+
+    nextId++;
+  }
+
+  return ids;
 }
 
 /** Tracks consecutive sky-sector hops for outdoor portal chains. */
@@ -312,51 +382,67 @@ export function sectorsSharePortalLine(map: WadMap, sectorA: number, sectorB: nu
 }
 
 function canTraversePortal(
+  index: SectorVisibilityIndex,
   map: WadMap,
+  skyIslandIds: Int32Array,
   cameraSectorIndex: number,
   cameraInSky: boolean,
   fromSectorIndex: number,
   toSectorIndex: number,
   skyChain: number,
-  fromDepth: number
+  skyContext: number | null,
+  indoorDepth: number
 ): boolean {
-  const toIsSky = isSkySector(map, toSectorIndex);
-  const fromIsSky = isSkySector(map, fromSectorIndex);
-
-  if (cameraInSky) {
-    if (fromIsSky && toIsSky && skyChain >= MAX_SKY_PORTAL_CHAIN) {
-      return false;
-    }
-    return true;
-  }
-
   if (toSectorIndex === cameraSectorIndex || fromSectorIndex === cameraSectorIndex) {
     return true;
   }
 
-  // Walk through indoor portals (doorways, stairs, corridors).
+  const toIsSky = isSkySector(map, toSectorIndex);
+  const fromIsSky = isSkySector(map, fromSectorIndex);
+  const adjacent = index.sectorAdjacency[fromSectorIndex] ?? [];
+
+  // Doorways between indoor rooms — only when the camera is indoors, within local reach.
   if (!fromIsSky && !toIsSky) {
-    return true;
+    return !cameraInSky && indoorDepth < MAX_INDOOR_PORTAL_DEPTH;
   }
 
-  // Window from indoor room to outdoor sky.
+  // Step out of an indoor sector into outdoor sky.
   if (toIsSky && !fromIsSky) {
-    return true;
-  }
-
-  // Outdoor sky graph — limit how far sky sectors chain (prevents whole-map flood).
-  if (toIsSky && fromIsSky) {
-    return skyChain >= 0 && skyChain < MAX_SKY_PORTAL_CHAIN;
-  }
-
-  // Outdoor → indoor: direct window from the outdoor sector; shallow depth from indoor camera.
-  if (fromIsSky && !toIsSky) {
     if (cameraInSky) {
       return true;
     }
+    const targetIsland = skyIslandIds[toSectorIndex];
+    if (targetIsland < 0) {
+      return false;
+    }
+    if (skyContext !== null) {
+      return targetIsland === skyContext;
+    }
     return (
-      sectorsSharePortalLine(map, fromSectorIndex, toSectorIndex) &&
-      fromDepth <= INDOOR_CAMERA_MAX_SKY_INDOOR_DEPTH
+      fromSectorIndex === cameraSectorIndex ||
+      sectorsSharePortalLine(map, cameraSectorIndex, fromSectorIndex)
+    );
+  }
+
+  // Move between sky sectors in the same outdoor island (courtyard/hangar cell).
+  if (fromIsSky && toIsSky) {
+    if (skyIslandIds[fromSectorIndex] !== skyIslandIds[toSectorIndex]) {
+      return false;
+    }
+    return skyChain >= 0 && skyChain < MAX_SKY_PORTAL_CHAIN;
+  }
+
+  // Sky → attached indoor (window/door on the outdoor sector the camera uses).
+  if (fromIsSky && !toIsSky) {
+    if (!adjacent.includes(toSectorIndex)) {
+      return false;
+    }
+    if (cameraInSky) {
+      return fromSectorIndex === cameraSectorIndex;
+    }
+    return (
+      toSectorIndex === cameraSectorIndex ||
+      sectorsSharePortalLine(map, cameraSectorIndex, toSectorIndex)
     );
   }
 
@@ -386,6 +472,18 @@ export function isSectorPotentiallyVisible(
   return relatedSectorIndices.some((index) => visibleSectors.has(index));
 }
 
+/** Portal-graph visibility only — no distance culling (Doom uses connectivity, not radius). */
+export function isSectorGraphVisible(
+  sectorIndex: number,
+  visibleSectors: Set<number> | null,
+  cameraSectorIndex: number,
+  relatedSectorIndices: readonly number[] = []
+): boolean {
+  if (!visibleSectors) return true;
+  if (cameraSectorIndex >= 0 && sectorIndex === cameraSectorIndex) return true;
+  return isSectorPotentiallyVisible(sectorIndex, visibleSectors, relatedSectorIndices);
+}
+
 export function isDrawVisible(
   center: [number, number, number],
   cameraPos: [number, number, number],
@@ -394,10 +492,22 @@ export function isDrawVisible(
   sectorIndex: number,
   cameraSectorIndex = -1,
   horizontalOnly = false,
-  relatedSectorIndices: readonly number[] = []
+  relatedSectorIndices: readonly number[] = [],
+  options?: { skipDistanceCull?: boolean }
 ): boolean {
-  if (!isSectorPotentiallyVisible(sectorIndex, visibleSectors, relatedSectorIndices)) {
+  if (
+    !isSectorGraphVisible(
+      sectorIndex,
+      visibleSectors,
+      cameraSectorIndex,
+      relatedSectorIndices
+    )
+  ) {
     return false;
+  }
+
+  if (options?.skipDistanceCull) {
+    return true;
   }
 
   if (cameraSectorIndex >= 0 && sectorIndex === cameraSectorIndex) {

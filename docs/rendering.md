@@ -11,9 +11,9 @@ The level viewer is a **WebGL2 forward renderer**: triangulated sectors, extrude
 | Aspect | Original Doom (1993) | Doom WAD Lab |
 |--------|----------------------|--------------|
 | **Output** | 320×200 8-bit framebuffer | WebGL2 RGBA canvas (any resolution) |
-| **Visibility** | BSP subsector order + seg clipping | Portal sector flood-fill + frustum + distance |
-| **Walls** | Vertical **columns** per screen X | Textured **triangle quads** in 3D |
-| **Floors/ceilings** | Flat **spans** (horizontal runs) | Triangulated **meshes** per sector |
+| **Visibility** | BSP traverse + angular clipper (`RenderBSP` / `AddLine` / `DoSubsector`) | Same BSP path via `buildGzdoomDrawState` — walls by visible linedef **and sidedef**, flats by visible **subsector** |
+| **Walls** | `HWWall::Process` per visible seg (upper/mid/lower bands) | Same band logic in `hwWallProcess.ts`; quads built at load via `mapToWalls`, drawn for the BSP-visible sidedef only |
+| **Floors/ceilings** | Flat **spans** per subsector (`HWFlat::ProcessSector`) | Triangulated **meshes** per sector (`mapToFlats.ts`), drawn for BSP-visible sectors |
 | **Sky** | Floor/ceiling **F_SKY** holes + wall height | Full-screen **cylindrical skybox** + no F_SKY flats |
 | **Sprites** | Drawn in BSP order (approximate depth) | Back-to-front sorted billboards + depth override for centers |
 | **Lighting** | Sector light level → **colormap** bands | Per-sector uniforms: ambient, fog, dynamic lights |
@@ -27,7 +27,7 @@ The level viewer is a **WebGL2 forward renderer**: triangulated sectors, extrude
 
 Tradeoffs:
 
-- No exact vanilla BSP occlusion; we approximate with **sector portal visibility** (see below).
+- BSP clipper occlusion drives draw culling (`src/wad/renderer/bsp/`). Portal flood-fill is no longer used in `drawScene`.
 - Sprite depth can differ slightly from vanilla (we use center-depth for billboards to fix door jamb leaks).
 - Sky is a **panorama** behind geometry, not per-sector sky planes (`mapToSkys.ts` exists but is not wired to the main pass).
 
@@ -92,6 +92,20 @@ Per-sector `visibilityDistance` derived from `lightlevel` (darker = shorter fog 
 
 Opaque walls behind the camera plane culled beyond `WALL_FACING_CULL_DISTANCE` unless camera is very close.
 
+## Wall geometry (`HWWall::Process`)
+
+**Files:** `src/wad/renderer/bsp/hwWallProcess.ts`, `src/wad/renderer/bsp/hwFakeFlat.ts`, `src/wad/renderer/geometry/mapToWalls.ts`
+
+At map load, each linedef side runs a port of GZDoom `HWWall::Process`:
+
+- **`hw_FakeFlat`** — resolves stacked-sector planes (identity for classic WADs).
+- **One-sided** — mid, then bottom, then top texture over full sector height.
+- **Two-sided upper** — skipped when both ceilings are sky; floor obstruction clamps back ceiling (`ffh > bch`).
+- **Two-sided lower** — ceiling obstruction clamps back floor (`fch < bfh`); only when back floor is above front floor.
+- **Two-sided mid** — `DoMidTexture` span with pegging (`ML_DONTPEGBOTTOM`).
+
+BSP visibility (`buildGzdoomDrawState`) decides **which** linedefs/sectors to draw each frame; band heights come from this Process path and refresh when doors move ceilings (`refreshMapGeometry.ts`).
+
 ## Sky rendering
 
 **Files:** `drawSkybox.ts`, `skyBox.frag`, `selectSkyTexture.ts`
@@ -129,6 +143,6 @@ Separate 2D canvas overlay (Tab toggle, `iddt` cheat levels) — vector line dra
 ## Tests
 
 - `sectorVisibility.test.ts`, `frustumCull.test.ts`, `playerView.test.ts`
-- `selectSkyTexture.test.ts`, `mapToWalls.test.ts`
+- `selectSkyTexture.test.ts`, `mapToWalls.test.ts`, `hwWallProcess.test.ts`, `bspVisibility.test.ts`
 
 See also: [Visual enhancements](./visual-enhancements.md), [Performance](./performance.md).

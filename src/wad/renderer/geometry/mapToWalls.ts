@@ -204,8 +204,8 @@ const resolveSolidTexName = (
 ): string | undefined => {
   for (let i = 0; i < strs.length; i++) {
     const texName = resolveTexName(strs[i]);
-
-    if (texName && !texturesByName[texName].transparent) {
+    const texDef = texName ? texturesByName[texName] : undefined;
+    if (texDef && !texDef.transparent) {
       return texName;
     }
   }
@@ -233,11 +233,16 @@ const procesSideDef = (
   const walls = new Array<WallObject>();
 
   if (otherSideDef === -1) {
-    if (resolveTexName(side.midTexture)) {
+    const oneSidedTex =
+      resolveTexName(side.midTexture) ??
+      resolveTexName(side.bottomTexture) ??
+      resolveTexName(side.topTexture);
+    const oneSidedTexDef = oneSidedTex ? texturesByName[oneSidedTex] : undefined;
+    if (oneSidedTex && oneSidedTexDef) {
       walls.push({
         sector,
         sectorIndex,
-        texName: side.midTexture,
+        texName: oneSidedTex,
         ...createWall({
           v1,
           v2,
@@ -245,40 +250,8 @@ const procesSideDef = (
           top,
           inverse,
           side,
-          texSize: texturesByName[side.midTexture],
+          texSize: oneSidedTexDef,
           drawFromTop: !lineDef.flags.lowerUnpegged,
-        }),
-      });
-    } else if (resolveTexName(side.bottomTexture)) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: side.bottomTexture,
-        ...createWall({
-          v1,
-          v2,
-          bottom,
-          top,
-          inverse,
-          side,
-          texSize: texturesByName[side.bottomTexture],
-          drawFromTop: !lineDef.flags.lowerUnpegged,
-        }),
-      });
-    } else if (resolveTexName(side.topTexture)) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: side.topTexture,
-        ...createWall({
-          v1,
-          v2,
-          bottom,
-          top,
-          inverse,
-          side,
-          texSize: texturesByName[side.topTexture],
-          drawFromTop: lineDef.flags.upperUnpegged,
         }),
       });
     }
@@ -293,52 +266,46 @@ const procesSideDef = (
 
   //TODO: if the sector ceiling height is lower than the other sector this ceiling is lower and there are no side-textures we need to place some sky
   if (hasMidTexture) {
-    const midBottom = Math.max(sector.floorheight, otherSector.floorheight);
-    const midTop = Math.min(sector.ceilingheight, otherSector.ceilingheight);
-    if (midTop > midBottom + WALL_VISIBILITY_EPS) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: side.midTexture,
-        transparent: texturesByName[side.midTexture].transparent,
-        twoSidedMiddle: true,
-        repeatVertical: false,
-        ...createWall({
-          v1,
-          v2,
-          bottom: midBottom - WALL_JOINT_OVERLAP,
-          top: midTop + WALL_JOINT_OVERLAP,
-          inverse,
-          side,
-          texSize: texturesByName[side.midTexture],
-          // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
-          drawFromTop: lineDef.flags.upperUnpegged,
+    const midTexDef = texturesByName[side.midTexture];
+    if (midTexDef) {
+      const midBottom = Math.max(sector.floorheight, otherSector.floorheight);
+      const midTop = Math.min(sector.ceilingheight, otherSector.ceilingheight);
+      if (midTop > midBottom + WALL_VISIBILITY_EPS) {
+        walls.push({
+          sector,
+          sectorIndex,
+          texName: side.midTexture,
+          transparent: midTexDef.transparent,
+          twoSidedMiddle: true,
           repeatVertical: false,
-        }),
-      });
+          ...createWall({
+            v1,
+            v2,
+            bottom: midBottom - WALL_JOINT_OVERLAP,
+            top: midTop + WALL_JOINT_OVERLAP,
+            inverse,
+            side,
+            texSize: midTexDef,
+            // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
+            drawFromTop: lineDef.flags.upperUnpegged,
+            repeatVertical: false,
+          }),
+        });
+      }
     }
   }
 
   const lowerWallBottom = Math.min(sector.floorheight, otherSector.floorheight);
   const lowerWallTop = Math.max(sector.floorheight, otherSector.floorheight);
   if (lowerWallTop > lowerWallBottom + WALL_VISIBILITY_EPS) {
-    const tex = resolveSolidTexName(
-      [
-        side.bottomTexture,
-        side.topTexture,
-        side.midTexture,
-        otherSide.bottomTexture,
-        otherSide.topTexture,
-        otherSide.midTexture,
-        defaultWall,
-      ],
-      texturesByName
-    );
+    // GZDoom: lower wall only renders when bottomTexture is explicitly set (not '-').
+    // Never fall back to other slots — a missing bottom texture means transparent gap.
+    const tex = resolveTexName(side.bottomTexture);
+    const texDef = tex ? texturesByName[tex] : undefined;
 
-    if (tex) {
-      //for lower unpegged walls, need additional offset so the texture aligns with the wall height
+    if (tex && texDef) {
       const bottomStart = lineDef.flags.lowerUnpegged
-        ? (top - bottom - texturesByName[tex].height) / texturesByName[tex].height
+        ? (top - bottom - texDef.height) / texDef.height
         : 0;
 
       walls.push({
@@ -348,11 +315,11 @@ const procesSideDef = (
         ...createWall({
           v1,
           v2,
-          bottom: lowerWallBottom,
-          top: lowerWallTop + (hasMidTexture ? WALL_JOINT_OVERLAP : 0),
+          bottom: lowerWallBottom - WALL_JOINT_OVERLAP,
+          top: lowerWallTop + WALL_JOINT_OVERLAP,
           inverse,
           side,
-          texSize: texturesByName[tex],
+          texSize: texDef,
           drawFromTop: !lineDef.flags.lowerUnpegged,
           bottomStart: -bottomStart,
         }),
@@ -368,20 +335,11 @@ const procesSideDef = (
     upperWallTop > upperWallBottom + WALL_VISIBILITY_EPS &&
     (!sectorHasSky || !otherSectorHasSky)
   ) {
-    const tex = resolveSolidTexName(
-      [
-        side.topTexture,
-        side.bottomTexture,
-        side.midTexture,
-        otherSide.topTexture,
-        otherSide.bottomTexture,
-        otherSide.midTexture,
-        defaultWall,
-      ],
-      texturesByName
-    );
+    // GZDoom: upper wall only renders when topTexture is explicitly set (not '-').
+    const tex = resolveTexName(side.topTexture);
+    const texDef = tex ? texturesByName[tex] : undefined;
 
-    if (tex) {
+    if (tex && texDef) {
       walls.push({
         sector,
         sectorIndex,
@@ -389,11 +347,41 @@ const procesSideDef = (
         ...createWall({
           v1,
           v2,
-          bottom: upperWallBottom - (hasMidTexture ? WALL_JOINT_OVERLAP : 0),
-          top: upperWallTop,
+          bottom: upperWallBottom - WALL_JOINT_OVERLAP,
+          top: upperWallTop + WALL_JOINT_OVERLAP,
           inverse,
           side,
-          texSize: texturesByName[tex],
+          texSize: texDef,
+          drawFromTop: lineDef.flags.upperUnpegged,
+        }),
+      });
+    }
+  } else if (
+    upperWallTop > upperWallBottom + WALL_VISIBILITY_EPS &&
+    sectorHasSky &&
+    otherSectorHasSky &&
+    sector.floorheight === otherSector.floorheight &&
+    sector.ceilingheight < otherSector.ceilingheight
+  ) {
+    // GZDoom HWWall: short sky-sector step when back ceiling is higher (courtyard edges).
+    // Only render if there is an explicit top texture; sky-sky transitions with no top
+    // texture are handled by the sky portal (seamless sky above the short wall).
+    const tex = resolveTexName(side.topTexture);
+    const texDef = tex ? texturesByName[tex] : undefined;
+
+    if (tex && texDef) {
+      walls.push({
+        sector,
+        sectorIndex,
+        texName: tex,
+        ...createWall({
+          v1,
+          v2,
+          bottom: sector.ceilingheight,
+          top: otherSector.ceilingheight,
+          inverse,
+          side,
+          texSize: texDef,
           drawFromTop: lineDef.flags.upperUnpegged,
         }),
       });
@@ -430,6 +418,7 @@ export function mapToWallsForLine(
   );
   for (const wall of sideResults) {
     wall.lineIndex = lineIndex;
+    wall.sideDefIndex = lineDef.sidenum[0];
     walls.push(wall);
   }
 
@@ -445,6 +434,7 @@ export function mapToWallsForLine(
     );
     for (const wall of otherSideResults) {
       wall.lineIndex = lineIndex;
+      wall.sideDefIndex = lineDef.sidenum[1];
       walls.push(wall);
     }
   }

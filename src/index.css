@@ -92,8 +92,7 @@ input {
   height: 100vh;
   margin: 0 auto;
   padding: 0.45rem 0 0.25rem;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .app-main {
@@ -109,8 +108,8 @@ input {
   gap: 0.75rem 1rem;
   flex-shrink: 0;
   margin-bottom: 0.25rem;
-  min-height: 4.1rem;
-  padding: 0.55rem 0.7rem 0.9rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.7rem;
   overflow: visible;
   border: 2px solid #202020;
   background:
@@ -127,7 +126,6 @@ input {
   gap: 0.65rem;
   flex: 1;
   min-width: 0;
-  overflow: visible;
 }
 
 .hero-meta {
@@ -157,11 +155,11 @@ input {
 .doom-wordmark {
   display: flex;
   flex-shrink: 0;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.35rem;
   margin: 0;
-  padding: 0 0 0.12rem;
-  line-height: 1;
+  padding: 0.1rem 0;
+  line-height: 0;
   overflow: visible;
 }
 
@@ -169,12 +167,10 @@ input {
   display: block;
   flex-shrink: 0;
   width: auto;
-  height: auto;
-  max-height: 3.15rem;
-  max-width: 8.6rem;
-  aspect-ratio: 1004 / 308;
+  height: 2.35rem;
+  max-width: 5.5rem;
   object-fit: contain;
-  object-position: left bottom;
+  object-position: left center;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -445,14 +441,13 @@ input {
 }
 
 .level-toolbar {
-  --toolbar-control-height: 1.75rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem 0.5rem;
   flex-shrink: 0;
-  padding: 0.35rem 0.4rem;
+  padding: 0.28rem 0.35rem;
   border: 1px solid #252525;
   background: #050505;
 }
@@ -461,24 +456,44 @@ input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem 0.45rem;
+  gap: 0.3rem 0.4rem;
   min-width: 0;
 }
 
-.level-toolbar label.doom-field.doom-field--inline {
-  display: inline-flex;
-  flex-direction: row;
+.level-toolbar__group--wad {
   align-items: center;
-  gap: 0.35rem;
-  margin: 0;
+  gap: 0.45rem 0.55rem;
+}
+
+.level-toolbar__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.35rem 0.5rem;
+}
+
+.level-toolbar__selectors .doom-field--inline {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.level-toolbar__selectors .doom-field--inline span {
+  line-height: 1;
+}
+
+.level-toolbar__wad-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+  flex-shrink: 0;
+}
+
+.level-toolbar__music {
+  align-items: center;
 }
 
 .level-toolbar__group--end {
   margin-left: auto;
-}
-
-.level-toolbar__group--music {
-  flex-wrap: nowrap;
 }
 
 .music-status--inline button {
@@ -671,20 +686,13 @@ input {
 }
 
 .level-toolbar .doom-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  box-sizing: border-box;
-  min-height: var(--toolbar-control-height);
-  padding: 0.24rem 0.55rem;
+  padding: 0.32rem 0.55rem;
   font-size: 0.74rem;
-  line-height: 1;
+  min-height: 1.75rem;
 }
 
 .level-toolbar select {
-  box-sizing: border-box;
-  min-height: var(--toolbar-control-height);
+  min-height: 1.75rem;
   padding: 0.22rem 0.4rem;
   font-size: 0.78rem;
 }
@@ -943,7 +951,8 @@ input {
 }
 
 .game-canvas,
-.automap-canvas {
+.automap-canvas,
+.bsp-debug-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -959,6 +968,10 @@ input {
   visibility: hidden;
 }
 
+.game-canvas--bsp-debug {
+  opacity: 0.35;
+}
+
 .automap-canvas {
   z-index: 2;
   pointer-events: none;
@@ -967,6 +980,31 @@ input {
 
 .automap-canvas--active {
   opacity: 1;
+}
+
+.bsp-debug-canvas {
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.bsp-debug-canvas--active {
+  opacity: 1;
+}
+
+.bsp-debug-hud {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 4;
+  padding: 0.35rem 0.55rem;
+  font-family: var(--doom-mono, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #9fd;
+  background: rgba(0, 20, 16, 0.82);
+  border: 1px solid rgba(0, 255, 170, 0.35);
+  pointer-events: none;
 }
 
 .automap-hud {
@@ -1122,17 +1160,60 @@ input {
   height: 100%;
 }
 
-.doom-level-transition {
+.viewport-label-grid {
   position: absolute;
   inset: 0;
-  z-index: 8;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
   pointer-events: none;
-  background: transparent;
+}
+
+.viewport-label-grid__cell {
+  position: relative;
+  border: 2px solid rgba(255, 255, 0, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.viewport-label-grid__label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  padding: 0.15rem 0.45rem;
+  color: #111;
+  background: rgba(255, 255, 0, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.65);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: none;
+}
+
+.label-grid-hud {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  padding: 0.35rem 0.55rem;
+  color: #ffff66;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 102, 0.45);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.game-card--hidden .game-card__viewport canvas {
   visibility: hidden;
 }
 
-.doom-level-transition--active {
-  visibility: visible;
+.doom-level-transition {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
   background: #584848;
 }
 
@@ -1144,39 +1225,6 @@ input {
   width: 100%;
   height: 100%;
   display: block;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-
-.doom-intermission {
-  position: absolute;
-  inset: 0;
-  z-index: 9;
-  pointer-events: none;
-  visibility: hidden;
-  background: #584848;
-}
-
-.doom-intermission--active {
-  visibility: visible;
-  pointer-events: auto;
-}
-
-.doom-intermission__canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-
-.doom-hud {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }

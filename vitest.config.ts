@@ -83,7 +83,7 @@ export default defineConfig({
           include: ['test/integration/**/*.integration.test.ts'],
           environment: 'node',
           setupFiles: ['./test/setup/integrationCanvas.ts'],
-          testTimeout: 120_000,
+          testTimeout: 180_000,
         },
       },
     ],

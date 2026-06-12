@@ -90,8 +90,10 @@ describe('door runtime integration', () => {
     };
 
     const closedGeometry = buildMapGeometryCpu(map, texturesByName);
-    expect(mapToWallsForLine(map, texturesByName, 0).length).toBe(2);
-    expect(buildWallRangesByLine(closedGeometry.walls, map.LINEDEFS.length)[0].count).toBe(2);
+    // GZDoom only creates geometry for the sidedef with an explicit texture (side 0, BIGDOOR2).
+    // Side 1 has no texture ('-') so no geometry — phantom back-side walls were removed.
+    expect(mapToWallsForLine(map, texturesByName, 0).length).toBe(1);
+    expect(buildWallRangesByLine(closedGeometry.walls, map.LINEDEFS.length)[0].count).toBe(1);
 
     map.SECTORS[1].ceilingheight = 88;
     expect(mapToWallsForLine(map, texturesByName, 0).length).toBe(0);

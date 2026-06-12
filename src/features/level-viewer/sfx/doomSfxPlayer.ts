@@ -85,11 +85,14 @@ function pcm8ToFloat(bytes: Uint8Array, sampleRate: number) {
   return { sampleRate, samples };
 }
 
+import { DOOM_MAP_SOUNDS } from '@/wad/game/mapActionSounds';
+
+/** @deprecated Use `DOOM_MAP_SOUNDS` from `@/wad/game/mapActionSounds`. */
 export const DOOM_DOOR_SOUNDS = {
-  switchOn: 'DSSWTCHN',
-  switchOff: 'DSSWTCHX',
-  doorOpen: 'DSDOROPN',
-  doorClose: 'DSDORCLS',
-  blazeOpen: 'DSBDOPN',
-  blazeClose: 'DSBDCLS',
+  switchOn: DOOM_MAP_SOUNDS.switchOn,
+  switchOff: DOOM_MAP_SOUNDS.switchOff,
+  doorOpen: DOOM_MAP_SOUNDS.doorOpen,
+  doorClose: DOOM_MAP_SOUNDS.doorClose,
+  blazeOpen: DOOM_MAP_SOUNDS.blazeOpen,
+  blazeClose: DOOM_MAP_SOUNDS.blazeClose,
 } as const;

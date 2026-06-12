@@ -38,3 +38,5 @@ public/soundfonts/*.sf2
 *.njsproj
 *.sln
 *.sw?
+tmp-*/
+test-results/

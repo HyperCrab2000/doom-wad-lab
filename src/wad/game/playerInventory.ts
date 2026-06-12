@@ -178,6 +178,7 @@ export function inventoryHudSnapshot(inventory: PlayerInventory) {
     weapon: inventory.selectedWeapon,
     weapons: [...inventory.weapons],
     keys: { ...inventory.keys },
+    backpack: inventory.backpack,
     alive: inventory.health > 0,
   };
 }

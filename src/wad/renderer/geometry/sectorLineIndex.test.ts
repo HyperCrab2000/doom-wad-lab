@@ -4,7 +4,6 @@ import { WadMap } from '@/wad/interfaces/WadMap';
 import {
   getFlatIndicesForSectors,
   getLineIndicesForSectors,
-  getLineIndicesForSides,
 } from '@/wad/renderer/geometry/sectorLineIndex';
 
 describe('sectorLineIndex', () => {
@@ -20,16 +19,6 @@ describe('sectorLineIndex', () => {
 
     expect([...getLineIndicesForSectors(map, [0])].sort()).toEqual([0]);
     expect([...getLineIndicesForSectors(map, [1, 3])].sort()).toEqual([0, 2]);
-  });
-
-  it('finds linedefs by sidedef index', () => {
-    const map = {
-      LINEDEFS: [{ sidenum: [0, 1] }, { sidenum: [2, -1] }],
-      SIDEDEFS: [{ sector: 0 }, { sector: 1 }, { sector: 2 }],
-    } as unknown as WadMap;
-
-    expect([...getLineIndicesForSides(map, [1])].sort()).toEqual([0]);
-    expect([...getLineIndicesForSides(map, [2])].sort()).toEqual([1]);
   });
 
   it('returns flat indices for the requested sectors', () => {

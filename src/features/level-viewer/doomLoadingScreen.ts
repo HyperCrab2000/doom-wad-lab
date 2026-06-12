@@ -82,13 +82,11 @@ function drawStcfnText(
   centerX: number,
   baselineY: number,
   scale = 2
-): boolean {
+): void {
   const spacing = 1 * scale;
   const { glyphs, totalWidth } = collectStcfnGlyphs(wad, text, scale);
-  if (glyphs.length === 0) return false;
-
+  if (glyphs.length === 0) return;
   drawStcfnGlyphs(ctx, glyphs, centerX - totalWidth / 2, baselineY, spacing);
-  return true;
 }
 
 /** STCFN text with a fixed left edge and baseline (status bar). */
@@ -125,69 +123,6 @@ export function drawStcfnTextCentered(
   return true;
 }
 
-function drawFallbackLoadingText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  centerX: number,
-  centerY: number,
-  scale: number
-): void {
-  const size = Math.max(16, 8 * scale);
-  ctx.fillStyle = '#c41e1e';
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = Math.max(2, scale);
-  ctx.font = `900 ${size}px Impact, "Arial Black", "Arial Narrow", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.strokeText(text, centerX, centerY);
-  ctx.fillText(text, centerX, centerY);
-}
-
-/**
- * Full-screen transition plate: brown backdrop + centered STCFN status text.
- * Used on the game viewport while a map loads and during the melt wipe.
- */
-/** TV-static overlay on the loading plate (vanilla load screen noise). */
-export function drawLoadingStaticNoise(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  intensity = 0.22
-): void {
-  const imageData = ctx.createImageData(width, height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const value = Math.random() * 255;
-    data[i] = value;
-    data[i + 1] = value;
-    data[i + 2] = value;
-    data[i + 3] = Math.floor(255 * intensity);
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-export function drawDoomTransitionScreen(
-  canvas: HTMLCanvasElement,
-  wad: Wad,
-  message = 'LOADING'
-): boolean {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return false;
-
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.fillStyle = DOOM_LOAD_BROWN;
-  ctx.fillRect(0, 0, w, h);
-  ctx.imageSmoothingEnabled = false;
-
-  const scale = Math.max(2, Math.min(5, Math.floor(Math.min(w, h) / 72)));
-  const drew = drawStcfnTextCentered(ctx, wad, message, w / 2, h / 2, scale);
-  if (!drew) {
-    drawFallbackLoadingText(ctx, message, w / 2, h / 2, scale);
-  }
-  return true;
-}
-
 /**
  * Draw the classic Doom level load screen: TITLEPIC (retail box logo) top-aligned,
  * M_LOADG plaque, and STCFN "LOADING..." text.
@@ -208,7 +143,8 @@ export function drawDoomLoadingScreen(
 
   const titleData = findLump(wad, 'TITLEPIC');
   if (!titleData) {
-    return drawDoomTransitionScreen(canvas, wad, message.replace(/\.+$/, ''));
+    drawStcfnText(ctx, wad, message, w / 2, h - 24, 2);
+    return false;
   }
 
   const title = drawPatch(titleData, wad.playpal);

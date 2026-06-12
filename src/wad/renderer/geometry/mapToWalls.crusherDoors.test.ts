@@ -43,7 +43,9 @@ describe('MAP28 crusher-style doors', () => {
       mapToWallsForLine(openMap, texturesByName, lineIndex).length
     );
 
-    expect(closedCounts.every((count) => count === 2)).toBe(true);
+    // Only the sidedef with the actual door texture creates geometry — GZDoom doesn't
+    // render phantom walls on the back side that has '-' textures.
+    expect(closedCounts.every((count) => count === 1)).toBe(true);
     expect(openCounts.every((count) => count === 0)).toBe(true);
   });
 
@@ -51,8 +53,8 @@ describe('MAP28 crusher-style doors', () => {
     const map = loadMap28();
     const texturesByName = buildTextureLookup(map);
 
-    expect(mapToWallsForLine(map, texturesByName, 455).length).toBe(2);
-    expect(mapToWallsForLine(map, texturesByName, 551).length).toBe(2);
+    expect(mapToWallsForLine(map, texturesByName, 455).length).toBe(1);
+    expect(mapToWallsForLine(map, texturesByName, 551).length).toBe(1);
 
     const openMap = structuredClone(map);
     openMap.SECTORS[99].ceilingheight = 128;

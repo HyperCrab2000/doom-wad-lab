@@ -30,7 +30,6 @@ describe('FloorMoverSystem', () => {
     }
     expect(platSector.floorheight).toBeGreaterThan(0);
   });
-
 });
 
 function createTaggedMap(

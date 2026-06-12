@@ -1,20 +1,17 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import {
-  drawDoomLoadingScreen,
-  drawLoadingStaticNoise,
-} from './doomLoadingScreen';
+import { drawDoomLoadingScreen } from './doomLoadingScreen';
 
-const WIPE_DURATION_MS = 2400;
+const WIPE_DURATION_MS = 1500;
 const MELT_COLUMNS = 160;
-const LOADING_ANIM_MS = 450;
-const STATIC_FLICKER_MS = 90;
+const LOADING_ANIM_MS = 400;
 
 function createMeltState(height: number): { offset: Float32Array; speed: Float32Array } {
   const offset = new Float32Array(MELT_COLUMNS);
   const speed = new Float32Array(MELT_COLUMNS);
   for (let i = 0; i < MELT_COLUMNS; i++) {
-    offset[i] = -Math.random() * height * 0.12;
-    speed[i] = (height / WIPE_DURATION_MS) * 1000 * (0.75 + Math.random() * 0.55);
+    offset[i] = 0;
+    // Pixels per second — staggered columns finish near WIPE_DURATION_MS.
+    speed[i] = height * (0.55 + Math.random() * 0.65);
   }
   return { offset, speed };
 }
@@ -37,56 +34,7 @@ function syncCanvasSize(
   }
 }
 
-function captureGameFrame(
-  gameCanvas: HTMLCanvasElement,
-  target: HTMLCanvasElement,
-  width: number,
-  height: number
-): boolean {
-  const ctx = target.getContext('2d');
-  if (!ctx) return false;
-
-  target.width = width;
-  target.height = height;
-  ctx.imageSmoothingEnabled = false;
-
-  const gl = gameCanvas.getContext('webgl2');
-  if (gl && gameCanvas.width > 0 && gameCanvas.height > 0) {
-    const readW = gameCanvas.width;
-    const readH = gameCanvas.height;
-    const pixels = new Uint8Array(readW * readH * 4);
-    gl.readPixels(0, 0, readW, readH, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-    const scratch = document.createElement('canvas');
-    scratch.width = readW;
-    scratch.height = readH;
-    const scratchCtx = scratch.getContext('2d');
-    if (scratchCtx) {
-      const imageData = scratchCtx.createImageData(readW, readH);
-      for (let y = 0; y < readH; y++) {
-        const srcRow = (readH - 1 - y) * readW * 4;
-        const dstRow = y * readW * 4;
-        imageData.data.set(pixels.subarray(srcRow, srcRow + readW * 4), dstRow);
-      }
-      scratchCtx.putImageData(imageData, 0, 0);
-      ctx.drawImage(scratch, 0, 0, readW, readH, 0, 0, width, height);
-      return true;
-    }
-  }
-
-  if (gameCanvas.width < 1 || gameCanvas.height < 1) {
-    return false;
-  }
-
-  try {
-    ctx.drawImage(gameCanvas, 0, 0, width, height);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export type LevelTransitionPhase = 'loading' | 'static' | 'wipe';
+export type LevelTransitionPhase = 'loading' | 'wipe';
 
 export const DoomLevelTransition: React.FC<{
   active: boolean;
@@ -103,22 +51,13 @@ export const DoomLevelTransition: React.FC<{
   const snapshotRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const loadingAnimRef = useRef<number | null>(null);
-  const staticAnimRef = useRef<number | null>(null);
   const onCompleteRef = useRef(onComplete);
   const onSnapshotCapturedRef = useRef(onSnapshotCaptured);
   onCompleteRef.current = onComplete;
   onSnapshotCapturedRef.current = onSnapshotCaptured;
 
-  const loadingMessage = useCallback(
-    (dots = 3) => {
-      const base = mapLabel ? `LOADING ${mapLabel}` : 'LOADING';
-      return `${base}${'.'.repeat(dots)}`;
-    },
-    [mapLabel]
-  );
-
   const paintLoadingScreen = useCallback(
-    (message?: string, withStatic = false) => {
+    (message = 'LOADING...') => {
       const overlay = overlayRef.current;
       const loading = loadingRef.current;
       if (!overlay || !loading || !wad) return;
@@ -128,25 +67,21 @@ export const DoomLevelTransition: React.FC<{
         syncCanvasSize(overlay, loading, viewport.clientWidth, viewport.clientHeight);
       }
 
-      const msg = message ?? loadingMessage(3);
-      drawDoomLoadingScreen(loading, wad, msg);
+      drawDoomLoadingScreen(loading, wad, message);
       const ctx = overlay.getContext('2d');
-      if (!ctx) return;
-
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(loading, 0, 0, overlay.width, overlay.height);
-      if (withStatic) {
-        drawLoadingStaticNoise(ctx, overlay.width, overlay.height, 0.18);
+      if (ctx) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(loading, 0, 0, overlay.width, overlay.height);
       }
     },
-    [loadingMessage, viewportRef, wad]
+    [viewportRef, wad]
   );
 
   const runWipe = useCallback(() => {
     const overlay = overlayRef.current;
     const loading = loadingRef.current;
     const gameCanvas = gameCanvasRef.current;
-    if (!overlay || !loading || !gameCanvas) {
+    if (!overlay || !loading || !gameCanvas || gameCanvas.width < 1 || gameCanvas.height < 1) {
       return false;
     }
 
@@ -155,27 +90,23 @@ export const DoomLevelTransition: React.FC<{
 
     const w = overlay.width;
     const h = overlay.height;
-    if (w < 1 || h < 1) {
-      return false;
-    }
-
-    let gameSnapshot = snapshotRef.current;
-    if (!gameSnapshot) {
-      gameSnapshot = document.createElement('canvas');
-      snapshotRef.current = gameSnapshot;
-    }
-
-    if (!captureGameFrame(gameCanvas, gameSnapshot, w, h)) {
-      return false;
-    }
-
-    onSnapshotCapturedRef.current?.();
-    paintLoadingScreen(loadingMessage(3), false);
-
     const melt = createMeltState(h);
     const columnWidth = w / MELT_COLUMNS;
     const start = performance.now();
     let lastFrame = start;
+
+    let gameSnapshot = snapshotRef.current;
+    if (!gameSnapshot || gameSnapshot.width !== w || gameSnapshot.height !== h) {
+      gameSnapshot = document.createElement('canvas');
+      gameSnapshot.width = w;
+      gameSnapshot.height = h;
+      snapshotRef.current = gameSnapshot;
+    }
+    const snapshotCtx = gameSnapshot.getContext('2d');
+    if (!snapshotCtx) return false;
+    snapshotCtx.imageSmoothingEnabled = false;
+    snapshotCtx.drawImage(gameCanvas, 0, 0, w, h);
+    onSnapshotCapturedRef.current?.();
 
     const frame = (now: number) => {
       const dt = Math.min(48, now - lastFrame);
@@ -191,7 +122,7 @@ export const DoomLevelTransition: React.FC<{
       ctx.drawImage(gameSnapshot!, 0, 0, w, h);
 
       for (let col = 0; col < MELT_COLUMNS; col++) {
-        const y = Math.min(h, Math.floor(melt.offset[col]));
+        const y = Math.min(h, melt.offset[col]);
         if (y >= h) continue;
         const sx = Math.floor(col * columnWidth);
         const sw = Math.max(1, Math.ceil((col + 1) * columnWidth) - sx);
@@ -210,7 +141,7 @@ export const DoomLevelTransition: React.FC<{
 
     rafRef.current = requestAnimationFrame(frame);
     return true;
-  }, [gameCanvasRef, loadingMessage, paintLoadingScreen]);
+  }, [gameCanvasRef]);
 
   useEffect(() => {
     if (!active || !wad) {
@@ -222,50 +153,33 @@ export const DoomLevelTransition: React.FC<{
         window.clearInterval(loadingAnimRef.current);
         loadingAnimRef.current = null;
       }
-      if (staticAnimRef.current !== null) {
-        window.clearInterval(staticAnimRef.current);
-        staticAnimRef.current = null;
-      }
       return;
     }
 
-    if (phase === 'loading') {
-      paintLoadingScreen(loadingMessage(3), false);
-      let dot = 0;
-      loadingAnimRef.current = window.setInterval(() => {
-        dot = (dot + 1) % 4;
-        paintLoadingScreen(loadingMessage(dot), false);
-      }, LOADING_ANIM_MS);
+    paintLoadingScreen(mapLabel ? `LOADING ${mapLabel}` : 'LOADING...');
 
-      if (staticAnimRef.current !== null) {
-        window.clearInterval(staticAnimRef.current);
-        staticAnimRef.current = null;
-      }
-    } else if (phase === 'static') {
+    if (phase !== 'loading') {
       if (loadingAnimRef.current !== null) {
         window.clearInterval(loadingAnimRef.current);
         loadingAnimRef.current = null;
       }
-      paintLoadingScreen(loadingMessage(3), true);
-      staticAnimRef.current = window.setInterval(() => {
-        paintLoadingScreen(loadingMessage(3), true);
-      }, STATIC_FLICKER_MS);
-    } else if (loadingAnimRef.current !== null) {
-      window.clearInterval(loadingAnimRef.current);
-      loadingAnimRef.current = null;
+      return;
     }
+
+    let dot = 0;
+    loadingAnimRef.current = window.setInterval(() => {
+      dot = (dot + 1) % 4;
+      const base = mapLabel ? `LOADING ${mapLabel}` : 'LOADING';
+      paintLoadingScreen(`${base}${'.'.repeat(dot)}`);
+    }, LOADING_ANIM_MS);
 
     return () => {
       if (loadingAnimRef.current !== null) {
         window.clearInterval(loadingAnimRef.current);
         loadingAnimRef.current = null;
       }
-      if (staticAnimRef.current !== null) {
-        window.clearInterval(staticAnimRef.current);
-        staticAnimRef.current = null;
-      }
     };
-  }, [active, loadingMessage, paintLoadingScreen, phase, wad]);
+  }, [active, mapLabel, paintLoadingScreen, phase, wad]);
 
   useEffect(() => {
     if (!active || phase !== 'wipe' || !wad) {
@@ -276,10 +190,7 @@ export const DoomLevelTransition: React.FC<{
       return;
     }
 
-    if (staticAnimRef.current !== null) {
-      window.clearInterval(staticAnimRef.current);
-      staticAnimRef.current = null;
-    }
+    paintLoadingScreen(mapLabel ? `LOADING ${mapLabel}` : 'LOADING...');
 
     let cancelled = false;
     let attempts = 0;
@@ -287,7 +198,7 @@ export const DoomLevelTransition: React.FC<{
     const tryStartWipe = () => {
       if (cancelled) return;
       if (runWipe()) return;
-      if (attempts++ < 120) {
+      if (attempts++ < 90) {
         requestAnimationFrame(tryStartWipe);
       } else {
         onCompleteRef.current();
@@ -306,7 +217,7 @@ export const DoomLevelTransition: React.FC<{
         rafRef.current = null;
       }
     };
-  }, [active, phase, runWipe, wad]);
+  }, [active, mapLabel, paintLoadingScreen, phase, runWipe, wad]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -317,9 +228,7 @@ export const DoomLevelTransition: React.FC<{
     const resize = () => {
       syncCanvasSize(overlay, loading, viewport.clientWidth, viewport.clientHeight);
       if (phase === 'loading') {
-        paintLoadingScreen(loadingMessage(3), false);
-      } else if (phase === 'static') {
-        paintLoadingScreen(loadingMessage(3), true);
+        paintLoadingScreen(mapLabel ? `LOADING ${mapLabel}` : 'LOADING...');
       }
     };
 
@@ -327,13 +236,12 @@ export const DoomLevelTransition: React.FC<{
     const observer = new ResizeObserver(resize);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [active, loadingMessage, paintLoadingScreen, phase, viewportRef]);
+  }, [active, mapLabel, paintLoadingScreen, phase, viewportRef]);
+
+  if (!active) return null;
 
   return (
-    <div
-      className={`doom-level-transition ${active ? 'doom-level-transition--active' : ''}`}
-      aria-hidden={!active}
-    >
+    <div className="doom-level-transition" aria-hidden={!active}>
       <canvas ref={loadingRef} className="doom-level-transition__buffer" />
       <canvas ref={overlayRef} className="doom-level-transition__overlay" />
     </div>

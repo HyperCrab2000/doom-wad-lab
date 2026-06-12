@@ -16,7 +16,6 @@ import { findTrianglesAtPosition } from '@/wad/utils/findTrianglesAtPosition';
 import { pointInTriangle } from '@/wad/utils/pointInTriangle';
 import { getEmissiveColor, hasSkyWindow } from '@/wad/renderer/renderGame/lightingHeuristics';
 import { getSectorLineGeometry } from '@/wad/renderer/geometry/getLineDefsBySector';
-import { applySectorTypePresentation } from '@/wad/game/sectorSpecialRuntime';
 import {
   applySectorFloorLighting,
   createThingPointLights,
@@ -125,7 +124,6 @@ function applyMapSectorLighting(
     sector.visibilityDistance = getSectorVisibilityDistance(sector);
     const sampledColor = textureColors.get(sector.floorpic) ?? [1, 1, 1];
     applySectorFloorLighting(sector, sector.floorpic, sampledColor);
-    applySectorTypePresentation(sector);
   });
 
   buffers.walls.forEach((wall) => {

@@ -8,6 +8,7 @@ export interface WallObject {
   sector?: Sector;
   sectorIndex?: number;
   lineIndex?: number;
+  sideDefIndex?: number;
   texName?: string;
   transparent?: boolean;
   twoSidedMiddle?: boolean;

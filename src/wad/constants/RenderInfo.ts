@@ -13,6 +13,9 @@ export const PORTAL_VISIBILITY_RADIUS = 4096;
 /** Safety cap on portal graph traversal depth. */
 export const MAX_PORTAL_TRAVERSAL_DEPTH = 96;
 
+/** From an indoor camera, max indoor-only portal hops (stops whole-map indoor floods). */
+export const MAX_INDOOR_PORTAL_DEPTH = 3;
+
 /** From an indoor camera, max BFS depth for outdoor→indoor portal hops (courtyard windows). */
 export const INDOOR_CAMERA_MAX_SKY_INDOOR_DEPTH = 2;
 

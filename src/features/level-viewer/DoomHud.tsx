@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import type { Wad } from '@/wad/interfaces/Wad';
 import { drawPatch } from '@/wad/renderer/drawAssets/drawPatch';
-import { drawStcfnTextAt, drawStcfnTextCentered } from '@/features/level-viewer/doomLoadingScreen';
+import { drawStcfnTextAt } from '@/features/level-viewer/doomLoadingScreen';
 import { findWadLump } from '@/features/level-viewer/doomWadGraphics';
 import type { PlayerHudSnapshot } from '@/wad/game/playerInventory';
 import type { StatusFaceLump } from '@/wad/game/statusFace';
 
 const BAR_HEIGHT = 32;
 const HUD_SCALE = 2;
+/** Bottom band only — never cover the full viewport with a 2D canvas (breaks WebGL compositing). */
+const HUD_BAND_HEIGHT = 96;
 
 const WEAPON_LABELS: Record<string, string> = {
   fist: 'FIST',
@@ -43,6 +45,8 @@ export interface DoomHudProps {
 
 export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getHudState }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const messageRef = useRef<HTMLDivElement>(null);
+  const deathRef = useRef<HTMLDivElement>(null);
   const stbarRef = useRef<ReturnType<typeof drawPatch> | null>(null);
   const facePatchesRef = useRef<Map<string, ReturnType<typeof drawPatch>>>(new Map());
 
@@ -85,21 +89,21 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
       }
 
       const width = Math.max(1, viewport.clientWidth);
-      const height = Math.max(1, viewport.clientHeight);
-      if (canvas.width !== width || canvas.height !== height) {
+      const bandHeight = HUD_BAND_HEIGHT;
+      if (canvas.width !== width || canvas.height !== bandHeight) {
         canvas.width = width;
-        canvas.height = height;
+        canvas.height = bandHeight;
       }
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: true });
       if (!ctx) {
         frame = requestAnimationFrame(draw);
         return;
       }
 
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, bandHeight);
       const hud = getHudState();
-      const barY = height - BAR_HEIGHT;
+      const barY = bandHeight - BAR_HEIGHT;
 
       const stbar = stbarRef.current;
       if (stbar) {
@@ -144,7 +148,7 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
         drawStcfnTextAt(ctx, wad, powerupLabels.join(' '), width * 0.5, powerupY, HUD_SCALE - 1);
       }
 
-      const baseline = height - 6;
+      const baseline = bandHeight - 6;
       drawStcfnTextAt(ctx, wad, healthText, 16, baseline, HUD_SCALE);
       drawStcfnTextAt(ctx, wad, armorText, width * 0.38, baseline, HUD_SCALE);
       drawStcfnTextAt(ctx, wad, weaponLabel, width * 0.58, baseline, HUD_SCALE);
@@ -159,14 +163,12 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
         drawStcfnTextAt(ctx, wad, keys.join(' '), 12, keyY, HUD_SCALE);
       }
 
-      if (hud.message) {
-        drawStcfnTextCentered(ctx, wad, hud.message, width / 2, height * 0.62, HUD_SCALE) ||
-          drawFallbackMessage(ctx, hud.message, width, height);
+      if (messageRef.current) {
+        messageRef.current.textContent = hud.message ?? '';
+        messageRef.current.hidden = !hud.message;
       }
-
-      if (!hud.alive) {
-        drawStcfnTextCentered(ctx, wad, 'YOU DIED', width / 2, height * 0.45, HUD_SCALE + 1) ||
-          drawFallbackMessage(ctx, 'YOU DIED', width, height, 0.45);
+      if (deathRef.current) {
+        deathRef.current.hidden = hud.alive;
       }
 
       frame = requestAnimationFrame(draw);
@@ -178,7 +180,17 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
 
   if (!active) return null;
 
-  return <canvas ref={canvasRef} className="doom-hud" aria-hidden={!active} />;
+  return (
+    <div className="doom-hud-layer" aria-hidden={!active}>
+      <div ref={messageRef} className="doom-hud-message" hidden />
+      <div ref={deathRef} className="doom-hud-message doom-hud-message--death" hidden>
+        YOU DIED
+      </div>
+      <div className="doom-hud-wrap">
+        <canvas ref={canvasRef} className="doom-hud" />
+      </div>
+    </div>
+  );
 };
 
 function getActiveAmmoDisplay(hud: HudState): string {
@@ -199,20 +211,4 @@ function getActiveAmmoDisplay(hud: HudState): string {
     default:
       return '--';
   }
-}
-
-function drawFallbackMessage(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  width: number,
-  height: number,
-  yRatio = 0.62
-): void {
-  ctx.fillStyle = '#c41e1e';
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 3;
-  ctx.font = '900 22px Impact, "Arial Black", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.strokeText(text, width / 2, height * yRatio);
-  ctx.fillText(text, width / 2, height * yRatio);
 }

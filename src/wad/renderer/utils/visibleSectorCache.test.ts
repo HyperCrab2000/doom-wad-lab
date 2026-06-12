@@ -1,46 +1,37 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
+import { buildSectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
 import { VisibleSectorCache } from './visibleSectorCache';
-import type { SectorVisibilityIndex } from './sectorVisibility';
+
+function loadE1M1() {
+  const wadPath = path.resolve(process.cwd(), 'public/wads/DOOM.WAD');
+  const buf = fs.readFileSync(wadPath);
+  const wad = loadWadFromArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+  return wad.maps.E1M1;
+}
 
 describe('VisibleSectorCache', () => {
-  const index = {
-    subsectorToSector: [0, 1],
-    sectorBounds: [
-      { minX: 0, maxX: 64, minY: 0, maxY: 64 },
-      { minX: 64, maxX: 128, minY: 0, maxY: 64 },
-    ],
-    sectorAdjacency: [[1], [0]],
-  } satisfies SectorVisibilityIndex;
-
-  const map = {
-    SECTORS: [{}, {}],
-    LINEDEFS: [
-      {
-        v1: 0,
-        v2: 1,
-        sidenum: [0, 1],
-        flags: { twoSided: true },
-      },
-    ],
-    SIDEDEFS: [{ sector: 0 }, { sector: 1 }],
-    VERTEXES: [
-      { x: 0, y: 0 },
-      { x: 64, y: 0 },
-    ],
-  } as unknown as import('@/wad/interfaces/WadMap').WadMap;
-
   it('reuses the set when the camera barely moves', () => {
+    const map = loadE1M1();
+    const index = buildSectorVisibilityIndex(map)!;
     const cache = new VisibleSectorCache();
-    const a = cache.getVisibleSectors(index, map, 16, 16, 0);
-    const b = cache.getVisibleSectors(index, map, 20, 18, 0);
+    const a = cache.getVisibleSectors(index, map, -1088, -3616, 70);
+    const b = cache.getVisibleSectors(index, map, -1080, -3610, 70);
+    expect(a).not.toBeNull();
     expect(b).toBe(a);
   });
 
   it('rebuilds after a sector change', () => {
+    const map = loadE1M1();
+    const index = buildSectorVisibilityIndex(map)!;
     const cache = new VisibleSectorCache();
-    const a = cache.getVisibleSectors(index, map, 16, 16, 0);
-    const b = cache.getVisibleSectors(index, map, 80, 16, 1);
+    const a = cache.getVisibleSectors(index, map, -1088, -3616, 70);
+    const b = cache.getVisibleSectors(index, map, -512, -2560, 71);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
     expect(b).not.toBe(a);
-    expect(b.has(1)).toBe(true);
+    expect(b!.has(71)).toBe(true);
   });
 });

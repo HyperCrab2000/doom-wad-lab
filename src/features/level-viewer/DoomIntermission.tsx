@@ -51,7 +51,7 @@ export const DoomIntermission: React.FC<{
         canvas.height = h;
       }
 
-      drawDoomTransitionScreen(canvas, wad, 'FINISHED');
+      drawDoomTransitionScreen(canvas, wad, { segments: ['FINISHED'], dots: 0 });
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 

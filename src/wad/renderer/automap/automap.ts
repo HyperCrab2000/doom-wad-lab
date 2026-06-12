@@ -1,5 +1,6 @@
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { hasValidFlags, isExcludedSpawnThing } from '@/wad/renderer/utils/hasValidFlags';
+import { automapRotationRadians } from '@/wad/renderer/controls/playerView';
 
 /** Vanilla iddt cheat cycles: normal → all lines → all lines + things. */
 export type AutomapCheatLevel = 0 | 1 | 2;
@@ -49,7 +50,7 @@ export function drawAutomap(
 
   ctx.save();
   ctx.translate(centerX, centerY);
-  ctx.rotate(-player.yaw + Math.PI / 2);
+  ctx.rotate(automapRotationRadians(player.yaw));
 
   const toScreen = (x: number, y: number) => ({
     x: (x - player.x) * scale,

@@ -10,8 +10,15 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:browser": "vitest run --project integration test/integration/e1m1-browser-render.integration.test.ts",
     "test:coverage": "vitest run --project unit --coverage",
+    "export:logo": "npx tsx scripts/export-doom-logo.ts public/wads/DOOM.WAD",
     "test:console": "npx tsx scripts/capture-console-errors.ts",
+    "test:load": "npm run test:load:chrome && npm run test:load:firefox",
+    "test:black-screen": "npm run test:load",
+    "test:load:chrome": "npx tsx scripts/verify-e1m1-load.ts",
+    "test:load:firefox": "npx tsx scripts/verify-firefox-load.ts",
+    "test:load:diag": "npx tsx scripts/diagnose-load.ts",
     "test:music": "npx tsx scripts/test-opl3-browser.ts",
     "preview": "vite preview",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,html}\""
@@ -33,6 +40,7 @@
   "homepage": "https://github.com/andrewlowndes/doom",
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@playwright/test": "^1.60.0",
     "@types/earcut": "^3.0.0",
     "@types/gl-matrix": "^2.4.5",
     "@types/http-server": "^0.12.4",

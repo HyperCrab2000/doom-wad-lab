@@ -13,11 +13,18 @@ import { RuntimeVoxelMesh, VoxelThingFrameMap } from './voxelThingMeshes';
 import { hasVoxelDefinitionForSprite } from '@/wad/voxels/voxelCatalog';
 import { RenderableThing } from './renderableThings';
 import {
-  findCameraSectorIndex,
-  isDrawVisible,
+  buildGzdoomDrawState,
+} from '@/wad/renderer/bsp/gzdoomDrawState';
+import {
+  collectGzdoomTransparentWalls,
+  invalidateGzdoomRendererCaches,
+  renderGzdoomFlats,
+  renderGzdoomOpaqueWalls,
+} from '@/wad/renderer/gzdoom/gzdoomRenderer';
+import {
+  isSectorGraphVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
 import { PointLightGrid } from '@/wad/renderer/utils/pointLightGrid';
-import { VisibleSectorCache } from '@/wad/renderer/utils/visibleSectorCache';
 import { shouldRenderFullscreenSkybox } from '@/wad/renderer/utils/sectorSkyVisibility';
 import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import {
@@ -25,7 +32,6 @@ import {
   FRUSTUM_BOUNDS_MARGIN,
   FRUSTUM_CULL_RADIUS,
   VISIBILITY_DISTANCE_MARGIN,
-  WALL_FACING_CULL_DISTANCE,
 } from '@/wad/constants/RenderInfo';
 import { extractFrustumPlanes, isSphereInFrustum } from '@/wad/renderer/utils/frustumCull';
 import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
@@ -41,7 +47,6 @@ import { ThingKind } from '@/wad/constants/ThingTypes';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
 
-const visibleSectorCache = new VisibleSectorCache();
 const pointLightGrid = new PointLightGrid();
 let cachedMap: WadMap | null = null;
 
@@ -82,7 +87,7 @@ let cachedPointLights: readonly PointLight[] | null = null;
 export function invalidateDrawSceneCaches(): void {
   cachedMap = null;
   cachedPointLights = null;
-  visibleSectorCache.invalidate();
+  invalidateGzdoomRendererCaches();
   sectorLightCache.clear();
   pointLightGrid.clear();
 }
@@ -145,7 +150,6 @@ export function drawScene(params: DrawSceneParams) {
 
   if (map !== cachedMap) {
     cachedMap = map;
-    visibleSectorCache.invalidate();
     sectorLightCache.clear();
   }
 
@@ -158,35 +162,30 @@ export function drawScene(params: DrawSceneParams) {
   mat4.multiply(modelViewMatrix, viewMatrix, modelMatrix);
   mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
 
-  const cameraSectorIndex =
-    buffers.triangleHash
-      ? findCameraSectorIndex(
-          map,
-          buffers.sectorTriangles,
-          buffers.triangleHash,
-          cameraPos,
-          buffers.sectorVisibility
-        )
-      : -1;
-
-  const visibleSectors = buffers.sectorVisibility
-    ? visibleSectorCache.getVisibleSectors(
-        buffers.sectorVisibility,
+  const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const drawState = buffers.bspRenderIndex
+    ? buildGzdoomDrawState({
         map,
-        cameraPos[0],
-        -cameraPos[2],
-        cameraSectorIndex
-      )
+        buffers,
+        viewX: cameraPos[0],
+        viewY: -cameraPos[2],
+        viewYaw: viewAngles.yaw,
+        cameraPos,
+      })
     : null;
 
-  const skyAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const resolvedCameraSectorIndex = drawState?.cameraSectorIndex ?? -1;
+  const visibleSectors = drawState?.visibleSectors ?? null;
+
   const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
-  if (
-    skyTexture &&
-    shouldRenderFullscreenSkybox(map, cameraSectorIndex, visibleSectors)
-  ) {
-    drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, skyAngles.yaw, skyAngles.pitch);
+  if (skyTexture && shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)) {
+    drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, viewAngles.yaw, viewAngles.pitch);
+    gl.depthFunc(gl.LESS);
   }
+
+  let frameWallDraws = 0;
+  let frameFlatDraws = 0;
+  let frameWallSkippedTex = 0;
 
   const frustumPlanes = extractFrustumPlanes(modelViewProjMatrix);
 
@@ -195,24 +194,44 @@ export function drawScene(params: DrawSceneParams) {
   flatShader.setUniforms({ modelViewProj: modelViewProjMatrix });
 
   gl.disable(gl.CULL_FACE);
-  const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
 
   const flatBatch: FlatDrawBatch = { batchKey: '', lightKey: '' };
-  for (const flat of sortedFlats) {
-    if (!shouldDrawFlat(flat, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) {
-      continue;
-    }
-    drawFlat(flat, {
+  const flatDrawCtx = {
+    flatShader,
+    textures,
+    wad,
+    animateFlatIndex,
+    timeSeconds,
+    cameraPos,
+    liquidWake: params.liquidWake,
+    recordFlatDraw: () => {
+      frameFlatDraws++;
+    },
+  };
+
+  if (drawState) {
+    renderGzdoomFlats(drawState, buffers, {
       flatShader,
+      modelViewProjMatrix,
       textures,
       wad,
       animateFlatIndex,
       timeSeconds,
       cameraPos,
       liquidWake: params.liquidWake,
-    }, flatBatch);
+      drawFlat: (flat, batch) => {
+        drawFlat(flat, flatDrawCtx, batch);
+      },
+    });
+  } else {
+    const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
+    for (const flat of sortedFlats) {
+      if (!shouldDrawFlat(flat, cameraPos, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
+        continue;
+      }
+      drawFlat(flat, flatDrawCtx, flatBatch);
+    }
   }
-  gl.enable(gl.CULL_FACE);
 
   const wallShader = shaders.walls;
   gl.useProgram(wallShader.program);
@@ -220,9 +239,7 @@ export function drawScene(params: DrawSceneParams) {
 
   let wallUniformBatchKey = '';
   let wallLightKey = '';
-  const drawWall = (wall: MapBuffers['walls'][number]) => {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) return;
-
+  const drawWallMesh = (wall: MapBuffers['walls'][number]) => {
     let textureName = wall.texName;
     const animatedTexture = wad.animatedTextures[textureName];
     if (animatedTexture) {
@@ -232,8 +249,12 @@ export function drawScene(params: DrawSceneParams) {
     const wallTexture =
       textures.walls[textureName] ??
       textures.walls[textureName.toUpperCase()] ??
-      textures.walls[wall.texName];
-    if (!wallTexture) return;
+      textures.walls[wall.texName] ??
+      Object.values(textures.walls)[0];
+    if (!wallTexture) {
+      frameWallSkippedTex++;
+      return;
+    }
 
     const batchKey = `${textureName}:${wall.sectorIndex}`;
     const nextLightKey = lightCellKey(wall.center);
@@ -246,7 +267,7 @@ export function drawScene(params: DrawSceneParams) {
         tex: wallTexture,
         heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
         lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds),
-        shouldClip: wadAssets.texturesByName[textureName].transparent,
+        shouldClip: wadAssets.texturesByName[textureName]?.transparent ?? false,
         repeatVertical: wall.repeatVertical,
         ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
         fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
@@ -269,20 +290,64 @@ export function drawScene(params: DrawSceneParams) {
     }
     wallShader.setAttributes({ aPosition: wall.position, aUv: wall.uv, aNormal: wall.normal });
     wall.indices.draw();
+    frameWallDraws++;
+  };
+
+  const drawWall = (wall: MapBuffers['walls'][number]) => {
+    if (!drawState && !shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
+      return;
+    }
+    drawWallMesh(wall);
   };
 
   gl.disable(gl.BLEND);
   gl.depthMask(true);
+  gl.disable(gl.CULL_FACE);
   wallUniformBatchKey = '';
   wallLightKey = '';
-  for (const wall of buffers.opaqueWalls) {
-    drawWall(wall);
+
+  if (drawState) {
+    renderGzdoomOpaqueWalls(drawState, buffers, {
+      gl,
+      wallShader,
+      modelViewProjMatrix,
+      cameraPos,
+      map,
+      textures,
+      wad,
+      wadAssets,
+      buffers,
+      animateWallIndex,
+      timeSeconds,
+      drawWall,
+    });
+  } else {
+    for (const wall of buffers.opaqueWalls) {
+      drawWall(wall);
+    }
+    for (const wall of buffers.transparentWalls) {
+      if (wall.twoSidedMiddle) continue;
+      drawWall(wall);
+    }
   }
 
   transparentWallPool.length = 0;
-  for (const wall of buffers.transparentWalls) {
-    if (!shouldDrawWall(wall, cameraPos, visibleSectors, cameraSectorIndex, frustumPlanes)) continue;
-    transparentWallPool.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
+  if (drawState) {
+    for (const entry of collectGzdoomTransparentWalls(
+      map,
+      drawState,
+      buffers,
+      cameraPos,
+      getWallDistanceSq
+    )) {
+      transparentWallPool.push(entry);
+    }
+  } else {
+    for (const wall of buffers.transparentWalls) {
+      if (!wall.twoSidedMiddle) continue;
+      if (!shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) continue;
+      transparentWallPool.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
+    }
   }
   if (transparentWallPool.length > 1) {
     transparentWallPool.sort((a, b) => b.distanceSq - a.distanceSq);
@@ -310,13 +375,6 @@ export function drawScene(params: DrawSceneParams) {
   spriteThingPool.length = 0;
   for (const entry of renderableThings) {
     const { thingObj, thingIndex, thingType, thingSector, sectorIndex } = entry;
-    if (visibleSectors && !visibleSectors.has(sectorIndex)) continue;
-    const dx = thingObj.x - cameraPos[0];
-    const dz = -thingObj.y - cameraPos[2];
-    const distanceSq = dx * dx + dz * dz;
-    const visibility = thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE;
-    const maxThingDist = visibility + VISIBILITY_DISTANCE_MARGIN;
-    if (distanceSq > maxThingDist * maxThingDist) continue;
     if (
       !isSphereInFrustum(
         frustumPlanes,
@@ -328,6 +386,10 @@ export function drawScene(params: DrawSceneParams) {
     ) {
       continue;
     }
+
+    const dx = thingObj.x - cameraPos[0];
+    const dy = -thingObj.y - cameraPos[2];
+    const distanceSq = dx * dx + dy * dy;
 
     const voxelFrames = params.voxelThingFrames.get(thingType.sprite);
     const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % (voxelFrames?.length ?? 1)];
@@ -383,6 +445,8 @@ export function drawScene(params: DrawSceneParams) {
     const frameIds = Object.keys(spriteFrames).map(Number).sort();
     const frameId = frameIds[(animateSpriteIndex + thingIndex) % frameIds.length];
     const thingSprite = spriteFrames[frameId];
+    const thingTexture = textures.things[thingSprite.sprite.name];
+    if (!thingTexture) continue;
 
     const thingYPos = thingType.isFloater
       ? thingSector.ceilingheight - thingSprite.sprite.height / 2
@@ -415,7 +479,7 @@ export function drawScene(params: DrawSceneParams) {
       modelViewProj: scratchModelViewProjMatrix,
       centerClipZ: centerClip[2],
       centerClipW: centerClip[3],
-      tex: textures.things[thingSprite.sprite.name],
+      tex: thingTexture,
       lightIntensity: thingSector.lightIntensity,
       fogColor: thingSector.fogColor ?? [0.025, 0.022, 0.02],
       fogDensity: thingSector.fogDensity ?? 0.25,
@@ -437,6 +501,16 @@ export function drawScene(params: DrawSceneParams) {
   if (voxelCounter) {
     voxelCounter.textContent = `VOXELS: ${voxelThingsDrawn} drawn / ${voxelThingsPending} loading`;
   }
+
+  if (typeof window !== 'undefined') {
+    (window as unknown as { __doomDrawStats?: Record<string, number> }).__doomDrawStats = {
+      walls: frameWallDraws,
+      flats: frameFlatDraws,
+      wallSkippedTex: frameWallSkippedTex,
+      wallEntries: drawState?.wallDrawOrder.length ?? 0,
+      flatSubsectors: drawState?.flatSubsectorOrder.length ?? 0,
+    };
+  }
 }
 
 function shouldDrawFlat(
@@ -447,14 +521,10 @@ function shouldDrawFlat(
   frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
   if (
-    !isDrawVisible(
-      flat.center,
-      cameraPos,
-      flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-      visibleSectors,
+    !isSectorGraphVisible(
       flat.sectorIndex,
-      cameraSectorIndex,
-      true
+      visibleSectors,
+      cameraSectorIndex
     )
   ) {
     return false;
@@ -469,42 +539,21 @@ function shouldDrawFlat(
   );
 }
 
+/** Walls draw when BSP includes their linedef (fallback path uses sector visibility set). */
 function shouldDrawWall(
   wall: MapBuffers['walls'][number],
-  cameraPos: [number, number, number],
   visibleSectors: Set<number> | null,
   cameraSectorIndex: number,
   frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
   if (
-    !isDrawVisible(
-      wall.center,
-      cameraPos,
-      wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-      visibleSectors,
+    !isSectorGraphVisible(
       wall.sectorIndex,
-      cameraSectorIndex,
-      false,
-      wall.portalSectors
+      visibleSectors,
+      cameraSectorIndex
     )
   ) {
     return false;
-  }
-
-  if (!wall.transparent && !wall.twoSidedMiddle) {
-    const toCameraX = cameraPos[0] - wall.center[0];
-    const toCameraY = cameraPos[1] - wall.center[1];
-    const toCameraZ = cameraPos[2] - wall.center[2];
-    const distanceSq = toCameraX * toCameraX + toCameraY * toCameraY + toCameraZ * toCameraZ;
-    if (distanceSq > WALL_FACING_CULL_DISTANCE * WALL_FACING_CULL_DISTANCE) {
-      const facing =
-        toCameraX * wall.facingNormal[0] +
-        toCameraY * wall.facingNormal[1] +
-        toCameraZ * wall.facingNormal[2];
-      if (facing <= 0) {
-        return false;
-      }
-    }
   }
 
   const frustumRadius =
@@ -528,6 +577,7 @@ function drawFlat(
     timeSeconds: number;
     cameraPos: [number, number, number];
     liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
+    recordFlatDraw?: () => void;
   },
   batch: FlatDrawBatch
 ) {
@@ -562,7 +612,8 @@ function drawFlat(
   const flatTexture =
     ctx.textures.flats[flatName] ??
     ctx.textures.flats[flatName.toUpperCase()] ??
-    ctx.textures.flats[flat.flatName];
+    ctx.textures.flats[flat.flatName] ??
+    Object.values(ctx.textures.flats)[0];
   if (!flatTexture) return;
 
   const batchKey = `${flatName}:${flat.sectorIndex}`;
@@ -608,6 +659,7 @@ function drawFlat(
 
   ctx.flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });
   flat.indices.draw();
+  ctx.recordFlatDraw?.();
 }
 
 function renderVoxelThing({

@@ -3,6 +3,8 @@ import { mat4 } from 'gl-matrix';
 import { playerEyeHeight } from '@/wad/constants/GameInfo';
 import { Sector } from '@/wad/interfaces/Sector';
 import {
+  automapRotationRadians,
+  bspDebugMapRotationRadians,
   doomAngleToYaw,
   getPlayerEyeZ,
   getViewAnglesFromViewMatrix,
@@ -93,6 +95,35 @@ describe('player view placement', () => {
 
     const angles = getViewAnglesFromViewMatrix(view);
     expect(angles.pitch).toBeGreaterThan(0);
+  });
+
+  it('faces into the E1M1 hangar from the player start (angle 90, south on map)', () => {
+    const yaw = doomAngleToYaw(90);
+    const view = mat4.create();
+    writePlayerViewMatrix(view, {
+      x: 1056,
+      y: -3616,
+      yaw,
+      pitch: 0,
+      worldFeetZ: 0,
+      sector: sector(0, 128),
+    });
+
+    const invView = mat4.invert(mat4.create(), view)!;
+    const forward = [-invView[8], -invView[9], -invView[10]];
+    const len = Math.hypot(forward[0], forward[1], forward[2]);
+    const doomX = forward[0] / len;
+    const doomY = -forward[2] / len;
+
+    // Spawn is 32 units from the north wall; gameplay forward is south (+y).
+    expect(doomX).toBeCloseTo(0, 5);
+    expect(doomY).toBeGreaterThan(0.9);
+    expect(getViewAnglesFromViewMatrix(view).yaw).toBeCloseTo(yaw, 5);
+  });
+
+  it('uses the same rotation as the automap so forward points up on screen', () => {
+    expect(bspDebugMapRotationRadians(Math.PI / 2)).toBeCloseTo(automapRotationRadians(Math.PI / 2));
+    expect(bspDebugMapRotationRadians(0)).toBeCloseTo(Math.PI / 2);
   });
 });
 

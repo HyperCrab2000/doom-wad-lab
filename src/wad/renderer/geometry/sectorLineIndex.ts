@@ -18,23 +18,6 @@ export function getLineIndicesForSectors(map: WadMap, sectorIndices: Iterable<nu
   return lines;
 }
 
-/** Linedef indices that reference any of the given sidedef indices. */
-export function getLineIndicesForSides(map: WadMap, sideIndices: Iterable<number>): Set<number> {
-  const sides = new Set(sideIndices);
-  const lines = new Set<number>();
-
-  map.LINEDEFS.forEach((line, lineIndex) => {
-    for (const sideIndex of line.sidenum) {
-      if (sideIndex >= 0 && sides.has(sideIndex)) {
-        lines.add(lineIndex);
-        break;
-      }
-    }
-  });
-
-  return lines;
-}
-
 export function getFlatIndicesForSectors(
   flats: Array<{ sectorIndex: number }>,
   sectorIndices: Iterable<number>

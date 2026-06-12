@@ -141,5 +141,5 @@ void main() {
   vec3 finalColor = mix(litColor * baseLight * sectorDistanceLight, fogColor, fogFactor);
   finalColor = pow(finalColor, vec3(1.0 / 2.2));
 
-  fragColor = vec4(finalColor, texVal.a);
+  fragColor = vec4(finalColor, 1.0);
 }

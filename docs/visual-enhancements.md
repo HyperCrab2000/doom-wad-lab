@@ -94,11 +94,11 @@ Lit map things (torches, candles, barrels, etc.) become **point lights**:
 Classic **melt** effect on level change:
 
 1. Show loading overlay (`P_SetupLevel` style)
-2. Render one frame of new level → **snapshot** canvas
-3. Animate 160 columns falling at staggered speeds (~1.5s)
+2. Render the new level under the overlay
+3. **Per-pixel vertical columns** drip downward at staggered speeds (~2.6s), revealing the level
 4. Resume gameplay + music
 
-Uses snapshot (not live re-render each frame) for performance.
+The overlay copies the live WebGL frame each tick (with `readPixels` / `drawImage` fallback) so the dissolve always runs.
 
 ## Music visualizer
 

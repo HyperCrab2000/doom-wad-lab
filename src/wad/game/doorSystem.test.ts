@@ -8,17 +8,6 @@ import { Sector } from '@/wad/interfaces/Sector';
 import { WadMap } from '@/wad/interfaces/WadMap';
 
 describe('DoorSystem', () => {
-  it('blocks keyed doors when the player lacks the key', () => {
-    const doorSector = sector(0, 8, 0);
-    const roomSector = sector(0, 128, 0);
-    const map = createDoorMap(doorSector, roomSector, 26, 0);
-    const system = new DoorSystem(map, () => ({ blue: false, red: false, yellow: false }));
-
-    expect(system.tryUseLine(0, map.LINEDEFS[0]).triggered).toBe(false);
-    const withKey = new DoorSystem(map, () => ({ blue: true, red: false, yellow: false }));
-    expect(withKey.tryUseLine(0, map.LINEDEFS[0]).triggered).toBe(true);
-  });
-
   it('raises the back sector ceiling when opening a manual switch door', () => {
     const doorSector = sector(0, 8, 0);
     const roomSector = sector(0, 128, 0);

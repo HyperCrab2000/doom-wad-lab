@@ -28,7 +28,7 @@ describe('pickupSystem', () => {
     const tracker = new PickupTracker();
 
     const result = tryPickups(map, 32, 0, 16, inventory, tracker);
-    expect(result.message).toContain('stimpack');
+    expect(result.message).toBe('Picked up a stimpack.');
     expect(inventory.health).toBe(90);
     expect(tracker.isPicked(stim)).toBe(true);
   });
