@@ -133,3 +133,5 @@ cd doom-wad-lab && npm run test:corpus
 npm run mod:parity
 npm run test:mod-parity
 ```
+
+**Testing docs:** [../TESTING.md](../TESTING.md) · [../../../docs/TESTING.md](../../../docs/TESTING.md)

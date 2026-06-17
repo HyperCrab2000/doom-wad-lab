@@ -1,5 +1,27 @@
 import { defineConfig } from 'vitest/config';
+import os from 'node:os';
 import path from 'path';
+
+const cpuCount = os.cpus().length;
+const maxWorkers = (() => {
+  const fromEnv = process.env.VITEST_MAX_WORKERS;
+  if (fromEnv === '100%') return cpuCount;
+  if (fromEnv) {
+    const n = Number(fromEnv);
+    if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  }
+  return Math.max(2, cpuCount - 1);
+})();
+
+/** Shared pool defaults — file-level parallelism across ~130 unit test files. */
+const parallelPool = {
+  pool: 'threads' as const,
+  maxWorkers,
+  fileParallelism: true,
+  isolate: true,
+  // Bound it.concurrent within a file — avoids Vitest worker RPC timeouts.
+  maxConcurrency: Math.max(4, Math.min(cpuCount, 16)),
+};
 
 /** Pure logic and parsers — unit-testable without WebGL/browser runtime. */
 const coverageInclude = [
@@ -56,6 +78,8 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ['./test/setupWebGL.ts'],
+    hookTimeout: 120_000,
+    ...parallelPool,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
@@ -76,6 +100,8 @@ export default defineConfig({
           include: ['src/**/*.test.ts', 'gzstate/**/*.test.ts'],
           exclude: ['**/*.integration.test.ts', 'test/integration/**'],
           environment: 'node',
+          testTimeout: 60_000,
+          ...parallelPool,
         },
       },
       {
@@ -86,6 +112,10 @@ export default defineConfig({
           environment: 'node',
           setupFiles: ['./test/setup/integrationCanvas.ts'],
           testTimeout: 180_000,
+          // Browser/integration tests: fewer forks to avoid Puppeteer contention.
+          pool: 'forks',
+          maxWorkers: Math.min(4, maxWorkers),
+          fileParallelism: true,
         },
       },
     ],

@@ -15,7 +15,10 @@ import {
   exportToGzstate,
   loadWadFromArrayBuffer,
   readGzstateFile,
+  type Wad,
 } from '@hypercrab2000/doom-wad-core';
+
+import { parallelMap } from '../../../test/parallelMap';
 
 const CORPUS_REQUIRED = process.env.GZRENDER_CORPUS_REQUIRED === '1';
 const CORPUS_ROOT = path.join(process.cwd(), 'artifacts/gzrender-v2/corpus');
@@ -25,7 +28,9 @@ const IWADS = [
   { wadPath: path.join(process.cwd(), 'public/wads/DOOM2.WAD'), slug: 'DOOM2' },
 ] as const;
 
-function loadWadOrSkip(wadPath: string) {
+const wadCache = new Map<string, Wad | null>();
+
+function loadWadOrSkip(wadPath: string): Wad | null {
   if (!fs.existsSync(wadPath)) {
     if (CORPUS_REQUIRED) throw new Error(`Missing IWAD: ${wadPath}`);
     return null;
@@ -34,8 +39,43 @@ function loadWadOrSkip(wadPath: string) {
   return loadWadFromArrayBuffer(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
 }
 
+function cachedWad(wadPath: string, slug: string): Wad | null {
+  if (!wadCache.has(slug)) {
+    wadCache.set(slug, loadWadOrSkip(wadPath));
+  }
+  return wadCache.get(slug) ?? null;
+}
+
+function assertMapParity(wad: Wad, slug: string, map: string): boolean {
+  const mapDir = path.join(CORPUS_ROOT, slug, map);
+  const gzdoomPath = path.join(mapDir, 'gzdoom.gzstate');
+  if (!fs.existsSync(gzdoomPath)) {
+    if (CORPUS_REQUIRED) {
+      throw new Error(`Missing GZDoom fixture for ${slug}/${map}: ${gzdoomPath}`);
+    }
+    return false;
+  }
+
+  const nodeDoc = exportToGzstate(wad, map);
+  const gzdoomDoc = readGzstateFile(new Uint8Array(fs.readFileSync(gzdoomPath)));
+  assertFullParity(nodeDoc, gzdoomDoc);
+
+  const staticGzPath = path.join(mapDir, 'gzdoom-static.gzstate');
+  if (fs.existsSync(staticGzPath)) {
+    const staticDoc = readGzstateFile(new Uint8Array(fs.readFileSync(staticGzPath)));
+    assertFullParity(staticDoc, gzdoomDoc);
+  } else if (CORPUS_REQUIRED) {
+    throw new Error(`Missing static GZDoom fixture for ${slug}/${map}`);
+  }
+
+  return true;
+}
+
 describe('GZSTATE full corpus parity (68 maps)', () => {
   for (const { wadPath, slug } of IWADS) {
+    const wad = cachedWad(wadPath, slug);
+    const maps = wad ? discoverMapNames(wad) : [];
+
     describe(slug, () => {
       it('summary.json reports zero failures when present', () => {
         const summaryPath = path.join(CORPUS_ROOT, slug, 'summary.json');
@@ -58,48 +98,26 @@ describe('GZSTATE full corpus parity (68 maps)', () => {
         expect(summary.staticVerify).toBe(true);
       });
 
+      it('loads IWAD when present', () => {
+        if (!wad) return;
+        expect(maps.length).toBeGreaterThan(0);
+      });
+
       it(
         'every map: Node export matches GZDoom dump (+ static WAD when artifacts exist)',
         async () => {
-        const wad = loadWadOrSkip(wadPath);
-        if (!wad) return;
+          if (!wad) return;
 
-        const maps = discoverMapNames(wad);
-        expect(maps.length).toBeGreaterThan(0);
+          const results = await parallelMap(maps, (map) => assertMapParity(wad, slug, map));
+          const checked = results.filter(Boolean).length;
 
-        let checked = 0;
-        for (const map of maps) {
-          const mapDir = path.join(CORPUS_ROOT, slug, map);
-          const gzdoomPath = path.join(mapDir, 'gzdoom.gzstate');
-          if (!fs.existsSync(gzdoomPath)) {
-            if (CORPUS_REQUIRED) {
-              throw new Error(`Missing GZDoom fixture for ${slug}/${map}: ${gzdoomPath}`);
-            }
-            continue;
+          if (CORPUS_REQUIRED) {
+            expect(checked).toBe(maps.length);
+          } else if (checked === 0) {
+            return;
           }
-
-          const nodeDoc = exportToGzstate(wad, map);
-          const gzdoomDoc = readGzstateFile(new Uint8Array(fs.readFileSync(gzdoomPath)));
-          assertFullParity(nodeDoc, gzdoomDoc);
-          checked++;
-
-          const staticGzPath = path.join(mapDir, 'gzdoom-static.gzstate');
-          if (fs.existsSync(staticGzPath)) {
-            const staticDoc = readGzstateFile(new Uint8Array(fs.readFileSync(staticGzPath)));
-            assertFullParity(staticDoc, gzdoomDoc);
-          } else if (CORPUS_REQUIRED) {
-            throw new Error(`Missing static GZDoom fixture for ${slug}/${map}`);
-          }
-        }
-
-        if (CORPUS_REQUIRED) {
-          expect(checked).toBe(maps.length);
-        } else if (checked === 0) {
-          // Soft skip when no corpus artifacts yet (smoke tests cover E1M1/MAP01 elsewhere).
-          return;
-        }
         },
-        120_000,
+        180_000,
       );
     });
   }

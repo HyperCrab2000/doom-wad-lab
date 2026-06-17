@@ -35,7 +35,12 @@ const result = runFullParity(wadLabDoc, gzdoomDoc);
 ## Tests
 
 - `src/wad/parity/parity.test.ts` — DOOM.WAD/E1M1 and DOOM2.WAD/MAP01 integration vs GZDoom fixtures
+- `src/wad/parity/corpus.parity.test.ts` — **68 maps** (`npm run test:corpus`)
 - `src/wad/parity/raster/raster.test.ts` — palette raster unit tests
+- `src/wad/renderer/modular/modularStageParity.test.ts` — modular stages (`npm run test:modular`)
+- `src/wad/renderer/bsp/vanilla/vanillaBspParity.test.ts` — BSP invariants
+
+Full reference: [docs/TESTING.md](../../docs/TESTING.md)
 
 Regenerate GZDoom fixtures after changing `gzdoom-project/src/gzstate_dump.cpp`:
 

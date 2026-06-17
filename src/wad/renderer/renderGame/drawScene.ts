@@ -239,7 +239,7 @@ function recordModularStageBoundary(
   });
 }
 
-export function drawScene(params: DrawSceneParams) {
+export function executeHwDrawPipeline(params: DrawSceneParams) {
   const {
     gl, shaders, projectionMatrix, modelMatrix, viewMatrix, modelViewMatrix,
     modelViewProjMatrix, playfieldLayout, cameraPos, textures, currentSky, buffers,
@@ -1331,4 +1331,9 @@ function getWallDistanceSq(wall: MapBuffers['walls'][number], cameraPos: [number
     (y - cameraPos[1]) * (y - cameraPos[1]) +
     (z - cameraPos[2]) * (z - cameraPos[2])
   );
+}
+
+/** Classic GL entry — federated WASM uses {@link executeHwDrawPipeline} directly. */
+export function drawScene(params: DrawSceneParams): void {
+  executeHwDrawPipeline(params);
 }

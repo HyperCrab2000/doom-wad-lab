@@ -7,8 +7,11 @@
 # - zipdir on macOS must recurse subdirs (patched in gzdoom-project/tools/zipdir/zipdir.c).
 set -euo pipefail
 
-GZDOOM_ROOT="${GZDOOM_ROOT:-/Users/williamfarmer/IdeaProjects/gzdoom-project}"
-BUILD_DIR="${GZDOOM_BUILD:-$GZDOOM_ROOT/build}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=gzdoom-paths.sh
+source "$SCRIPT_DIR/gzdoom-paths.sh"
+GZDOOM_ROOT="$(resolve_gzdoom_root)" || GZDOOM_ROOT=""
+BUILD_DIR="${GZDOOM_BUILD:-${GZDOOM_ROOT:+$GZDOOM_ROOT/build}}"
 ZIPDIR="$BUILD_DIR/tools/zipdir/zipdir"
 DEST="${GZDOOM_PK3_DIR:-$BUILD_DIR/gzdoom.app/Contents/MacOS}"
 LOG_DIR="${GZRENDER_LOG_DIR:-$(cd "$(dirname "$0")/../.." && pwd)/artifacts/gzrender-v2/logs}"
@@ -19,6 +22,10 @@ mkdir -p "$BUILD_DIR" "$DEST" "$LOG_DIR"
 
 log() { printf '%s\n' "$*" | tee -a "$LOG_FILE"; }
 die() { log "ERROR: $*"; exit 1; }
+
+if [[ -z "$GZDOOM_ROOT" ]]; then
+  die "GZDOOM_ROOT not found — expected sibling doom/gzdoom-project (or set GZDOOM_ROOT)"
+fi
 
 if [[ ! -x "$ZIPDIR" ]]; then
   die "zipdir not found at $ZIPDIR — run: tools/gzrender-v2/build-gzdoom.sh (builds zipdir first)"

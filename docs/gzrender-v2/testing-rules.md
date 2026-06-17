@@ -56,8 +56,27 @@ Stop and fix immediately if:
 
 - After serializer changes: unit + golden tests.
 - After Node adapter changes: unit + state parity smoke.
-- After GZDoom exporter changes: build + dump + state inspector.
+- After GZDoom exporter changes: build + dump + `npm run test:corpus`.
 - After importer changes: import/render smoke.
-- After renderer changes: frame diff smoke.
+- After renderer changes: frame diff smoke (`npm run test:frame`).
 - After event/state-machine changes: event timeline tests.
 - Before ending a session: broadest safe working suite.
+
+## Parallel execution (2026-06-17)
+
+Heavy IWAD suites use three mechanisms documented in [TESTING.md](../TESTING.md):
+
+1. **Vitest file pool** — `threads` pool, `maxWorkers = cpus - 1`, `fileParallelism: true` (~130 unit files in parallel).
+2. **In-test `parallelMap`** — bounded concurrency across maps inside a single `it()` (`test/parallelMap.ts`).
+3. **Snapshot cache** — modular parity avoids redundant Classic/WASM captures (`spawnStageSnapshotHarness.ts`).
+
+Environment overrides:
+
+```bash
+VITEST_MAX_WORKERS=100% npm run test:unit
+VITEST_IN_TEST_PARALLEL=8 npm run test:corpus
+```
+
+**Integration tests** stay on `forks` pool (max 4 workers) to avoid Puppeteer contention.
+
+Do not use hundreds of `it.concurrent` cases in one file — prefer `parallelMap` or small batches (see `vanillaBspParity.test.ts`, batch size 4).

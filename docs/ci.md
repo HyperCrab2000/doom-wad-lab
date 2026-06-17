@@ -29,7 +29,7 @@ flowchart LR
 
 1. **`npm ci`** — clean install from lockfile.
 2. **TimGM6mb.sf2** — downloaded into `public/soundfonts/` for music code paths.
-3. **`npm run test:unit`** — Vitest unit project (`src/**/*.test.ts`).
+3. **`npm run test:unit`** — Vitest unit project (`src/**/*.test.ts`); **threads** pool, parallel across ~130 files ([`vitest.config.ts`](../vitest.config.ts), [TESTING.md](./TESTING.md)).
 4. **`npm run test:coverage`** — same tests with **≥90%** line/statement coverage on scoped engine code ([`vitest.config.ts`](../vitest.config.ts)).
 5. **`npm run test:integration`** — integration project; IWAD tests **skip** when no valid `DOOM.WAD` / `DOOM2.WAD` is present; synthetic line-special tests **always** run.
 6. **`npm run build`** — Vite production bundle (workers + lazy voxel chunk).
@@ -49,11 +49,23 @@ flowchart LR
 
 ```bash
 npm run test:unit
+npm run test:unit:fast    # all CPU cores
 npm run test:coverage
 npm run test:integration
 npm run build
 npm run preview -- --host 127.0.0.1 --port 4173
 TEST_URL=http://127.0.0.1:4173 npm run test:console
+```
+
+### Parity suites (local; not in default CI)
+
+Requires IWADs in `public/wads/` and generated corpus artifacts. See [TESTING.md](./TESTING.md).
+
+```bash
+npm run corpus:parity:all
+npm run test:corpus
+npm run test:modular
+npx vitest run --project unit src/wad/renderer/bsp/vanilla/vanillaBspParity.test.ts
 ```
 
 ## IWAD vs synthetic tests

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { compareFrameSnapshots, formatStageSnapshotDiff } from '@/wad/renderer/modular/compareStageSnapshots';
 import { hashFrameSnapshot } from '@/wad/renderer/modular/stageSnapshotCollector';
@@ -6,9 +6,12 @@ import { MODULAR_STAGE_ORDER } from '@/wad/renderer/modular/modularRenderStage';
 import {
   captureAllSpawnModularFrameSnapshots,
   captureSpawnModularFrameSnapshot,
+  clearModularSnapshotCache,
   iwadsPresent,
 } from '@/wad/renderer/modular/spawnStageSnapshotHarness';
 import { preloadAllIwadMaps } from '@/wad/renderer/bsp/vanilla/vanillaBspHarness';
+import type { ModularFrameSnapshot } from '@/wad/renderer/modular/stageSnapshotTypes';
+import type { MapRef } from '@/wad/renderer/bsp/vanilla/vanillaBspHarness';
 
 describe('modular stage snapshot helpers', () => {
   it('hashFrameSnapshot is stable for identical stage maps', () => {
@@ -48,23 +51,32 @@ describe('modular stage snapshot helpers', () => {
   });
 });
 
-describe('Classic GL vs WASM federated modular stage parity (68 maps @ spawn)', () => {
+describe.concurrent('Classic GL vs WASM federated modular stage parity (68 maps @ spawn)', () => {
+  let classicSnapshots: Array<{ mapRef: MapRef; snapshot: ModularFrameSnapshot }> = [];
+
   beforeAll(() => {
     if (!iwadsPresent()) return;
     preloadAllIwadMaps();
+    classicSnapshots = captureAllSpawnModularFrameSnapshots('classic-gl');
+    for (const { mapRef } of classicSnapshots) {
+      captureSpawnModularFrameSnapshot(mapRef, 'wasm-federated');
+    }
+  });
+
+  afterAll(() => {
+    clearModularSnapshotCache();
   });
 
   it('covers 68 IWAD maps when WADs are present', () => {
     if (!iwadsPresent()) return;
-    const classic = captureAllSpawnModularFrameSnapshots('classic-gl');
-    expect(classic.length).toBe(68);
+    expect(classicSnapshots.length).toBe(68);
   });
 
   it('full renderer state hash matches between Classic GL and WASM at every map spawn', () => {
     if (!iwadsPresent()) return;
 
     const violations: string[] = [];
-    for (const { mapRef, snapshot: classic } of captureAllSpawnModularFrameSnapshots('classic-gl')) {
+    for (const { mapRef, snapshot: classic } of classicSnapshots) {
       const wasm = captureSpawnModularFrameSnapshot(mapRef, 'wasm-federated');
       if (!wasm) {
         violations.push(`${mapRef.wadName}/${mapRef.mapName}: WASM snapshot missing`);
@@ -82,11 +94,11 @@ describe('Classic GL vs WASM federated modular stage parity (68 maps @ spawn)', 
   }, 120_000);
 
   for (const stage of MODULAR_STAGE_ORDER) {
-    it(`per-stage BSP hash parity @ spawn — ${stage}`, () => {
+    it.concurrent(`per-stage BSP hash parity @ spawn — ${stage}`, () => {
       if (!iwadsPresent()) return;
 
       const violations: string[] = [];
-      for (const { mapRef, snapshot: classic } of captureAllSpawnModularFrameSnapshots('classic-gl')) {
+      for (const { mapRef, snapshot: classic } of classicSnapshots) {
         const wasm = captureSpawnModularFrameSnapshot(mapRef, 'wasm-federated');
         if (!wasm) continue;
         const result = compareFrameSnapshots(classic, wasm, [stage]);

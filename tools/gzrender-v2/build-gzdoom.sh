@@ -12,8 +12,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-GZDOOM_ROOT="${GZDOOM_ROOT:-/Users/williamfarmer/IdeaProjects/gzdoom-project}"
-BUILD_DIR="${GZDOOM_BUILD:-$GZDOOM_ROOT/build}"
+# shellcheck source=gzdoom-paths.sh
+source "$SCRIPT_DIR/gzdoom-paths.sh"
+GZDOOM_ROOT="$(resolve_gzdoom_root)" || GZDOOM_ROOT=""
+BUILD_DIR="${GZDOOM_BUILD:-${GZDOOM_ROOT:+$GZDOOM_ROOT/build}}"
 LOG_DIR="${GZRENDER_LOG_DIR:-$ROOT/artifacts/gzrender-v2/logs}"
 LOG_FILE="$LOG_DIR/build-gzdoom.log"
 
@@ -32,8 +34,8 @@ die() {
   exit 1
 }
 
-if [[ ! -d "$GZDOOM_ROOT" ]]; then
-  die "GZDOOM_ROOT not found: $GZDOOM_ROOT"
+if [[ -z "$GZDOOM_ROOT" || ! -d "$GZDOOM_ROOT" ]]; then
+  die "GZDOOM_ROOT not found — expected sibling doom/gzdoom-project (or set GZDOOM_ROOT)"
 fi
 
 if [[ ! -f "$BUILD_DIR/build.ninja" ]]; then

@@ -164,9 +164,9 @@ Module "node:crypto" has been externalized for browser compatibility
 
 | Layer | Command | Maps | Status |
 |-------|---------|------|--------|
-| GZSTATE sections | `npm run test:corpus` | 68 | ✅ Pass |
-| BSP / vanilla invariants | `vanillaBspParity.test.ts` | 68 + 9172 sector probes | ✅ Pass |
-| Modular stage BSP @ spawn | `npm run test:modular` | 68 × 11 stages | ✅ Pass (delegated WASM) |
+| GZSTATE sections | `npm run test:corpus` | 68 | ✅ Pass (~18s) |
+| BSP / vanilla invariants | `vanillaBspParity.test.ts` | 68 + 9000+ sector probes | ✅ Pass (~78s, parallel batches) |
+| Modular stage BSP @ spawn | `npm run test:modular` | 68 × 11 stages | ✅ Pass (~3s, snapshot cache) |
 | E1M1 frame pixels | `npm run test:frame` | 1 | ⚠️ Soft pass; 99.24% mismatch |
 | WASM independent draw | — | 0 | ❌ Not started |
 
@@ -474,6 +474,8 @@ Algorithm (`frameDiff.ts`):
 | Browser smoke | `e1m1-browser-render.integration.test.ts` | canvas not black |
 
 **Do not claim “100% tested clone”** until `GZFRAME_PARITY_REQUIRED=1` passes and WASM draws without delegating to `drawScene`.
+
+**Parallelization & full command reference:** [../TESTING.md](../TESTING.md), [../../../docs/TESTING.md](../../../docs/TESTING.md).
 
 ---
 

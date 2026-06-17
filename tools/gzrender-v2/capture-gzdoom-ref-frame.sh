@@ -10,7 +10,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GZDOOM="${GZDOOM_BIN:-/Users/williamfarmer/IdeaProjects/gzdoom-project/build/gzdoom.app/Contents/MacOS/gzdoom}"
+# shellcheck source=gzdoom-paths.sh
+source "$SCRIPT_DIR/gzdoom-paths.sh"
+GZDOOM="$(resolve_gzdoom_bin)" || GZDOOM=""
 IWAD="${1:-$ROOT/public/wads/DOOM.WAD}"
 MAP="${2:-E1M1}"
 OUT_STATE="${3:-$ROOT/artifacts/gzrender-v2/gzdoom/${MAP}.gzstate}"

@@ -143,6 +143,8 @@ npm run corpus:tick          # GZDoom vs WASM tick parity
 npm run test:engine-render   # federated engine WASM + renderer WASM integration
 ```
 
+**Testing docs:** [docs/TESTING.md](../docs/TESTING.md) · [../../docs/TESTING.md](../../docs/TESTING.md)
+
 ## Browser UI integration (doom-wad-lab)
 
 The Level Viewer already loads **WAD + music independently**. Federated mode plugs in without changing that:

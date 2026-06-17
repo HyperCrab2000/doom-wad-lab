@@ -30,6 +30,7 @@ GZDoom dump → GZDoom import renderer → frame parity → strip renderer
 | [parity-gap-tracker.md](./parity-gap-tracker.md) | Classified unsupported/failing cases |
 | [risk-register.md](./risk-register.md) | Open risks |
 | [test-matrix.md](./test-matrix.md) | Test layer commands and status |
+| [TESTING.md](../TESTING.md) | Exhaustive test reference (this repo) |
 | [wasm-webgl-renderer.md](./wasm-webgl-renderer.md) | **Exhaustive** WASM/WebGL build log, modular stages, parity status |
 
 ## Specification
@@ -40,11 +41,10 @@ GZDoom dump → GZDoom import renderer → frame parity → strip renderer
 | Architecture | [architecture-rules.md](./architecture-rules.md) |
 | GZSTATE v1 | [gzstate-v1.md](./gzstate-v1.md) |
 | Parity | [parity-rules.md](./parity-rules.md) |
-| Testing | [testing-rules.md](./testing-rules.md) |
+| Testing | [testing-rules.md](./testing-rules.md), [testing/README.md](./testing/README.md), [../TESTING.md](../TESTING.md) |
 | Corpus | [corpus-testing.md](./corpus-testing.md) |
 | Events | [event-system.md](./event-system.md) |
 | **Game engine vs renderer** | [game-engine-vs-renderer.md](./game-engine-vs-renderer.md) |
-| Federation | [federation-model.md](./federation-model.md) |
 | Federation | [federation-model.md](./federation-model.md) |
 | Browser/WASM | [browser-wasm-plan.md](./browser-wasm-plan.md) |
 | Memory contract | [project-memory-contract.md](./project-memory-contract.md) |

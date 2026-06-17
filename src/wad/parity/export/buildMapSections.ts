@@ -51,7 +51,7 @@ export function buildLinedefs(map: WadMap): GzstateLineDef[] {
   return map.LINEDEFS.map((line) => ({
     vertex1: line.v1,
     vertex2: line.v2,
-    flags: encodeClassicLineFlags(line.flags),
+    flags: line.rawFlags ?? encodeClassicLineFlags(line.flags),
     flags2: 0,
     special: line.special,
     side0: sideIndex(line.sidenum[0]),

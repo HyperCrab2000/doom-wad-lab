@@ -115,3 +115,15 @@ gzdoom -batchout /dev/null -nosound -iwad DOOM.WAD -warp 1 1 \\
 - `tools/zipdir/zipdir.c` — macOS recursive directory scan fix
 
 Mirror copies: `tools/gzrender-v2/gzdoom/`
+
+## Testing
+
+Vitest gates that consume these tools:
+
+| Gate | Command |
+|------|---------|
+| 68-map GZSTATE | `npm run test:corpus` |
+| Corpus generation | `npm run corpus:parity:all` |
+| Frame capture | `npm run capture:gzdoom-frame` |
+
+Full documentation: [../../docs/TESTING.md](../../docs/TESTING.md), [../../../docs/TESTING.md](../../../docs/TESTING.md).

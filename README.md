@@ -36,6 +36,7 @@ Open the dev server URL. Two modes:
 
 | Guide | Topic |
 |-------|--------|
+| [**Testing**](./docs/TESTING.md) | Vitest, parity suites, parallelization, CI checklist |
 | [WAD processing](./docs/wad-processing.md) | Parse pipeline, workers, geometry, caches |
 | [MUS & music](./docs/mus-music.md) | MUS decode, MIDI conversion, SoundFont playback |
 | [Voxels](./docs/voxels.md) | KVX format, VOXELDEF, in-game meshes |
@@ -94,8 +95,12 @@ Hosting uses **S3 + CloudFront + WAF** with **GitHub Actions OIDC**. See [infra/
 
 ```sh
 npm run build
-npm test
+npm run test:unit
+# Parity (needs IWADs + corpus artifacts):
+npm run test:corpus && npm run test:modular
 ```
+
+See [docs/TESTING.md](./docs/TESTING.md) for the full command reference.
 
 ## License
 
