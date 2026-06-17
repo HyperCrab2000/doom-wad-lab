@@ -9,8 +9,8 @@ import { FramesByThingNameMap } from './types';
 import { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
 import { getViewAnglesFromViewMatrix } from '@/wad/renderer/controls/playerView';
-import { RuntimeVoxelMesh, VoxelThingFrameMap } from './voxelThingMeshes';
-import { hasVoxelDefinitionForSprite } from '@/wad/voxels/voxelCatalog';
+import { RuntimeVoxelMesh, VoxelThingFrameMap, shouldPreferVoxelSprite } from './voxelThingMeshes';
+import type { VoxelCatalogView } from '@/wad/voxels/voxelModCatalog';
 import { RenderableThing } from './renderableThings';
 import {
   buildGzdoomDrawState,
@@ -44,8 +44,32 @@ import {
   type PointLight,
 } from '@/wad/renderer/renderGame/sectorLighting';
 import { ThingKind } from '@/wad/constants/ThingTypes';
+import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
+import type { WallTexture } from '@/wad/interfaces/WallTexture';
+import { bindPlayfieldViewport, clearPlayfieldChrome } from '@/wad/renderer/renderGame/playfieldCamera';
+import {
+  modularStageIndex,
+  modularStageInRange,
+  type ModularRenderStage,
+} from '@/wad/renderer/modular/modularRenderStage';
+import type { StageSnapshotRecorder } from '@/wad/renderer/modular/stageSnapshotCollector';
+import type { StageDrawCounts } from '@/wad/renderer/modular/stageSnapshotTypes';
+import { snapshotFromDrawState } from '@/wad/renderer/bsp/vanilla/bspSnapshot';
+import { drawGzdoomVisibilityWireframe } from '@/wad/renderer/modular/drawGzdoomVisibilityWireframe';
+import { drawGzdoomMeshWireframe } from '@/wad/renderer/modular/drawGzdoomMeshWireframe';
+import { drawBspVisibleSegWireframe } from '@/wad/renderer/modular/bspSegWireframe';
+import { resolveWireframeDrawState as pickWireframeDrawState } from '@/wad/renderer/modular/wireframeDrawState';
+import { drawUnlitFlatMesh, drawUnlitWallMesh } from '@/wad/renderer/modular/drawUnlitMesh';
+import {
+  buildRenderLayerDrawPlan,
+  isWireframeOnlyView,
+  type RenderLayerDrawPlan,
+  type RenderLayerToggles,
+  type WireframeMode,
+} from '@/wad/renderer/modular/renderLayerToggles';
+import { EMPTY_LIGHT_UNIFORMS } from '@/wad/renderer/utils/precomputedLights';
 
 const pointLightGrid = new PointLightGrid();
 let cachedMap: WadMap | null = null;
@@ -105,6 +129,10 @@ export interface DrawSceneParams {
   viewMatrix: mat4;
   modelViewMatrix: mat4;
   modelViewProjMatrix: mat4;
+  invViewProjMatrix: mat4;
+  playfieldLayout: GameViewLayout;
+  cameraFov: number;
+  canvasAspect: number;
   cameraPos: [number, number, number];
   textures: {
     flats: Record<string, WebGLTexture>;
@@ -132,21 +160,141 @@ export interface DrawSceneParams {
   timeSeconds: number;
   renderableThings: RenderableThing[];
   voxelThingFrames: VoxelThingFrameMap;
+  voxelCatalog?: VoxelCatalogView;
   pointLights: PointLight[];
   /** World XZ of a recent liquid entry for surface ripples (optional). */
   liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
+  renderBackend?: RenderBackend;
+  wadPath?: string | null;
+  mapName?: string;
+  wallTexturesByName: Record<string, WallTexture>;
+  floorTextureColors: Map<string, [number, number, number]>;
+  wallTextureColors: Map<string, [number, number, number]>;
+  /** When set (Path Trace modular mode), only runs passes up to this stage. */
+  modularStageCap?: ModularRenderStage | null;
+  /** When set with cap, only runs passes from this stage upward (overlay draws). */
+  modularStageMin?: ModularRenderStage | null;
+  /** Skip chromakey clear — draw on top of GPU path trace color buffer. */
+  skipPlayfieldClear?: boolean;
+  /** Layer toggles from LevelViewer (Classic + path-trace hybrid). */
+  renderLayerToggles?: RenderLayerToggles;
+  /** Path trace: draw only hybrid overlays (wireframe, liquid, voxels). */
+  pathTraceOverlay?: boolean;
+  /** When set, records per-stage draw/BSP snapshots for modular parity. */
+  stageSnapshotRecorder?: StageSnapshotRecorder;
+}
+
+function wireframeDebugActive(cap: ModularRenderStage | null | undefined): boolean {
+  if (cap == null) return false;
+  const i = modularStageIndex(cap);
+  return i >= modularStageIndex('visibilityWireframe') && i <= modularStageIndex('meshWireframe');
+}
+
+function passesFlatsUnlit(cap: ModularRenderStage | null | undefined): boolean {
+  if (cap == null) return false;
+  const i = modularStageIndex(cap);
+  return i >= modularStageIndex('flatsUnlit') && i < modularStageIndex('flats');
+}
+
+function passesFlatsTextured(cap: ModularRenderStage | null | undefined): boolean {
+  if (cap == null) return true;
+  return modularStageIndex(cap) >= modularStageIndex('flats');
+}
+
+function passesWallsUnlit(cap: ModularRenderStage | null | undefined): boolean {
+  if (cap == null) return false;
+  const i = modularStageIndex(cap);
+  return i >= modularStageIndex('wallsUnlit') && i < modularStageIndex('wallsOpaque');
+}
+
+function passesWallsTextured(cap: ModularRenderStage | null | undefined): boolean {
+  if (cap == null) return true;
+  return modularStageIndex(cap) >= modularStageIndex('wallsOpaque');
+}
+
+function makeStageDrawCounts(): StageDrawCounts {
+  return {
+    walls: 0,
+    flats: 0,
+    transparentWalls: 0,
+    voxels: 0,
+    sprites: 0,
+    wallSkippedTex: 0,
+  };
+}
+
+function recordModularStageBoundary(
+  recorder: StageSnapshotRecorder | undefined,
+  stage: ModularRenderStage,
+  drawState: ReturnType<typeof buildGzdoomDrawState> | null,
+  counts: StageDrawCounts,
+): void {
+  if (!recorder) return;
+  recorder.record(stage, {
+    cameraSectorIndex: drawState?.cameraSectorIndex ?? -1,
+    cameraSubsector: drawState?.cameraSubsector ?? -1,
+    flatDrawMode: drawState?.flatDrawMode ?? 'unknown',
+    drawCounts: { ...counts },
+    bsp: drawState ? snapshotFromDrawState(drawState) : null,
+  });
 }
 
 export function drawScene(params: DrawSceneParams) {
   const {
     gl, shaders, projectionMatrix, modelMatrix, viewMatrix, modelViewMatrix,
-    modelViewProjMatrix, cameraPos, textures, currentSky, buffers,
+    modelViewProjMatrix, playfieldLayout, cameraPos, textures, currentSky, buffers,
     wad, map, wadAssets, sortedFramesByThingName,
     animateFlatIndex, animateWallIndex, animateSpriteIndex, timeSeconds, skyboxBuffers,
     renderableThings, pointLights, liquidWake,
+    modularStageCap: stageCap = null,
+    modularStageMin: stageMin = null,
+    skipPlayfieldClear = false,
+    renderLayerToggles,
+    pathTraceOverlay = false,
+    stageSnapshotRecorder,
   } = params;
 
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const layerPlan = renderLayerToggles ? buildRenderLayerDrawPlan(renderLayerToggles) : null;
+
+  if (pathTraceOverlay && layerPlan) {
+    drawPathTraceHybridOverlay(params, layerPlan);
+    return;
+  }
+
+  const runStage = (stage: ModularRenderStage): boolean => {
+    if (layerPlan) {
+      switch (stage) {
+        case 'sky':
+          return layerPlan.sky;
+        case 'flatsUnlit':
+          return layerPlan.ceilingsUnlit || layerPlan.floorsUnlit;
+        case 'flats':
+          return layerPlan.floorsTextured || layerPlan.ceilingsTextured;
+        case 'wallsUnlit':
+          return layerPlan.wallsUnlit;
+        case 'wallsOpaque':
+        case 'wallsTransparent':
+          return layerPlan.wallsTextured;
+        case 'voxels':
+          return layerPlan.voxels;
+        case 'sprites':
+          return layerPlan.sprites;
+        default:
+          return true;
+      }
+    }
+    if (stageCap == null && stageMin == null) return true;
+    return modularStageInRange(stageCap, stageMin, stage);
+  };
+
+  if (!skipPlayfieldClear) {
+    clearPlayfieldChrome(gl);
+    bindPlayfieldViewport(gl, playfieldLayout);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  } else {
+    bindPlayfieldViewport(gl, playfieldLayout);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+  }
 
   if (map !== cachedMap) {
     cachedMap = map;
@@ -163,6 +311,7 @@ export function drawScene(params: DrawSceneParams) {
   mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
 
   const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const courtyardSky = renderLayerToggles?.courtyardSky ?? true;
   const drawState = buffers.bspRenderIndex
     ? buildGzdoomDrawState({
         map,
@@ -171,21 +320,80 @@ export function drawScene(params: DrawSceneParams) {
         viewY: -cameraPos[2],
         viewYaw: viewAngles.yaw,
         cameraPos,
+        enableCourtyardSky: courtyardSky,
       })
     : null;
 
   const resolvedCameraSectorIndex = drawState?.cameraSectorIndex ?? -1;
   const visibleSectors = drawState?.visibleSectors ?? null;
 
+  const stageDrawCounts = makeStageDrawCounts();
+  recordModularStageBoundary(stageSnapshotRecorder, 'clear', drawState, stageDrawCounts);
+
+  if (layerPlan && renderLayerToggles && isWireframeOnlyView(renderLayerToggles)) {
+    bindPlayfieldViewport(gl, playfieldLayout);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (drawState) {
+      drawDebugMeshOverlays({
+        gl,
+        map,
+        buffers,
+        drawState,
+        modelViewProjMatrix,
+        layerPlan,
+        sceneParams: params,
+      });
+      publishWireframeDrawStats(drawState, layerPlan, params, buffers);
+    }
+    return;
+  }
+
+  if (drawState && wireframeDebugActive(stageCap) && !skipPlayfieldClear) {
+    if (runStage('visibilityWireframe')) {
+      drawGzdoomVisibilityWireframe({
+        gl,
+        map,
+        drawState,
+        modelViewProjMatrix,
+      });
+    }
+    if (runStage('meshWireframe')) {
+      drawGzdoomMeshWireframe({
+        gl,
+        map,
+        buffers,
+        drawState,
+        modelViewProjMatrix,
+        edgeMode: 'triangles',
+      });
+    }
+    if (stageCap && modularStageIndex(stageCap) <= modularStageIndex('meshWireframe')) {
+      recordModularStageBoundary(stageSnapshotRecorder, 'visibilityWireframe', drawState, stageDrawCounts);
+      recordModularStageBoundary(stageSnapshotRecorder, 'meshWireframe', drawState, stageDrawCounts);
+      stageSnapshotRecorder?.finalize();
+      if (typeof window !== 'undefined') {
+        (window as unknown as { __doomModularStage?: string }).__doomModularStage = stageCap;
+      }
+      return;
+    }
+  }
+
+  recordModularStageBoundary(stageSnapshotRecorder, 'visibilityWireframe', drawState, stageDrawCounts);
+  recordModularStageBoundary(stageSnapshotRecorder, 'meshWireframe', drawState, stageDrawCounts);
+
   const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
-  if (skyTexture && shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)) {
+  if (runStage('sky') && skyTexture && shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)) {
     drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, viewAngles.yaw, viewAngles.pitch);
     gl.depthFunc(gl.LESS);
   }
+  recordModularStageBoundary(stageSnapshotRecorder, 'sky', drawState, stageDrawCounts);
 
   let frameWallDraws = 0;
   let frameFlatDraws = 0;
   let frameWallSkippedTex = 0;
+  let frameSpriteDraws = 0;
+  let frameTransparentWallDraws = 0;
 
   const frustumPlanes = extractFrustumPlanes(modelViewProjMatrix);
 
@@ -195,45 +403,124 @@ export function drawScene(params: DrawSceneParams) {
 
   gl.disable(gl.CULL_FACE);
 
-  const flatBatch: FlatDrawBatch = { batchKey: '', lightKey: '' };
-  const flatDrawCtx = {
-    flatShader,
-    textures,
-    wad,
-    animateFlatIndex,
-    timeSeconds,
-    cameraPos,
-    liquidWake: params.liquidWake,
-    recordFlatDraw: () => {
-      frameFlatDraws++;
-    },
-  };
+  const drawFlatsUnlit = runStage('flatsUnlit') && passesFlatsUnlit(stageCap);
+  const drawFlatsTextured = runStage('flats') && passesFlatsTextured(stageCap);
 
-  if (drawState) {
-    renderGzdoomFlats(drawState, buffers, {
+  if (drawFlatsUnlit || drawFlatsTextured) {
+    const flatBatch: FlatDrawBatch = { batchKey: '', lightKey: '' };
+    const flatDrawCtx = {
       flatShader,
-      modelViewProjMatrix,
       textures,
       wad,
       animateFlatIndex,
       timeSeconds,
       cameraPos,
       liquidWake: params.liquidWake,
-      drawFlat: (flat, batch) => {
-        drawFlat(flat, flatDrawCtx, batch);
+      recordFlatDraw: () => {
+        frameFlatDraws++;
       },
-    });
-  } else {
-    const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
-    for (const flat of sortedFlats) {
-      if (!shouldDrawFlat(flat, cameraPos, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
-        continue;
+    };
+
+    const drawFlatEntry = (flat: MapBuffers['flats'][number], batch: FlatDrawBatch) => {
+      const isFloorFlat =
+        normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
+      if (layerPlan) {
+        if (isFloorFlat && !layerPlan.drawFloorFlats) return;
+        if (!isFloorFlat && !layerPlan.drawCeilingFlats) return;
+        const liquid = isFloorFlat ? getFloorLiquidDrawUniforms(flat.sector.floorpic) : null;
+        if (layerPlan.liquidAnimated && liquid) {
+          drawFlat(flat, { ...flatDrawCtx, layerPlan }, batch);
+          return;
+        }
+        if (isFloorFlat && layerPlan.floorsUnlit) {
+          drawUnlitFlatMesh(gl, modelViewProjMatrix, flat);
+          frameFlatDraws++;
+          return;
+        }
+        if (!isFloorFlat && layerPlan.ceilingsUnlit) {
+          drawUnlitFlatMesh(gl, modelViewProjMatrix, flat);
+          frameFlatDraws++;
+          return;
+        }
+        if (isFloorFlat && layerPlan.floorsTextured) {
+          drawFlat(flat, { ...flatDrawCtx, layerPlan }, batch);
+          return;
+        }
+        if (!isFloorFlat && layerPlan.ceilingsTextured) {
+          drawFlat(flat, { ...flatDrawCtx, layerPlan }, batch);
+          return;
+        }
+        return;
       }
-      drawFlat(flat, flatDrawCtx, flatBatch);
+      if (drawFlatsTextured) {
+        drawFlat(flat, flatDrawCtx, batch);
+      } else {
+        drawUnlitFlatMesh(gl, modelViewProjMatrix, flat);
+        frameFlatDraws++;
+      }
+    };
+
+    if (drawState) {
+      renderGzdoomFlats(drawState, buffers, {
+        flatShader,
+        modelViewProjMatrix,
+        textures,
+        wad,
+        animateFlatIndex,
+        timeSeconds,
+        cameraPos,
+        liquidWake: params.liquidWake,
+        drawFlat: drawFlatEntry,
+      });
+    } else if (drawFlatsTextured) {
+      const sortedFlats = buffers.sortedFlats?.length ? buffers.sortedFlats : buffers.flats;
+      for (const flat of sortedFlats) {
+        if (!shouldDrawFlat(flat, cameraPos, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
+          continue;
+        }
+        drawFlat(flat, flatDrawCtx, flatBatch);
+      }
     }
   }
 
+  stageDrawCounts.flats = frameFlatDraws;
+  recordModularStageBoundary(stageSnapshotRecorder, 'flatsUnlit', drawState, stageDrawCounts);
+  recordModularStageBoundary(stageSnapshotRecorder, 'flats', drawState, stageDrawCounts);
+
+  const drawWallsUnlit = runStage('wallsUnlit') && passesWallsUnlit(stageCap);
+  const drawWallsTextured = runStage('wallsOpaque') && passesWallsTextured(stageCap);
+
   const wallShader = shaders.walls;
+
+  const drawWallUnlit = (wall: MapBuffers['walls'][number]) => {
+    if (!drawState && !shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
+      return;
+    }
+    drawUnlitWallMesh(gl, modelViewProjMatrix, wall);
+    frameWallDraws++;
+  };
+
+  if (drawWallsUnlit) {
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+    gl.disable(gl.CULL_FACE);
+    if (drawState) {
+      renderGzdoomOpaqueWalls(drawState, buffers, {
+        gl,
+        wallShader,
+        modelViewProjMatrix,
+        cameraPos,
+        map,
+        textures,
+        wad,
+        wadAssets,
+        buffers,
+        animateWallIndex,
+        timeSeconds,
+        drawWall: drawWallUnlit,
+      });
+    }
+  } else if (drawWallsTextured) {
   gl.useProgram(wallShader.program);
   wallShader.setUniforms({ modelViewProj: modelViewProjMatrix, uCameraPos: cameraPos });
 
@@ -269,7 +556,10 @@ export function drawScene(params: DrawSceneParams) {
         lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds),
         shouldClip: wadAssets.texturesByName[textureName]?.transparent ?? false,
         repeatVertical: wall.repeatVertical,
-        ambientColor: wall.sector.ambientColor ?? [1, 1, 1],
+        ambientColor:
+          layerPlan && !layerPlan.coloredLights
+            ? [1, 1, 1]
+            : (wall.sector.ambientColor ?? [1, 1, 1]),
         fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
         fogDensity: wall.sector.fogDensity ?? 0.25,
         visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
@@ -286,7 +576,11 @@ export function drawScene(params: DrawSceneParams) {
     }
     if (nextLightKey !== wallLightKey) {
       wallLightKey = nextLightKey;
-      wallShader.setUniforms(pointLightGrid.queryUniforms(wall.center));
+      wallShader.setUniforms(
+        layerPlan && !layerPlan.dynamicLights
+          ? EMPTY_LIGHT_UNIFORMS
+          : pointLightGrid.queryUniforms(wall.center)
+      );
     }
     wallShader.setAttributes({ aPosition: wall.position, aUv: wall.uv, aNormal: wall.normal });
     wall.indices.draw();
@@ -331,38 +625,50 @@ export function drawScene(params: DrawSceneParams) {
     }
   }
 
+  stageDrawCounts.walls = frameWallDraws;
+  stageDrawCounts.wallSkippedTex = frameWallSkippedTex;
+  recordModularStageBoundary(stageSnapshotRecorder, 'wallsUnlit', drawState, stageDrawCounts);
+  recordModularStageBoundary(stageSnapshotRecorder, 'wallsOpaque', drawState, stageDrawCounts);
+
   transparentWallPool.length = 0;
-  if (drawState) {
-    for (const entry of collectGzdoomTransparentWalls(
-      map,
-      drawState,
-      buffers,
-      cameraPos,
-      getWallDistanceSq
-    )) {
-      transparentWallPool.push(entry);
+  if (runStage('wallsTransparent')) {
+    if (drawState) {
+      for (const entry of collectGzdoomTransparentWalls(
+        map,
+        drawState,
+        buffers,
+        cameraPos,
+        getWallDistanceSq
+      )) {
+        transparentWallPool.push(entry);
+      }
+    } else {
+      for (const wall of buffers.transparentWalls) {
+        if (!wall.twoSidedMiddle) continue;
+        if (!shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) continue;
+        transparentWallPool.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
+      }
     }
-  } else {
-    for (const wall of buffers.transparentWalls) {
-      if (!wall.twoSidedMiddle) continue;
-      if (!shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) continue;
-      transparentWallPool.push({ wall, distanceSq: getWallDistanceSq(wall, cameraPos) });
+    if (transparentWallPool.length > 1) {
+      transparentWallPool.sort((a, b) => b.distanceSq - a.distanceSq);
     }
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    wallUniformBatchKey = '';
+    wallLightKey = '';
+    for (const entry of transparentWallPool) {
+      drawWall(entry.wall);
+      frameTransparentWallDraws++;
+    }
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
   }
-  if (transparentWallPool.length > 1) {
-    transparentWallPool.sort((a, b) => b.distanceSq - a.distanceSq);
   }
 
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.depthMask(false);
-  wallUniformBatchKey = '';
-  wallLightKey = '';
-  for (const entry of transparentWallPool) {
-    drawWall(entry.wall);
-  }
-  gl.depthMask(true);
-  gl.disable(gl.BLEND);
+  stageDrawCounts.transparentWalls = frameTransparentWallDraws;
+  recordModularStageBoundary(stageSnapshotRecorder, 'wallsTransparent', drawState, stageDrawCounts);
 
   const thingShader = shaders.things;
   const voxelShader = shaders.voxelThings;
@@ -393,7 +699,7 @@ export function drawScene(params: DrawSceneParams) {
 
     const voxelFrames = params.voxelThingFrames.get(thingType.sprite);
     const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % (voxelFrames?.length ?? 1)];
-    if (voxelFrame?.mesh) {
+    if (voxelFrame?.mesh && runStage('voxels')) {
       voxelThingsDrawn++;
       renderVoxelThing({
         gl,
@@ -409,14 +715,17 @@ export function drawScene(params: DrawSceneParams) {
       });
       continue;
     }
-    if (hasVoxelDefinitionForSprite(thingType.sprite)) {
+    if (shouldPreferVoxelSprite(thingType.sprite, params.voxelCatalog)) {
       voxelThingsPending++;
       continue;
     }
-    spriteThingPool.push({ entry, distanceSq });
+    if (runStage('sprites')) {
+      spriteThingPool.push({ entry, distanceSq });
+    }
   }
   gl.enable(gl.CULL_FACE);
 
+  if (runStage('sprites')) {
   gl.useProgram(thingShader.program);
   gl.activeTexture(gl.TEXTURE0);
   thingShader.setAttributes({ aPosition: buffers.thing.position, aUv: buffers.thing.uv });
@@ -492,10 +801,18 @@ export function drawScene(params: DrawSceneParams) {
     });
 
     buffers.thing.indices.draw();
+    frameSpriteDraws++;
   }
   gl.enable(gl.CULL_FACE);
   gl.depthMask(true);
   gl.disable(gl.BLEND);
+  }
+
+  stageDrawCounts.voxels = voxelThingsDrawn;
+  stageDrawCounts.sprites = frameSpriteDraws;
+  recordModularStageBoundary(stageSnapshotRecorder, 'voxels', drawState, stageDrawCounts);
+  recordModularStageBoundary(stageSnapshotRecorder, 'sprites', drawState, stageDrawCounts);
+  stageSnapshotRecorder?.finalize();
 
   const voxelCounter = document.getElementById('voxel-counter');
   if (voxelCounter) {
@@ -503,14 +820,71 @@ export function drawScene(params: DrawSceneParams) {
   }
 
   if (typeof window !== 'undefined') {
-    (window as unknown as { __doomDrawStats?: Record<string, number> }).__doomDrawStats = {
+    (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
       walls: frameWallDraws,
       flats: frameFlatDraws,
       wallSkippedTex: frameWallSkippedTex,
+      voxels: voxelThingsDrawn,
+      voxelsPending: voxelThingsPending,
+      sprites: frameSpriteDraws,
       wallEntries: drawState?.wallDrawOrder.length ?? 0,
       flatSubsectors: drawState?.flatSubsectorOrder.length ?? 0,
+      cameraSectorIndex: drawState?.cameraSectorIndex ?? -1,
+      flatDrawMode: drawState?.flatDrawMode ?? 'unknown',
+      courtyardFlat42:
+        drawState?.flatSubsectorOrder.some(
+          (ss) => (buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1) === 42
+        ) ?? false,
     };
   }
+
+  if (drawState && layerPlan && (layerPlan.wireframeMode !== 'off' || layerPlan.meshTriangles)) {
+    bindPlayfieldViewport(gl, playfieldLayout);
+    drawDebugMeshOverlays({
+      gl,
+      map,
+      buffers,
+      drawState,
+      modelViewProjMatrix,
+      layerPlan,
+      sceneParams: params,
+    });
+    publishWireframeDrawStats(drawState, layerPlan, params, buffers);
+  }
+}
+
+function wireframeListsForStats(
+  mode: WireframeMode,
+  params: DrawSceneParams,
+  drawState: NonNullable<ReturnType<typeof buildGzdoomDrawState>>
+): NonNullable<ReturnType<typeof buildGzdoomDrawState>> {
+  if (mode === 'off') return drawState;
+  return pickWireframeDrawState(mode, params, drawState);
+}
+
+function publishWireframeDrawStats(
+  drawState: NonNullable<ReturnType<typeof buildGzdoomDrawState>>,
+  layerPlan: RenderLayerDrawPlan,
+  params: DrawSceneParams,
+  buffers: MapBuffers
+): void {
+  if (typeof window === 'undefined') return;
+  const wfState = wireframeListsForStats(layerPlan.wireframeMode, params, drawState);
+  const bspLists = layerPlan.wireframeMode === 'bsp';
+  (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
+    ...((window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats ?? {}),
+    wallEntries: bspLists ? drawState.bspWallDrawOrder.length : wfState.wallDrawOrder.length,
+    flatSubsectors: bspLists
+      ? drawState.bspFlatSubsectorOrder.length
+      : wfState.flatSubsectorOrder.length,
+    wireframeMode: layerPlan.wireframeMode,
+    wireframePortalCulled: layerPlan.wireframeMode === 'sight',
+    cameraSectorIndex: drawState.cameraSectorIndex,
+    flatDrawMode: drawState.flatDrawMode,
+    courtyardFlat42: wfState.flatSubsectorOrder.some(
+      (ss) => (buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1) === 42
+    ),
+  };
 }
 
 function shouldDrawFlat(
@@ -567,6 +941,194 @@ function shouldDrawWall(
   );
 }
 
+function drawDebugMeshOverlays(params: {
+  gl: WebGL2RenderingContext;
+  map: DrawSceneParams['map'];
+  buffers: DrawSceneParams['buffers'];
+  drawState: NonNullable<ReturnType<typeof buildGzdoomDrawState>>;
+  modelViewProjMatrix: DrawSceneParams['modelViewProjMatrix'];
+  layerPlan: RenderLayerDrawPlan;
+  /** Path trace hybrid overlay: lines always on top of traced color. */
+  pathTraceOverlay?: boolean;
+  /** Full draw scene params — required for ray sight wireframe. */
+  sceneParams?: DrawSceneParams;
+}): void {
+  const { gl, map, buffers, drawState, modelViewProjMatrix, layerPlan, sceneParams } = params;
+  const mode = layerPlan.wireframeMode;
+  if (mode === 'off' && !layerPlan.meshTriangles) return;
+
+  const segMode = mode === 'bsp' ? 'production' : 'portal';
+  const meshVisibility = mode === 'bsp' ? 'bsp' : 'portal';
+  const wireframeDrawState =
+    mode === 'off' || !sceneParams
+      ? drawState
+      : pickWireframeDrawState(mode, sceneParams, drawState);
+
+  if (mode !== 'off') {
+    drawBspVisibleSegWireframe({
+      gl,
+      map,
+      buffers,
+      drawState: mode === 'bsp' ? drawState : wireframeDrawState,
+      modelViewProjMatrix,
+      mode: segMode,
+    });
+  }
+  if (layerPlan.meshTriangles) {
+    drawGzdoomMeshWireframe({
+      gl,
+      map,
+      buffers,
+      drawState: mode === 'bsp' ? drawState : wireframeDrawState,
+      modelViewProjMatrix,
+      edgeMode: 'triangles',
+      visibility: meshVisibility,
+    });
+  }
+}
+
+function drawPathTraceHybridOverlay(params: DrawSceneParams, layerPlan: RenderLayerDrawPlan): void {
+  const {
+    gl,
+    map,
+    buffers,
+    shaders,
+    viewMatrix,
+    projectionMatrix,
+    modelViewProjMatrix,
+    playfieldLayout,
+    cameraPos,
+    textures,
+    wad,
+    wadAssets,
+    renderableThings,
+    voxelThingFrames,
+    animateSpriteIndex,
+    timeSeconds,
+    liquidWake,
+    animateFlatIndex,
+    renderLayerToggles,
+  } = params;
+
+  bindPlayfieldViewport(gl, playfieldLayout);
+  if (renderLayerToggles && isWireframeOnlyView(renderLayerToggles)) {
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  } else {
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+  }
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
+
+  const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const courtyardSky = renderLayerToggles?.courtyardSky ?? true;
+  const drawState = buffers.bspRenderIndex
+    ? buildGzdoomDrawState({
+        map,
+        buffers,
+        viewX: cameraPos[0],
+        viewY: -cameraPos[2],
+        viewYaw: viewAngles.yaw,
+        cameraPos,
+        enableCourtyardSky: courtyardSky,
+      })
+    : null;
+  if (!drawState) return;
+
+  drawDebugMeshOverlays({
+    gl,
+    map,
+    buffers,
+    drawState,
+    modelViewProjMatrix,
+    layerPlan,
+    pathTraceOverlay: true,
+    sceneParams: params,
+  });
+
+  publishWireframeDrawStats(drawState, layerPlan, params, buffers);
+
+  if (typeof window !== 'undefined' && (layerPlan.wireframeMode !== 'off' || layerPlan.meshTriangles)) {
+    const wfState = wireframeListsForStats(layerPlan.wireframeMode, params, drawState);
+    (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
+      walls: 0,
+      flats: 0,
+      wallEntries: wfState.wallDrawOrder.length,
+      flatSubsectors: wfState.flatSubsectorOrder.length,
+      cameraSectorIndex: drawState.cameraSectorIndex,
+      wireframeMode: layerPlan.wireframeMode,
+      wireframePortalCulled: layerPlan.wireframeMode === 'sight',
+      flatDrawMode: drawState.flatDrawMode,
+    };
+  }
+
+  if (layerPlan.liquidAnimated) {
+    const flatShader = shaders.flats;
+    gl.useProgram(flatShader.program);
+    flatShader.setUniforms({ modelViewProj: modelViewProjMatrix });
+    gl.disable(gl.CULL_FACE);
+    const batch: FlatDrawBatch = { batchKey: '', lightKey: '' };
+    const flatDrawCtx = {
+      flatShader,
+      textures,
+      wad,
+      animateFlatIndex,
+      timeSeconds,
+      cameraPos,
+      liquidWake: params.liquidWake,
+      layerPlan,
+    };
+    renderGzdoomFlats(drawState, buffers, {
+      flatShader,
+      modelViewProjMatrix,
+      textures,
+      wad,
+      animateFlatIndex,
+      timeSeconds,
+      cameraPos,
+      liquidWake,
+      drawFlat: (flat, b) => {
+        const isFloor =
+          normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
+        if (!isFloor) return;
+        const liquid = getFloorLiquidDrawUniforms(flat.sector.floorpic);
+        if (!liquid) return;
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        drawFlat(flat, flatDrawCtx, b);
+        gl.disable(gl.BLEND);
+      },
+    });
+  }
+
+  if (layerPlan.voxels) {
+    const voxelShader = shaders.voxelThings;
+    gl.useProgram(voxelShader.program);
+    gl.disable(gl.BLEND);
+    gl.depthMask(true);
+    for (const entry of renderableThings) {
+      if (!drawState.visibleSectors.has(entry.sectorIndex)) continue;
+      const sprite = DOOM_THING_MAP_BY_ID[entry.thing.type]?.sprite;
+      const frames = sprite ? voxelThingFrames.get(sprite) : undefined;
+      if (!frames?.length) continue;
+      const frame = frames[(animateSpriteIndex + entry.thingIndex) % frames.length];
+      if (!frame?.mesh) continue;
+      renderVoxelThing({
+        gl,
+        shader: voxelShader,
+        mesh: frame.mesh,
+        thing: entry.thing,
+        thingKind: entry.kind,
+        sector: entry.sector,
+        sectorIndex: entry.sectorIndex,
+        timeSeconds,
+        viewMatrix,
+        projectionMatrix,
+      });
+    }
+  }
+}
+
 function drawFlat(
   flat: FlatBuffer,
   ctx: {
@@ -578,6 +1140,7 @@ function drawFlat(
     cameraPos: [number, number, number];
     liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
     recordFlatDraw?: () => void;
+    layerPlan?: RenderLayerDrawPlan;
   },
   batch: FlatDrawBatch
 ) {
@@ -591,15 +1154,20 @@ function drawFlat(
   const wallAmbient = flat.sector.ambientColorFromWall ?? ambient;
   const skyTint = flat.sector.skyLightTint ?? [0, 0, 0];
 
-  const finalAmbient: [number, number, number] = [
-    (ambient[0] + wallAmbient[0] + skyTint[0]) / 3,
-    (ambient[1] + wallAmbient[1] + skyTint[1]) / 3,
-    (ambient[2] + wallAmbient[2] + skyTint[2]) / 3,
-  ];
+  const finalAmbient: [number, number, number] = ctx.layerPlan && !ctx.layerPlan.coloredLights
+    ? [1, 1, 1]
+    : [
+        (ambient[0] + wallAmbient[0] + skyTint[0]) / 3,
+        (ambient[1] + wallAmbient[1] + skyTint[1]) / 3,
+        (ambient[2] + wallAmbient[2] + skyTint[2]) / 3,
+      ];
 
   const isFloorFlat =
     normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
   const floorLiquid = isFloorFlat ? getFloorLiquidDrawUniforms(flat.sector.floorpic) : null;
+  const liquidOn = ctx.layerPlan ? ctx.layerPlan.liquidAnimated : true;
+  const liquidStrength = liquidOn && floorLiquid ? floorLiquid.liquidStrength : 0;
+  const liquidEmissive = liquidOn && floorLiquid ? floorLiquid.liquidEmissive : 0;
 
   const surfaceGlow = getTextureSurfaceGlow(flatName);
   const flatReliefKey = flatName.toUpperCase();
@@ -640,8 +1208,8 @@ function drawFlat(
       fogDensity: flat.sector.fogDensity ?? 0.25,
       visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
       liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
-      liquidStrength: floorLiquid?.liquidStrength ?? 0,
-      liquidEmissive: floorLiquid?.liquidEmissive ?? 0,
+      liquidStrength,
+      liquidEmissive,
       uCameraPos: ctx.cameraPos,
       heightStrength,
       timeSeconds: ctx.timeSeconds,
@@ -654,7 +1222,11 @@ function drawFlat(
   }
   if (nextLightKey !== batch.lightKey) {
     batch.lightKey = nextLightKey;
-    ctx.flatShader.setUniforms(pointLightGrid.queryUniforms(flat.center));
+    ctx.flatShader.setUniforms(
+      ctx.layerPlan && !ctx.layerPlan.dynamicLights
+        ? EMPTY_LIGHT_UNIFORMS
+        : pointLightGrid.queryUniforms(flat.center)
+    );
   }
 
   ctx.flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });

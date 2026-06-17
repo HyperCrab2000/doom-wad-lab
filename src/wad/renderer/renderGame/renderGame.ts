@@ -5,11 +5,13 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import { setupCamera, updateCameraFromViewMatrix } from './camera';
 import { drawScene } from './drawScene';
+import { clearPathTraceLetterbox, clearPlayfieldChrome, createPlayfieldCamera, updatePlayfieldCamera } from '@/wad/renderer/renderGame/playfieldCamera';
+import { clearPathTraceCanvas } from '@/wad/renderer/rtgl/pathTraceGpu';
 import { LoadedWadData, loadWad } from './loadWad';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
-import { doomPlayerControls, PlayerSnapshot } from '@/wad/renderer/controls/doomPlayerControls';
-import { getViewAnglesFromViewMatrix } from '@/wad/renderer/controls/playerView';
+import { getViewAnglesFromViewMatrix, writePlayerViewMatrix } from '@/wad/renderer/controls/playerView';
+import { doomPlayerControls, findSectorAt, PlayerSnapshot } from '@/wad/renderer/controls/doomPlayerControls';
 import { invalidateBlockingSegmentCache } from '@/wad/renderer/controls/doomCollision';
 import { MapActionController, MapActionResult } from '@/wad/game/mapActionController';
 import {
@@ -19,6 +21,17 @@ import {
 } from '@/wad/game/doorSounds';
 import { DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
 import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
+import type { RenderBackend } from '@/wad/renderer/renderBackend';
+import { readDefaultRenderBackend } from '@/wad/renderer/renderBackend';
+import {
+  pathTraceNeedsHybridOverlay,
+  pathTraceNeedsGpuTrace,
+  persistRenderLayerToggles,
+  readStoredRenderLayerToggles,
+  type RenderLayerToggles,
+} from '@/wad/renderer/modular/renderLayerToggles';
+import { readRenderModularStageCap, isModularParityMode } from '@/wad/renderer/modular/modularRenderStage';
+import { getFederatedRuntime, resetFederatedRuntime, type FederatedSimulationMotion } from '@/wad/federated/GzFederatedRuntime';
 
 let wadData: LoadedWadData | null = null;
 let currentMap: WadMap | null = null;
@@ -29,6 +42,66 @@ let mapActions: MapActionController | null = null;
 let liquidWake: { x: number; z: number; strength: number; startedAt: number } | null = null;
 let sfxPlayer: DoomSfxPlayer | null = null;
 let playerControls: ReturnType<typeof doomPlayerControls> | null = null;
+let renderBackend: RenderBackend = readDefaultRenderBackend();
+let renderLayerToggles: RenderLayerToggles = readStoredRenderLayerToggles();
+/** Cap path-trace GPU work (~10 Hz) so the laptop stays responsive. */
+const PATH_TRACE_FRAME_INTERVAL_MS = 100;
+let lastPathTraceDrawAt = 0;
+let currentMapName = '';
+let currentWadPath: string | null = null;
+let drawPathTraceSyncFn:
+  | ((
+      params: import('@/wad/renderer/renderGame/drawScene').DrawSceneParams,
+      wadPath?: string | null,
+      mapName?: string,
+      options?: import('@/wad/renderer/rtgl/rtglRenderer').PathTraceDrawOptions
+    ) => import('@/wad/renderer/rtgl/rtglRenderer').PathTraceDrawResult)
+  | null = null;
+let pathTraceModulePromise: Promise<void> | null = null;
+let federatedWasmModulePromise: Promise<void> | null = null;
+let drawFederatedWasmSyncFn: ((params: import('@/wad/renderer/renderGame/drawScene').DrawSceneParams) => void) | null =
+  null;
+
+function ensurePathTraceModule(): Promise<void> {
+  if (!pathTraceModulePromise) {
+    pathTraceModulePromise = import('@/wad/renderer/rtgl/drawScenePathTrace').then((drawMod) => {
+      drawPathTraceSyncFn = drawMod.drawPathTraceSync;
+    });
+  }
+  return pathTraceModulePromise;
+}
+
+function ensureFederatedWasmModule(): Promise<void> {
+  if (!federatedWasmModulePromise) {
+    federatedWasmModulePromise = import('@/wad/renderer/gzrender-v2/federated/drawSceneFederatedWasm').then(
+      (mod) => {
+        drawFederatedWasmSyncFn = mod.drawFederatedWasmSync;
+      },
+    );
+  }
+  return federatedWasmModulePromise;
+}
+
+async function prewarmFederatedWasmGeometry(
+  wad: Wad,
+  mapName: string,
+  map: WadMap,
+): Promise<void> {
+  await ensureFederatedWasmModule();
+  await getFederatedRuntime().loadMap(wad, mapName, map);
+}
+
+async function prewarmPathTraceGeometry(
+  wadPath: string | null,
+  mapName: string,
+  map: WadMap,
+  loaded: LoadedWadData
+): Promise<void> {
+  await ensurePathTraceModule();
+  await import('@/wad/renderer/rtgl/rtglResourceCache').then(({ awaitPathTraceGeometryReady }) =>
+    awaitPathTraceGeometryReady(wadPath, mapName, map, loaded.wallTexturesByName, loaded.buffers)
+  );
+}
 
 function resizeCanvasToParent(canvas: HTMLCanvasElement, onResize: () => void): () => void {
   const parent = canvas.parentElement;
@@ -55,8 +128,19 @@ function resizeCanvasToParent(canvas: HTMLCanvasElement, onResize: () => void): 
 }
 
 export const renderGame = (canvas: HTMLCanvasElement) => {
-  const gl = canvas.getContext('webgl2', { antialias: true, preserveDrawingBuffer: true, alpha: false }) as WebGL2RenderingContext;
+  const gl = canvas.getContext('webgl2', {
+    antialias: false,
+    preserveDrawingBuffer: true,
+    alpha: false,
+  }) as WebGL2RenderingContext;
   if (!gl) throw new Error('WebGL2 not supported!');
+
+  if (readDefaultRenderBackend() === 'pathtrace') {
+    void ensurePathTraceModule();
+  }
+  if (readDefaultRenderBackend() === 'wasm-federated') {
+    void ensureFederatedWasmModule();
+  }
 
   const {
     camera,
@@ -71,6 +155,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     skyboxBuffers,
   } = setupCamera(gl, canvas);
 
+  const playfieldCamera = createPlayfieldCamera();
   gl.clearColor(1.0, 0.0, 1.0, 1.0); // CHROMAKEY
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
@@ -200,10 +285,18 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
   unbindResize = resizeCanvasToParent(canvas, resizeScene);
 
-  const load = (wad: Wad, map: WadMap, mapName: string, wadPath?: string | null): Promise<void> => {
+  const load = (
+    wad: Wad,
+    map: WadMap,
+    mapName: string,
+    wadPath?: string | null,
+    modPaths: readonly string[] = [],
+  ): Promise<void> => {
     presentationVisible = false;
+    currentMapName = mapName;
+    currentWadPath = wadPath ?? null;
     const gameMap = structuredClone(map);
-    return loadWad(gl, wad, gameMap, mapName, wadPath).then((loaded) => {
+    return loadWad(gl, wad, gameMap, mapName, wadPath, modPaths).then(async (loaded) => {
       wadData = loaded;
       currentMap = gameMap;
       mapActions = new MapActionController(gameMap);
@@ -212,12 +305,26 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       forceDoorGeometryRefresh = false;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
 
-      const { playerStart, playerZ, cameraAngle } = wadData;
-      vec3.set(camera.pos, playerStart.x, playerZ, -playerStart.y);
+      if (renderBackend === 'pathtrace') {
+        await prewarmPathTraceGeometry(wadPath ?? null, mapName, gameMap, loaded);
+      }
 
-      mat4.identity(viewMatrix);
-      mat4.rotateY(viewMatrix, viewMatrix, Math.PI / 2 - cameraAngle);
-      mat4.translate(viewMatrix, viewMatrix, vec3.negate(vec3.create(), camera.pos));
+      if (renderBackend === 'wasm-federated') {
+        await prewarmFederatedWasmGeometry(wad, mapName, gameMap);
+      }
+
+      const { playerStart, playerZ, cameraAngle } = wadData;
+      const startSector = findSectorAt(gameMap, loaded.buffers, playerStart);
+      writePlayerViewMatrix(viewMatrix, {
+        x: playerStart.x,
+        y: playerStart.y,
+        yaw: cameraAngle,
+        pitch: 0,
+        worldFeetZ: startSector?.floorheight ?? playerZ,
+        sector: startSector,
+      });
+      const spawnInv = mat4.invert(mat4.create(), viewMatrix)!;
+      vec3.set(camera.pos, spawnInv[12], spawnInv[13], spawnInv[14]);
 
       unbindControls?.();
       playerControls = doomPlayerControls({
@@ -262,8 +369,34 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
 
     updateCameraFromViewMatrix(viewMatrix, invViewMatrix, camera);
 
+    mat4.identity(modelMatrix);
+    updatePlayfieldCamera(
+      playfieldCamera,
+      gl.canvas.width,
+      gl.canvas.height,
+      camera.fov,
+      camera.near,
+      camera.far,
+      viewMatrix,
+      modelMatrix
+    );
+
     if (presentationVisible && wadData && currentMap && mapActions) {
-      const motion = mapActions.tick(Math.min(dt / 1000, 0.05));
+      const dtSeconds = Math.min(dt / 1000, 0.05);
+      let motion: FederatedSimulationMotion = {
+        playOpen: false,
+        playClose: false,
+        playStart: false,
+        sound: 'door',
+      };
+
+      if (renderBackend === 'wasm-federated' && getFederatedRuntime().isLoaded()) {
+        const sim = getFederatedRuntime().advanceFrame(dtSeconds, mapActions, currentMap);
+        motion = sim.motion;
+      } else {
+        motion = mapActions.tick(dtSeconds);
+      }
+
       if (motion.playOpen || motion.playClose) {
         playDoorMotionSound(
           wadData.wad,
@@ -300,15 +433,18 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       const start = performance.now();
       const player = getPlayerState();
 
-      // Textured scene always draws; LevelViewer overlays 2D BSP debug on top (V key).
-      drawScene({
+      const sceneParams = {
           gl,
           shaders,
-          projectionMatrix,
+          projectionMatrix: playfieldCamera.projectionMatrix,
           modelMatrix,
           viewMatrix,
-          modelViewMatrix,
-          modelViewProjMatrix,
+          modelViewMatrix: playfieldCamera.modelViewMatrix,
+          modelViewProjMatrix: playfieldCamera.modelViewProjMatrix,
+          invViewProjMatrix: playfieldCamera.invViewProjMatrix,
+          playfieldLayout: playfieldCamera.layout,
+          cameraFov: camera.fov,
+          canvasAspect: gl.canvas.width / Math.max(1, gl.canvas.height),
           cameraPos: camera.pos as [number, number, number],
           textures: wadData.textures,
           currentSky: wadData.currentSky,
@@ -324,7 +460,14 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           timeSeconds: time / 1000,
           renderableThings: wadData.renderableThings,
           voxelThingFrames: wadData.voxelThingFrames,
+          voxelCatalog: wadData.voxelCatalog,
           pointLights: wadData.pointLights,
+          wallTexturesByName: wadData.wallTexturesByName,
+          floorTextureColors: wadData.floorTextureColors,
+          wallTextureColors: wadData.wallTextureColors,
+          renderBackend,
+          wadPath: currentWadPath,
+          mapName: currentMapName,
           liquidWake: liquidWake
             ? {
                 x: liquidWake.x,
@@ -333,18 +476,148 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
                 ageSeconds: (performance.now() - liquidWake.startedAt) / 1000,
               }
             : null,
-      });
+          renderLayerToggles,
+      };
+
+      const modularStageCap = readRenderModularStageCap();
+      const sceneParamsWithModular = {
+        ...sceneParams,
+        modularStageCap,
+        stageSnapshotRecorder:
+          isModularParityMode() || modularStageCap != null
+            ? new StageSnapshotRecorder(renderBackend, currentMapName, modularStageCap)
+            : undefined,
+      };
+
+      if (renderBackend === 'pathtrace') {
+        const needsGpu = pathTraceNeedsGpuTrace(renderLayerToggles);
+        const needsOverlay = pathTraceNeedsHybridOverlay(renderLayerToggles);
+
+        if (!needsGpu) {
+          resizeScene();
+          clearPathTraceLetterbox(gl);
+        } else {
+          const traceNow = performance.now();
+          const traceDue = traceNow - lastPathTraceDrawAt >= PATH_TRACE_FRAME_INTERVAL_MS;
+          if (traceDue) {
+            lastPathTraceDrawAt = traceNow;
+            resizeScene();
+            clearPathTraceLetterbox(gl);
+
+            if (drawPathTraceSyncFn) {
+              const ptResult = drawPathTraceSyncFn(
+                {
+                  ...sceneParams,
+                  wadPath: currentWadPath,
+                  mapName: currentMapName,
+                },
+                currentWadPath,
+                currentMapName,
+                { keySky: false, preserveLetterbox: true }
+              );
+              if (ptResult.status === 'failed') {
+                clearPathTraceCanvas(gl);
+              }
+            } else {
+              clearPathTraceCanvas(gl);
+              void ensurePathTraceModule();
+            }
+          }
+        }
+
+        if (needsOverlay) {
+          drawScene({
+            ...sceneParamsWithModular,
+            pathTraceOverlay: true,
+            skipPlayfieldClear: true,
+          });
+        }
+      } else if (renderBackend === 'wasm-federated') {
+        if (drawFederatedWasmSyncFn) {
+          drawFederatedWasmSyncFn(sceneParamsWithModular);
+        } else {
+          void ensureFederatedWasmModule();
+          drawScene(sceneParamsWithModular);
+        }
+      } else {
+        drawScene(sceneParamsWithModular);
+      }
+      notifyRenderedFrame();
 
       const end = performance.now();
       const drawTime = end - start;
       const fps = Math.round(1000 / dt);
 
       if (fpsCounter) {
-        fpsCounter.textContent = `FPS: ${fps} (${drawTime.toFixed(2)} ms)`;
+        const tag =
+          renderBackend === 'pathtrace' ? ' · PT' : renderBackend === 'wasm-federated' ? ' · WASM' : '';
+        fpsCounter.textContent = `FPS: ${fps} (${drawTime.toFixed(2)} ms)${tag}`;
       }
-      notifyRenderedFrame();
     }
   }
 
-  return { load, setPresentationVisible, setAutomapActive, setBspDebugActive, getPlayerState, getBspTraceYaw, waitForRenderedFrame };
+  const setRenderBackend = (backend: RenderBackend) => {
+    renderBackend = backend;
+    lastPathTraceDrawAt = 0;
+    if (backend === 'pathtrace') {
+      void ensurePathTraceModule();
+      void import('@/wad/renderer/rtgl/rtglRenderer').then(({ resetPathTraceGpu }) => resetPathTraceGpu());
+      if (wadData && currentMap) {
+        void prewarmPathTraceGeometry(
+          currentWadPath,
+          currentMapName,
+          currentMap,
+          wadData
+        );
+      }
+    } else if (backend === 'wasm-federated') {
+      void ensureFederatedWasmModule();
+      void import('@/wad/renderer/gzrender-v2/federated/loadFederatedWasmBackend').then(({ loadFederatedWasmBackend }) =>
+        loadFederatedWasmBackend(),
+      );
+      if (wadData && currentMap) {
+        void prewarmFederatedWasmGeometry(wadData.wad, currentMapName, currentMap);
+      }
+    } else {
+      void import('@/wad/renderer/rtgl/rtglRenderer').then(({ resetPathTraceGpu }) => resetPathTraceGpu());
+    }
+  };
+
+  const getPathTraceDebugInfo = () => {
+    if (renderBackend !== 'pathtrace') return null;
+    return import('@/wad/renderer/rtgl/rtglRenderer')
+      .then(({ getPathTraceDebugInfo: read }) => read())
+      .catch(() => null);
+  };
+
+  const getFederatedWasmDebugInfo = () => {
+    if (renderBackend !== 'wasm-federated') return null;
+    return Promise.resolve(getFederatedRuntime().getDebugInfo());
+  };
+
+  const setRenderLayerToggles = (toggles: RenderLayerToggles) => {
+    renderLayerToggles = toggles;
+    persistRenderLayerToggles(toggles);
+    if (renderBackend === 'pathtrace') {
+      lastPathTraceDrawAt = 0;
+      void import('@/wad/renderer/rtgl/rtglRenderer').then(({ resetPathTraceGpu }) => resetPathTraceGpu());
+    }
+  };
+
+  const getRenderLayerToggles = () => renderLayerToggles;
+
+  return {
+    load,
+    setPresentationVisible,
+    setAutomapActive,
+    setBspDebugActive,
+    setRenderBackend,
+    setRenderLayerToggles,
+    getRenderLayerToggles,
+    getPlayerState,
+    getBspTraceYaw,
+    waitForRenderedFrame,
+    getPathTraceDebugInfo,
+    getFederatedWasmDebugInfo,
+  };
 };

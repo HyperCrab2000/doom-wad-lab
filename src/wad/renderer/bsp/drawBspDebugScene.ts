@@ -11,6 +11,7 @@ import type { ClassicBspTrace, SegVisibilityReason } from '@/wad/renderer/bsp/cl
 import { traceClassicBsp } from '@/wad/renderer/bsp/classicBspTrace';
 import { buildBspRenderIndex } from '@/wad/renderer/bsp/bspRenderIndex';
 import { buildBspDebugTrace } from '@/wad/renderer/bsp/bspDebugView';
+import { appendWallSegWireframe } from '@/wad/renderer/modular/bspSegWireframe';
 
 const DEBUG_VERT = `#version 300 es
 in vec3 aPosition;
@@ -106,7 +107,7 @@ export function drawBspDebugScene(params: DrawBspDebugSceneParams): ClassicBspTr
       const floor = sector?.floorheight ?? 0;
       const ceil = sector?.ceilingheight ?? floor + 128;
 
-      appendWallWireframe(positions, indices, v1.x, v1.y, v2.x, v2.y, floor, ceil);
+      appendWallSegWireframe(positions, indices, v1.x, v1.y, v2.x, v2.y, floor, ceil);
     }
 
     if (positions.length === 0) continue;
@@ -119,33 +120,4 @@ export function drawBspDebugScene(params: DrawBspDebugSceneParams): ClassicBspTr
   }
 
   return trace;
-}
-
-function appendWallWireframe(
-  positions: number[],
-  indices: number[],
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  floor: number,
-  ceil: number
-): void {
-  const base = positions.length / 3;
-  const z1 = -y1;
-  const z2 = -y2;
-
-  positions.push(
-    x1, floor, z1,
-    x2, floor, z2,
-    x2, ceil, z2,
-    x1, ceil, z1
-  );
-
-  indices.push(
-    base, base + 1,
-    base + 1, base + 2,
-    base + 2, base + 3,
-    base + 3, base
-  );
 }

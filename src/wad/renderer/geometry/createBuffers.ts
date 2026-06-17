@@ -59,6 +59,9 @@ function uploadCpuGeometry(
       uv: createBuffer(gl, wall.uv, 2),
       normal: createBuffer(gl, wall.normal, 3),
       indices: createElementBuffer(gl, wall.indices, 1),
+      cpuPosition: wall.position,
+      cpuUv: wall.uv,
+      cpuIndices: wall.indices,
       positionBytes: wall.position.byteLength,
       uvBytes: wall.uv.byteLength,
       normalBytes: wall.normal.byteLength,
@@ -86,6 +89,9 @@ function uploadCpuGeometry(
       normal: createBuffer(gl, flat.normal, 3),
       uv: createBuffer(gl, flat.uv, 2),
       indices: createElementBuffer(gl, flat.indices, 1),
+      cpuPosition: flat.position,
+      cpuUv: flat.uv,
+      cpuIndices: flat.indices,
       flatName: flat.flatName,
       sector,
       sectorIndex,
@@ -104,6 +110,9 @@ function uploadCpuGeometry(
       normal: createBuffer(gl, flat.normal, 3),
       uv: createBuffer(gl, flat.uv, 2),
       indices: createElementBuffer(gl, flat.indices, 1),
+      cpuPosition: flat.position,
+      cpuUv: flat.uv,
+      cpuIndices: flat.indices,
       flatName: flat.flatName,
       sector,
       sectorIndex,
@@ -153,9 +162,9 @@ export async function createMapBuffersAsync(
   gl: WebGLRenderingContext,
   map: WadMap,
   texturesByName: Record<string, WallTexture>
-): Promise<MapBuffers> {
+): Promise<{ buffers: MapBuffers; geometry: CpuMapGeometry }> {
   const geometry = await buildMapGeometryInWorker(map, texturesByName);
-  return uploadCpuGeometry(gl, map, geometry);
+  return { buffers: uploadCpuGeometry(gl, map, geometry), geometry };
 }
 
 export function attachMapBufferIndexes(

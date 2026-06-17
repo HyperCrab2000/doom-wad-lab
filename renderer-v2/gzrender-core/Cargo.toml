@@ -1,0 +1,17 @@
+[package]
+name = "gzrender-core"
+version = "0.1.0"
+edition = "2021"
+description = "Bare-metal GZSTATE loader and classic Doom software renderer (WASM target)"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[dev-dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true

@@ -40,3 +40,4 @@ public/soundfonts/*.sf2
 *.sw?
 tmp-*/
 test-results/
+tools/bsp-ref/chocolate-doom/

@@ -6,6 +6,10 @@ export interface WallBuffer {
   position: Buffer;
   uv: Buffer;
   normal: Buffer;
+  /** CPU copies used by path trace (must match GPU buffer uploads). */
+  cpuPosition: Float32Array;
+  cpuUv: Float32Array;
+  cpuIndices: Uint16Array;
   /** Cached byte lengths to avoid gl.getBufferParameter on every door refresh. */
   positionBytes: number;
   uvBytes: number;

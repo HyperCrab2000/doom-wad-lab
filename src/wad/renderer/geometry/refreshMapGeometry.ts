@@ -91,6 +91,9 @@ function applyWallObject(
   wallBuffer.boundsRadius = wall.boundsRadius ?? FRUSTUM_CULL_RADIUS;
   wallBuffer.facingNormal = readWallFacingNormal(wall);
   wallBuffer.portalSectors = getLineSectorIndices(map, wall.lineIndex ?? -1);
+  wallBuffer.cpuPosition = wall.position;
+  wallBuffer.cpuUv = wall.uv;
+  wallBuffer.cpuIndices = wall.indices;
 }
 
 function createWallBufferFromObject(
@@ -119,6 +122,9 @@ function createWallBufferFromObject(
     uv,
     normal,
     indices,
+    cpuPosition: wall.position,
+    cpuUv: wall.uv,
+    cpuIndices: wall.indices,
     positionBytes: wall.position.byteLength,
     uvBytes: wall.uv.byteLength,
     normalBytes: wall.normal.byteLength,
@@ -229,6 +235,9 @@ function createFlatBufferFromObject(
     normal,
     uv,
     indices,
+    cpuPosition: flat.position,
+    cpuUv: flat.uv,
+    cpuIndices: flat.indices,
     flatName: flat.flatName,
     sector,
     sectorIndex: flat.sectorIndex,

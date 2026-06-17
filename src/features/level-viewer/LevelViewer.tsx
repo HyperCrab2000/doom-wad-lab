@@ -15,15 +15,33 @@ import { drawBspDebugView } from '@/wad/renderer/bsp/bspDebugView';
 import { buildBspRenderIndex } from '@/wad/renderer/bsp/bspRenderIndex';
 import { appendCheatChar, cheatTriggered } from '@/wad/game/doomCheats';
 import { ViewportLabelGrid } from './ViewportLabelGrid';
+import {
+  persistRenderBackend,
+  readDefaultRenderBackend,
+  type RenderBackend,
+} from '@/wad/renderer/renderBackend';
+import {
+  readStoredRenderLayerToggles,
+  type RenderLayerToggles,
+} from '@/wad/renderer/modular/renderLayerToggles';
+import {
+  parseModularRenderStage,
+  type ModularRenderStage,
+} from '@/wad/renderer/modular/modularRenderStage';
+import { RenderLayerPanel } from './RenderLayerPanel';
 
 interface GameRenderer {
   load: ReturnType<typeof renderGame>['load'];
   setPresentationVisible: ReturnType<typeof renderGame>['setPresentationVisible'];
   setAutomapActive: ReturnType<typeof renderGame>['setAutomapActive'];
   setBspDebugActive: ReturnType<typeof renderGame>['setBspDebugActive'];
+  setRenderBackend: ReturnType<typeof renderGame>['setRenderBackend'];
+  setRenderLayerToggles: ReturnType<typeof renderGame>['setRenderLayerToggles'];
   getPlayerState: ReturnType<typeof renderGame>['getPlayerState'];
   getBspTraceYaw: ReturnType<typeof renderGame>['getBspTraceYaw'];
   waitForRenderedFrame: ReturnType<typeof renderGame>['waitForRenderedFrame'];
+  getPathTraceDebugInfo: ReturnType<typeof renderGame>['getPathTraceDebugInfo'];
+  getFederatedWasmDebugInfo: ReturnType<typeof renderGame>['getFederatedWasmDebugInfo'];
 }
 
 type TransitionPhase = 'loading' | 'wiping' | 'playing';
@@ -45,6 +63,16 @@ export const LevelViewer: React.FC<{
   const [labelGridActive, setLabelGridActive] = useState(
     () => new URLSearchParams(window.location.search).has('labels')
   );
+  const [renderBackend, setRenderBackendState] = useState<RenderBackend>(readDefaultRenderBackend);
+  const [renderLayerToggles, setRenderLayerTogglesState] = useState<RenderLayerToggles>(
+    readStoredRenderLayerToggles
+  );
+  const [modularStageCap, setModularStageCapState] = useState<ModularRenderStage | null>(() =>
+    parseModularRenderStage(new URLSearchParams(window.location.search).get('modStage')),
+  );
+  const [pathTraceHud, setPathTraceHud] = useState('');
+  const [federatedWasmHud, setFederatedWasmHud] = useState('');
+  const [visibilityHud, setVisibilityHud] = useState('');
   const [automapCheat, setAutomapCheat] = useState<AutomapCheatLevel>(0);
   const cheatBufferRef = useRef('');
 
@@ -53,6 +81,12 @@ export const LevelViewer: React.FC<{
       setGame(renderGame(gameCanvasRef.current));
     }
   }, [game]);
+
+  const [modPaths] = useState<string[]>(() => {
+    const raw = new URLSearchParams(window.location.search).get('mods');
+    if (!raw) return [];
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  });
 
   const {
     wad,
@@ -65,32 +99,137 @@ export const LevelViewer: React.FC<{
     setSelectedMap,
     refreshWad,
     clearCache,
-  } = useDoomLoader({ game });
+  } = useDoomLoader({ game, modPaths });
 
   useEffect(() => {
     if (!game || wadPath) return;
     setWadPath(WAD_OPTIONS[0]?.path ?? '/wads/DOOM.WAD');
   }, [game, wadPath, setWadPath]);
+
   const music = useLevelMusic(wad, selectedMap, wadPath);
+
+  useEffect(() => {
+    if (!game) return;
+    game.setRenderBackend(renderBackend);
+    persistRenderBackend(renderBackend);
+    if (renderBackend === 'pathtrace') {
+      void import('@/wad/renderer/rtgl/loadRtglBackend').then(({ loadRtglBackend }) => loadRtglBackend());
+    }
+    if (renderBackend === 'wasm-federated') {
+      void import('@/wad/renderer/gzrender-v2/federated/loadFederatedWasmBackend').then(({ loadFederatedWasmBackend }) =>
+        loadFederatedWasmBackend(),
+      );
+    }
+  }, [game, renderBackend]);
+
+  useEffect(() => {
+    if (!game) return;
+    game.setRenderLayerToggles(renderLayerToggles);
+  }, [game, renderLayerToggles]);
+
+  useEffect(() => {
+    if (renderBackend !== 'pathtrace' || !game) return;
+    const id = window.setInterval(() => {
+      void game.getPathTraceDebugInfo()?.then((info) => {
+        if (!info) return;
+        if (info.traceBackend === 'gpu') {
+          const errSuffix = info.error ? ` · ${info.error}` : '';
+          const scalePct = Math.round((info.traceScale ?? 0.45) * 100);
+          setPathTraceHud(
+            `GPU rays · ${info.triangleCount} tris · ${info.traceWidth}×${info.traceHeight} @ ${scalePct}% · ${info.traceMs} ms${errSuffix}`
+          );
+        } else {
+          setPathTraceHud(`GPU failed · ${info.error ?? 'unknown error'}`);
+        }
+      });
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [renderBackend, game]);
 
   useEffect(() => {
     onWadChange?.(wad);
   }, [wad, onWadChange]);
 
+  const handleRenderBackendChange = useCallback((backend: RenderBackend) => {
+    setRenderBackendState(backend);
+  }, []);
+
+  const handleRenderLayerChange = useCallback((next: RenderLayerToggles) => {
+    setRenderLayerTogglesState(next);
+  }, []);
+
+  const handleModularStageCapChange = useCallback((stage: ModularRenderStage | null) => {
+    setModularStageCapState(stage);
+    const url = new URL(window.location.href);
+    if (stage) url.searchParams.set('modStage', stage);
+    else url.searchParams.delete('modStage');
+    window.history.replaceState(null, '', url.toString());
+  }, []);
+
   const levelDataReady = mapLoadState === 'ready';
   const isPlaying = transitionPhase === 'playing';
 
   useEffect(() => {
+    if (renderBackend !== 'wasm-federated' || !game) return;
+    const id = window.setInterval(() => {
+      const info = game.getFederatedWasmDebugInfo?.();
+      if (!info) return;
+      void info.then((debug) => {
+        if (!debug) return;
+        const engineLabel =
+          debug.engineMode === 'wasm' && debug.engineWasmLoaded
+            ? 'engine WASM'
+            : debug.engineMode === 'wasm'
+              ? 'engine WASM→TS fallback'
+              : 'engine TS';
+        const patchSuffix =
+          debug.patchesLastFrame > 0 ? ` · ${debug.patchesLastFrame} patches` : '';
+        const voxelSuffix =
+          debug.voxelsDrawn != null
+            ? ` · vox ${debug.voxelsDrawn}${debug.voxelsPending ? `/${debug.voxelsPending} pend` : ''}`
+            : '';
+        const errSuffix = debug.error ? ` · ${debug.error}` : '';
+        setFederatedWasmHud(
+          `Federated · ${engineLabel} + renderer WASM · ${debug.mapName || '—'} · ${debug.vertexCount}v ${debug.sectorCount}s · GZSTATE ${Math.round(debug.gzstateBytes / 1024)}KB${patchSuffix}${voxelSuffix}${errSuffix}`,
+        );
+      });
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [renderBackend, game, isPlaying]);
+
+  useEffect(() => {
+    if ((renderBackend !== 'classic' && renderBackend !== 'wasm-federated') || !game || !isPlaying) return;
+    const id = window.setInterval(() => {
+      const stats = (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats;
+      if (!stats) return;
+      const cam = stats.cameraSectorIndex ?? '?';
+      const flat42 = stats.courtyardFlat42 ? 'yes' : 'no';
+      const mode = stats.flatDrawMode ?? '?';
+      setVisibilityHud(
+        `BSP · sector ${cam} · flat42 ${flat42} · ${mode} · walls ${stats.wallEntries ?? 0} flats ${stats.flatSubsectors ?? 0}${stats.wireframeMode && stats.wireframeMode !== 'off' ? ` · wire ${stats.wireframeMode}` : ''}`
+      );
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [renderBackend, game, isPlaying]);
+
+  useEffect(() => {
     loadStartedAtRef.current = performance.now();
-    setTransitionPhase('loading');
+    if (renderBackend === 'pathtrace') {
+      setTransitionPhase('playing');
+    } else if (renderBackend === 'wasm-federated') {
+      setTransitionPhase('loading');
+      game?.setPresentationVisible(false);
+    } else {
+      setTransitionPhase('loading');
+      game?.setPresentationVisible(false);
+    }
     setAutomapActive(false);
     setBspDebugActive(false);
     setAutomapCheat(0);
     cheatBufferRef.current = '';
     game?.setAutomapActive(false);
     game?.setBspDebugActive(false);
-    game?.setPresentationVisible(false);
-  }, [selectedMap, wadPath, game]);
+  }, [selectedMap, wadPath, game, renderBackend]);
 
   useEffect(() => {
     if (!levelDataReady || !wad || !selectedMap || !game) {
@@ -100,6 +239,14 @@ export const LevelViewer: React.FC<{
     let cancelled = false;
 
     (async () => {
+      if (renderBackend === 'pathtrace') {
+        game.setPresentationVisible(true);
+        if (!cancelled) {
+          setTransitionPhase('playing');
+        }
+        return;
+      }
+
       const elapsed = performance.now() - loadStartedAtRef.current;
       const remaining = MIN_LOADING_SCREEN_MS - elapsed;
       if (remaining > 0) {
@@ -117,7 +264,7 @@ export const LevelViewer: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [levelDataReady, wad, selectedMap, wadPath, game]);
+  }, [levelDataReady, wad, selectedMap, wadPath, game, renderBackend]);
 
   const handleSnapshotCaptured = useCallback(() => {
     game?.setPresentationVisible(false);
@@ -238,7 +385,10 @@ export const LevelViewer: React.FC<{
       const canvas = automapCanvasRef.current;
       const player = game.getPlayerState();
       if (canvas && player) {
-        drawAutomap(canvas, map, { player, cheatLevel: automapCheat });
+        drawAutomap(canvas, map, {
+          player: { ...player, yaw: game.getBspTraceYaw() },
+          cheatLevel: automapCheat,
+        });
       }
       frame = requestAnimationFrame(drawFrame);
     };
@@ -250,12 +400,13 @@ export const LevelViewer: React.FC<{
   const transitionPhaseProp = transitionPhase === 'wiping' ? 'wipe' : 'loading';
   const showTransition =
     Boolean(wad && selectedMap) &&
+    renderBackend !== 'pathtrace' &&
     (mapLoadState === 'loading' || transitionPhase !== 'playing');
-  const hideGameCanvas = transitionPhase !== 'playing';
+  const hideGameCanvas = renderBackend !== 'pathtrace' && transitionPhase !== 'playing';
 
   return (
     <section
-      className="doom-panel level-viewer"
+      className={`doom-panel level-viewer${isPlaying ? ' level-viewer--playing' : ''}`}
       data-map-load-state={mapLoadState}
       data-is-playing={isPlaying ? 'true' : 'false'}
     >
@@ -295,6 +446,18 @@ export const LevelViewer: React.FC<{
                     </option>
                   ))
                 )}
+              </select>
+            </label>
+
+            <label className="doom-field doom-field--inline">
+              <span>Renderer</span>
+              <select
+                value={renderBackend}
+                onChange={(e) => handleRenderBackendChange(e.target.value as RenderBackend)}
+              >
+                <option value="classic">Classic WebGL</option>
+                <option value="pathtrace">Path Trace (GPU)</option>
+                <option value="wasm-federated">WASM Federated (GZRender)</option>
               </select>
             </label>
 
@@ -338,8 +501,12 @@ export const LevelViewer: React.FC<{
       <div className="game-stage">
         <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
           <figcaption className="game-card__caption">
-            Renderer · BSP sight (GZDoom)
-            <span>Tab automap · V BSP debug · L label grid · iddt · WASD · Click/E use · Esc release mouse · Clear Cache if stale</span>
+            {renderBackend === 'pathtrace'
+              ? 'GPU preview · ~10 fps cap · switch to Classic to play'
+              : renderBackend === 'wasm-federated'
+                ? 'GZRender federated · GZSTATE + WASM host · classic WebGL draw'
+                : 'Classic HW · BSP submit + Z (solids)'}
+            <span>Tab automap · V BSP debug · L label grid</span>
           </figcaption>
           <div className="game-card__viewport" ref={viewportRef}>
             <canvas
@@ -369,7 +536,7 @@ export const LevelViewer: React.FC<{
             />
             {automapActive ? (
               <div className="automap-hud" aria-live="polite">
-                AUTOMAP
+                AUTOMAP · follow
                 {automapCheat === 1 ? ' · ALL LINES' : automapCheat === 2 ? ' · ALL THINGS' : ''}
               </div>
             ) : null}
@@ -384,7 +551,33 @@ export const LevelViewer: React.FC<{
                 LABEL GRID · A–I · press L to hide
               </div>
             ) : null}
+            {renderBackend === 'pathtrace' ? (
+              <div className="path-trace-hud" aria-live="polite">
+                {pathTraceHud || 'GPU rays · loading…'}
+              </div>
+            ) : renderBackend === 'wasm-federated' ? (
+              <div className="path-trace-hud federated-wasm-hud" aria-live="polite">
+                {federatedWasmHud || 'WASM federated · loading…'}
+              </div>
+            ) : isPlaying ? (
+              <div className="path-trace-hud visibility-hud" aria-live="polite">
+                {visibilityHud || 'BSP · loading…'}
+              </div>
+            ) : null}
           </div>
+          <RenderLayerPanel
+            toggles={renderLayerToggles}
+            onChange={handleRenderLayerChange}
+            modularStageCap={modularStageCap}
+            onModularStageCapChange={handleModularStageCapChange}
+            backendLabel={
+              renderBackend === 'pathtrace'
+                ? 'Path Trace'
+                : renderBackend === 'wasm-federated'
+                  ? 'WASM Federated'
+                  : 'Classic'
+            }
+          />
         </figure>
       </div>
     </section>

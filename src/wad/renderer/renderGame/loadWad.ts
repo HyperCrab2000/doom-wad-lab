@@ -8,6 +8,8 @@ import {
   createMapBuffersAsync,
   MapBuffers,
 } from '@/wad/renderer/geometry/createBuffers';
+import { mapLoadCacheKey } from '@/wad/renderer/renderGame/mapLoadCache';
+import { registerLoadedMapGeometry } from '@/wad/renderer/rtgl/rtglResourceCache';
 import { selectSkyTexture } from '@/wad/renderer/utils/selectSkyTexture';
 import { SpriteTexture } from '@/wad/interfaces/SpriteTexture';
 import { ThingSprite, FramesByThingNameMap } from './types';
@@ -25,7 +27,7 @@ import { PointLight } from './sectorLighting';
 import { Thing } from '@/wad/interfaces/Thing';
 import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
 import { doomAngleToYaw } from '@/wad/renderer/controls/playerView';
-import { createVoxelThingFrameMap, VoxelThingFrameMap } from './voxelThingMeshes';
+import { createVoxelThingFrameMap, createVoxelCatalogView, type VoxelCatalogView, type VoxelThingFrameMap } from './voxelThingMeshes';
 import { createHeightTextureSet, propagateWallHeightRelief, propagateFlatHeightRelief, clearHeightUrlMissCache } from './heightTextures';
 import { drawFlat as rasterizeFlat } from '@/wad/renderer/drawAssets/drawFlat';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
@@ -66,8 +68,11 @@ export interface LoadedWadData {
   sectorsByThing: Map<Thing, Sector>;
   renderableThings: RenderableThing[];
   voxelThingFrames: VoxelThingFrameMap;
+  voxelCatalog: VoxelCatalogView;
   pointLights: PointLight[];
   wallTexturesByName: Record<string, WallTexture>;
+  floorTextureColors: Map<string, [number, number, number]>;
+  wallTextureColors: Map<string, [number, number, number]>;
 }
 
 export async function loadWad(
@@ -75,7 +80,8 @@ export async function loadWad(
   wad: Wad,
   map: WadMap,
   mapName: string,
-  wadPath?: string | null
+  wadPath?: string | null,
+  modPaths: readonly string[] = [],
 ): Promise<LoadedWadData> {
   const cacheKey = mapLoadCacheKey(wadPath, mapName);
   let sharedPromise = getCachedMapLoad(cacheKey);
@@ -85,7 +91,7 @@ export async function loadWad(
   }
 
   const shared = await sharedPromise;
-  return hydrateLoadedMap(wad, map, shared);
+  return hydrateLoadedMap(wad, map, shared, modPaths);
 }
 
 interface RuntimeLoadedParams {
@@ -98,6 +104,9 @@ interface RuntimeLoadedParams {
   buffers: MapBuffers;
   wallTexturesByName: Record<string, WallTexture>;
   voxelThingFrames: VoxelThingFrameMap;
+  voxelCatalog: VoxelCatalogView;
+  floorTextureColors?: Map<string, [number, number, number]>;
+  wallTextureColors?: Map<string, [number, number, number]>;
 }
 
 function relinkMapBuffers(buffers: MapBuffers, map: WadMap): void {
@@ -145,10 +154,17 @@ function applyMapSectorLighting(
   });
 }
 
-function hydrateLoadedMap(wad: Wad, map: WadMap, shared: CachedMapGeometry): LoadedWadData {
+function hydrateLoadedMap(
+  wad: Wad,
+  map: WadMap,
+  shared: CachedMapGeometry,
+  modPaths: readonly string[] = [],
+): LoadedWadData {
   relinkMapBuffers(shared.buffers, map);
   applyMapSectorLighting(map, shared.buffers, shared.floorTextureColors, shared.wallTextureColors);
   attachMapBufferIndexes(shared.buffers, shared.triangleHash, shared.sectorVisibility);
+
+  const voxelCatalog = createVoxelCatalogView(wad);
 
   return buildRuntimeLoadedData({
     wad,
@@ -159,7 +175,10 @@ function hydrateLoadedMap(wad: Wad, map: WadMap, shared: CachedMapGeometry): Loa
     currentSky: shared.currentSky,
     buffers: shared.buffers,
     wallTexturesByName: shared.wallTexturesByName,
-    voxelThingFrames: createVoxelThingFrameMap(map),
+    floorTextureColors: shared.floorTextureColors,
+    wallTextureColors: shared.wallTextureColors,
+    voxelThingFrames: createVoxelThingFrameMap(map, { wad, modPaths, catalog: voxelCatalog }),
+    voxelCatalog,
   });
 }
 
@@ -174,6 +193,9 @@ function buildRuntimeLoadedData(params: RuntimeLoadedParams): LoadedWadData {
     buffers,
     wallTexturesByName,
     voxelThingFrames,
+    voxelCatalog,
+    floorTextureColors,
+    wallTextureColors,
   } = params;
 
   const playerStartThing = map.THINGS.find((thing) => thing.type === 1);
@@ -236,8 +258,11 @@ function buildRuntimeLoadedData(params: RuntimeLoadedParams): LoadedWadData {
     sectorsByThing,
     renderableThings,
     voxelThingFrames,
+    voxelCatalog,
     pointLights,
     wallTexturesByName,
+    floorTextureColors: floorTextureColors ?? new Map(),
+    wallTextureColors: wallTextureColors ?? new Map(),
   };
 }
 
@@ -296,10 +321,12 @@ async function buildSharedMapGeometry(
     ),
   };
 
-  const [buffers, heightTextures] = await Promise.all([
+  const [{ buffers, geometry }, heightTextures] = await Promise.all([
     createMapBuffersAsync(gl, map, wadAssets.texturesByName),
     createHeightTextureSet(gl, wallNameList, flatNameList, heightSources),
   ]);
+
+  registerLoadedMapGeometry(mapLoadCacheKey(wadPath, mapName), geometry);
 
   propagateWallHeightRelief(heightTextures, wad.animatedTextures);
   propagateFlatHeightRelief(heightTextures, wad.animatedFlats);

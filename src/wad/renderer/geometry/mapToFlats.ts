@@ -38,10 +38,11 @@ export const createFlatMesh = (
     flatNormals.push(...normal, ...normal, ...normal);
 
     // DOOM-style UVs: 1 texel = 1 world unit, repeat every 64
+    const mod64 = (v: number) => ((v % 64) + 64) % 64;
     flatUVs.push(
-      triangle[0].x % 64, triangle[0].y % 64,
-      triangle[1].x % 64, triangle[1].y % 64,
-      triangle[2].x % 64, triangle[2].y % 64,
+      mod64(triangle[0].x), mod64(triangle[0].y),
+      mod64(triangle[1].x), mod64(triangle[1].y),
+      mod64(triangle[2].x), mod64(triangle[2].y),
     );
 
     if (reverseOrientation) {

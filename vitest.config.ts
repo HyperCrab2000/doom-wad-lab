@@ -11,6 +11,8 @@ const coverageInclude = [
   'src/wad/loader/validateWadBuffer.ts',
   'src/wad/parser/loadWadFromArrayBuffer.ts',
   'src/wad/parser/thingFlags.ts',
+  'src/wad/parity/**',
+  'gzstate/**',
   'src/wad/renderer/geometry/**',
   'src/wad/renderer/utils/**',
   'src/wad/renderer/renderGame/mapLoadCache.ts',
@@ -71,7 +73,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts'],
+          include: ['src/**/*.test.ts', 'gzstate/**/*.test.ts'],
           exclude: ['**/*.integration.test.ts', 'test/integration/**'],
           environment: 'node',
         },

@@ -42,6 +42,23 @@ function copyOpl3BrowserBundle(): Plugin {
   };
 }
 
+function buildFederatedWasmPlugin(): Plugin {
+  return {
+    name: 'build-federated-wasm',
+    async buildStart() {
+      const { spawnSync } = await import('node:child_process');
+      const script = path.resolve(__dirname, 'tools/gzrender-v2/build-federated-wasm.mjs');
+      const result = spawnSync(process.execPath, [script], {
+        cwd: __dirname,
+        stdio: 'inherit',
+      });
+      if (result.status !== 0) {
+        throw new Error('build-federated-wasm failed');
+      }
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -50,6 +67,7 @@ export default defineConfig({
     }),
     fixOpl3StrictLoops(),
     copyOpl3BrowserBundle(),
+    buildFederatedWasmPlugin(),
   ],
   resolve: {
     alias: [
@@ -72,8 +90,11 @@ export default defineConfig({
           if (id.includes('node_modules/three/examples')) {
             return 'three';
           }
-          if (id.includes('/components/VoxelModelViewer') || id.includes('/features/voxel-viewer/')) {
-            return 'voxel-viewer';
+          if (id.includes('/wad/renderer/rtgl/')) {
+            return 'rtgl-renderer';
+          }
+          if (id.includes('/wad/renderer/gzrender-v2/')) {
+            return 'gzrender-federated';
           }
         },
       },

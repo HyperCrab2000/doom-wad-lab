@@ -402,15 +402,17 @@ describe('sector visibility culling', () => {
 
     const hangar = buildPortalVisibleSectors(index, map, 2112, -3792, 10, 4096);
     expect(hangar.has(42)).toBe(false);
-    expect(hangar.has(0)).toBe(true);
-    expect(hangar.has(12)).toBe(true);
+    expect(hangar.has(0)).toBe(false);
+    expect(hangar.has(12)).toBe(false);
+    expect(hangar.has(10)).toBe(true);
+    expect(hangar.size).toBeLessThan(10);
 
     const playerStart = buildPortalVisibleSectors(index, map, 1056, -3616, 29, 4096);
-    expect(playerStart.has(0)).toBe(true);
+    expect(playerStart.has(0)).toBe(false);
     expect(playerStart.has(42)).toBe(false);
     expect(playerStart.has(41)).toBe(false);
     expect(playerStart.has(46)).toBe(false);
-    expect(playerStart.size).toBeLessThan(40);
+    expect(playerStart.size).toBeLessThan(25);
   });
 
   it('includes window rooms attached to the outdoor sector the camera stands in', () => {

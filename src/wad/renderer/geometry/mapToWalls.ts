@@ -189,7 +189,7 @@ function extendLineEndpoints(v1: Vertex, v2: Vertex, overlap: number): { v1: Ver
 const WALL_VISIBILITY_EPS = 1;
 
 /** Extend wall quads along the linedef to hide sub-texel gaps at corners (E1M2, etc.). */
-const LINE_ENDPOINT_OVERLAP = 0.75;
+export const LINE_ENDPOINT_OVERLAP = 0.75;
 
 /** Overlap upper/lower/mid wall bands at two-sided lines (door frames). */
 const WALL_JOINT_OVERLAP = 1;

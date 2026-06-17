@@ -1,0 +1,32 @@
+[
+  {
+    "id": "stock-doom",
+    "description": "IWAD only — baseline (no PWAD). Matches existing 68-map corpus.",
+    "iwad": "public/wads/DOOM.WAD",
+    "files": [],
+    "maps": ["E1M1"]
+  },
+  {
+    "id": "stock-doom2",
+    "description": "IWAD only — Doom II baseline.",
+    "iwad": "public/wads/DOOM2.WAD",
+    "files": [],
+    "maps": ["MAP01"]
+  },
+  {
+    "id": "doom-voxel-mod",
+    "description": "Voxel Doom PK3 (user-supplied). Set VOXEL_MOD_PK3 env or place at public/mods/VoxelDoom.pk3.",
+    "iwad": "public/wads/DOOM.WAD",
+    "files": ["public/mods/VoxelDoom.pk3"],
+    "maps": ["E1M1", "E1M2"],
+    "gzdoomArgs": []
+  },
+  {
+    "id": "doom-rt-mod",
+    "description": "GZDoom hardware RT / lights mod (user-supplied). Place at public/mods/Lights.pk3 or set RT_MOD_PK3.",
+    "iwad": "public/wads/DOOM.WAD",
+    "files": ["public/mods/Lights.pk3"],
+    "maps": ["E1M1"],
+    "gzdoomArgs": ["+vid_rt", "1"]
+  }
+]

@@ -3,13 +3,15 @@ import { mat4 } from 'gl-matrix';
 import { playerEyeHeight } from '@/wad/constants/GameInfo';
 import { Sector } from '@/wad/interfaces/Sector';
 import {
-  automapRotationRadians,
+  automapFollowRotationRadians,
   bspDebugMapRotationRadians,
   doomAngleToYaw,
+  doomYawToCanvasAngle,
   getPlayerEyeZ,
   getViewAnglesFromViewMatrix,
+  projectDoomOffsetToAutomapCanvas,
   writePlayerViewMatrix,
-} from './playerView';
+} from '@/wad/renderer/controls/playerView';
 
 describe('player view placement', () => {
   it('converts Doom start angles to normalized yaw radians', () => {
@@ -121,9 +123,54 @@ describe('player view placement', () => {
     expect(getViewAnglesFromViewMatrix(view).yaw).toBeCloseTo(yaw, 5);
   });
 
+  it('maps Doom forward to the north-up automap canvas direction', () => {
+    const south = projectDoomOffsetToAutomapCanvas(Math.cos(Math.PI / 2), Math.sin(Math.PI / 2));
+    expect(south.x).toBeCloseTo(0);
+    expect(south.y).toBeLessThan(0);
+
+    const east = projectDoomOffsetToAutomapCanvas(Math.cos(0), Math.sin(0));
+    expect(east.x).toBeGreaterThan(0);
+    expect(east.y).toBeCloseTo(0);
+
+    expect(doomYawToCanvasAngle(Math.PI / 2)).toBeCloseTo(0);
+    expect(doomYawToCanvasAngle(0)).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('matches 3D view yaw to the automap arrow rotation', () => {
+    for (const degrees of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      const yaw = doomAngleToYaw(degrees);
+      const view = mat4.create();
+      writePlayerViewMatrix(view, {
+        x: 0,
+        y: 0,
+        yaw,
+        pitch: 0.2,
+        worldFeetZ: 0,
+        sector: sector(0, 128),
+      });
+      expect(getViewAnglesFromViewMatrix(view).yaw).toBeCloseTo(yaw, 5);
+      expect(doomYawToCanvasAngle(getViewAnglesFromViewMatrix(view).yaw)).toBeCloseTo(
+        doomYawToCanvasAngle(yaw),
+        5
+      );
+    }
+  });
+
   it('uses the same rotation as the automap so forward points up on screen', () => {
-    expect(bspDebugMapRotationRadians(Math.PI / 2)).toBeCloseTo(automapRotationRadians(Math.PI / 2));
-    expect(bspDebugMapRotationRadians(0)).toBeCloseTo(Math.PI / 2);
+    expect(bspDebugMapRotationRadians(Math.PI / 2)).toBeCloseTo(automapFollowRotationRadians(Math.PI / 2));
+    expect(bspDebugMapRotationRadians(0)).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it('rotates follow-mode forward to the top of the canvas', () => {
+    for (const degrees of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      const yaw = doomAngleToYaw(degrees);
+      const forward = projectDoomOffsetToAutomapCanvas(Math.cos(yaw), Math.sin(yaw));
+      const angle = automapFollowRotationRadians(yaw);
+      const rotatedX = forward.x * Math.cos(angle) - forward.y * Math.sin(angle);
+      const rotatedY = forward.x * Math.sin(angle) + forward.y * Math.cos(angle);
+      expect(rotatedX).toBeCloseTo(0, 3);
+      expect(rotatedY).toBeLessThan(0);
+    }
   });
 });
 

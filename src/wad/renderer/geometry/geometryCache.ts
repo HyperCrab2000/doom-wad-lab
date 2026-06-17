@@ -1,4 +1,5 @@
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
+import type { FlatObject } from '@/wad/interfaces/FlatObject';
 import type { WallBuffer } from '@/wad/interfaces/WallBuffer';
 import type { WallObject } from '@/wad/interfaces/WallObject';
 import { normalizeFlatName } from '@/wad/renderer/renderGame/sectorLighting';
@@ -78,6 +79,32 @@ export function buildWallRangesFromWallBuffers(
     range.count++;
   });
   return ranges;
+}
+
+/** CPU wall slices aligned with Classic `buffers.walls` indices (tests and offline tools). */
+export function pathTraceWallSlicesFromWallObjects(walls: WallObject[]) {
+  return walls.map((wall) => ({
+    cpuPosition: wall.position,
+    cpuUv: wall.uv,
+    cpuIndices: wall.indices,
+    sectorIndex: wall.sectorIndex ?? -1,
+    texName: wall.texName ?? '-',
+    transparent: Boolean(wall.transparent),
+    lineIndex: wall.lineIndex ?? -1,
+    sideDefIndex: wall.sideDefIndex ?? -1,
+  }));
+}
+
+/** Minimal flat slices for path-trace unit tests (no GL buffers). */
+export function pathTraceFlatSlicesFromFlatObjects(flats: FlatObject[]) {
+  return flats.map((flat) => ({
+    cpuPosition: flat.position,
+    cpuUv: flat.uv,
+    cpuIndices: flat.indices,
+    sectorIndex: flat.sectorIndex,
+    flatName: flat.flatName,
+    subsectorIndex: flat.subsectorIndex,
+  }));
 }
 
 /** Sort opaque walls to minimize texture and sector uniform changes each frame. */
