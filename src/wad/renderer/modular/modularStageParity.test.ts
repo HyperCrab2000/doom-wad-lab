@@ -80,10 +80,13 @@ describe('Classic GL modular stages @ spawn (68 maps)', () => {
 });
 
 describe.concurrent('WASM federated modular parity (GZSTATE geometry vs Classic WAD @ spawn)', () => {
+  const skipUnderCoverage =
+    process.env.VITEST_COVERAGE === '1' && process.env.GZRENDER_MODULAR_PARITY_REQUIRED !== '1';
+
   let classicSnapshots: Array<{ mapRef: MapRef; snapshot: ModularFrameSnapshot }> = [];
 
   beforeAll(() => {
-    if (!iwadsPresent()) return;
+    if (skipUnderCoverage || !iwadsPresent()) return;
     preloadAllIwadMaps();
     classicSnapshots = captureAllSpawnModularFrameSnapshots('classic');
     for (const { mapRef } of classicSnapshots) {
@@ -104,7 +107,7 @@ describe.concurrent('WASM federated modular parity (GZSTATE geometry vs Classic 
   });
 
   it('full renderer state hash matches Classic when GZSTATE reconstructs map correctly', () => {
-    if (!iwadsPresent()) return;
+    if (skipUnderCoverage || !iwadsPresent()) return;
 
     const violations: string[] = [];
     for (const { mapRef, snapshot: classic } of classicSnapshots) {
@@ -142,7 +145,7 @@ describe.concurrent('WASM federated modular parity (GZSTATE geometry vs Classic 
 
   for (const stage of MODULAR_STAGE_ORDER) {
     it.concurrent(`per-stage BSP hash parity @ spawn — ${stage}`, () => {
-      if (!iwadsPresent()) return;
+      if (skipUnderCoverage || !iwadsPresent()) return;
 
       const violations: string[] = [];
       for (const { mapRef, snapshot: classic } of classicSnapshots) {

@@ -45,6 +45,9 @@ function formatViolations(violations: CourtyardInvariantViolation[]): string {
     .join('\n');
 }
 
+const SKIP_HEAVY_COURTYARD =
+  process.env.VITEST_COVERAGE === '1' && process.env.COURTYARD_PARITY_REQUIRED !== '1';
+
 function runCourtyardSuite(wadPath: string, wadLabel: string) {
   describe(`${wadLabel} courtyard visibility`, () => {
     const wad = loadWad(wadPath);
@@ -57,6 +60,7 @@ function runCourtyardSuite(wadPath: string, wadLabel: string) {
     it(
       'passes GZDoom BSP flat draw contract at every probe and yaw',
       () => {
+      if (SKIP_HEAVY_COURTYARD) return;
       const violations: CourtyardInvariantViolation[] = [];
 
       for (const analysis of analyses) {
@@ -91,6 +95,7 @@ function runCourtyardSuite(wadPath: string, wadLabel: string) {
     it(
       'passes courtyard connectivity rules when the camera has a single outdoor opening',
       () => {
+      if (SKIP_HEAVY_COURTYARD) return;
       const violations: CourtyardInvariantViolation[] = [];
 
       for (const analysis of analyses) {

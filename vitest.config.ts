@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'path';
 
 const cpuCount = os.cpus().length;
+const isCoverageRun = process.env.VITEST_COVERAGE === '1';
 const maxWorkers = (() => {
   const fromEnv = process.env.VITEST_MAX_WORKERS;
   if (fromEnv === '100%') return cpuCount;
@@ -20,7 +21,7 @@ const parallelPool = {
   fileParallelism: true,
   isolate: true,
   // Bound it.concurrent within a file — avoids Vitest worker RPC timeouts.
-  maxConcurrency: Math.max(4, Math.min(cpuCount, 16)),
+  maxConcurrency: isCoverageRun ? 4 : Math.max(4, Math.min(cpuCount, 16)),
 };
 
 /** Pure logic and parsers — unit-testable without WebGL/browser runtime. */
@@ -78,7 +79,7 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ['./test/setupWebGL.ts'],
-    hookTimeout: 120_000,
+    hookTimeout: isCoverageRun ? 300_000 : 120_000,
     ...parallelPool,
     coverage: {
       provider: 'v8',
@@ -100,7 +101,7 @@ export default defineConfig({
           include: ['src/**/*.test.ts', 'gzstate/**/*.test.ts'],
           exclude: ['**/*.integration.test.ts', 'test/integration/**'],
           environment: 'node',
-          testTimeout: 60_000,
+          testTimeout: isCoverageRun ? 180_000 : 60_000,
           ...parallelPool,
         },
       },
