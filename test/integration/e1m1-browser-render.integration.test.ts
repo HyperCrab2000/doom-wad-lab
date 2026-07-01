@@ -50,7 +50,7 @@ describe('E1M1 browser render integration', () => {
         page.on('pageerror', (e) => consoleErrors.push(e.message));
 
         await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const wadSelect = await page.$('.level-toolbar select');
+        const wadSelect = await page.$('.level-chrome__selects select');
         if (wadSelect) {
           await wadSelect.select('/wads/DOOM.WAD');
         }

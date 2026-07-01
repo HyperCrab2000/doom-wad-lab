@@ -24,11 +24,13 @@ import { clearIwadLumpCache, listMapNamesFromIwad } from '@/wad/loader/iwadLumpA
 import {
   captureGzdoomViewerFrame,
   disposeGzdoomViewerRuntime,
+  getHostedGzdoomModule,
   startGzdoomHostedPlay,
   stopGzdoomHostedPlay,
 } from '@/wad/renderer/gzrender-v2/gzdoom/gzdoomViewerRuntime';
 import {
   disposeGzdoomSRuntime,
+  getGzdoomSModule,
   GzdoomSSessionSupersededError,
   startGzdoomSPlay,
   stopGzdoomSPlay,
@@ -40,8 +42,9 @@ import {
 } from './mapLoadTimeout';
 import { withTimeout } from '@/utils/promiseTimeout';
 import {
-  gzdoomLayerSessionKey,
-} from '@/wad/renderer/gzrender-v2/gzdoom/applyGzdoomRenderLayers';
+  INITIAL_GZDOOM_LOAD_PROGRESS,
+  type GzdoomLoadProgress,
+} from '@/features/level-viewer/gzdoomPlayLoadProgress';
 import type { RenderLayerToggles } from '@/wad/renderer/modular/renderLayerToggles';
 import {
   createErrorStatus,
@@ -77,6 +80,7 @@ export const useDoomLoader = ({
   modPaths = [],
   renderBackend,
   gzdoomCanvasRef,
+  gzdoomPlayCanvasLive = false,
   loadGzdoomPlay = false,
   captureGzdoomGold = true,
   renderLayerToggles,
@@ -86,6 +90,8 @@ export const useDoomLoader = ({
   modPaths?: readonly string[];
   renderBackend: RenderBackend;
   gzdoomCanvasRef?: RefObject<HTMLCanvasElement | null>;
+  /** True once the play canvas element is mounted (stable key — no remount on map change). */
+  gzdoomPlayCanvasLive?: boolean;
   /** GZDoom WASM hosted renderer for Play tab (NOT Classic TS). */
   loadGzdoomPlay?: boolean;
   /** Spawn-frame WASM gold capture (Phase 2c); parallel with Classic play, not on its critical path. */
@@ -100,10 +106,6 @@ export const useDoomLoader = ({
   const [wad, setWad] = useState<Wad | null>(null);
   const [wadPath, setWadPath] = useState<string | null>(wadPathProp ?? null);
   const modPathsKey = useMemo(() => modPaths.join('|'), [modPaths]);
-  const gzdoomLayerKey = useMemo(
-    () => gzdoomLayerSessionKey(renderLayerToggles),
-    [renderLayerToggles],
-  );
   const stackCacheKey = useMemo(
     () => (wadPath ? wadStackCacheKey(wadPath, modPaths) : null),
     [wadPath, modPaths],
@@ -124,6 +126,24 @@ export const useDoomLoader = ({
   const classicReadyKeyRef = useRef('');
   const prevRenderBackendRef = useRef(renderBackend);
   const [classicLoadStartedAt, setClassicLoadStartedAt] = useState<number | null>(null);
+  const [goldCaptureStartedAt, setGoldCaptureStartedAt] = useState<number | null>(null);
+  const [gzdoomLoadProgress, setGzdoomLoadProgress] = useState<GzdoomLoadProgress>(
+    INITIAL_GZDOOM_LOAD_PROGRESS,
+  );
+  const [gzdoomGoldLoadProgress, setGzdoomGoldLoadProgress] = useState<GzdoomLoadProgress>(
+    INITIAL_GZDOOM_LOAD_PROGRESS,
+  );
+
+  const reportGzdoomLoadProgress = useCallback((progress: GzdoomLoadProgress) => {
+    setGzdoomLoadProgress(progress);
+  }, []);
+
+  const reportGzdoomGoldLoadProgress = useCallback((progress: GzdoomLoadProgress) => {
+    setGzdoomGoldLoadProgress(progress);
+  }, []);
+
+  const renderLayerTogglesRef = useRef(renderLayerToggles);
+  renderLayerTogglesRef.current = renderLayerToggles;
 
   // On renderer switch (not initial mount): tear down hosted GZDoom and reset play state so the new
   // backend never inherits a stale session key or zombie WASM main loop on the shared canvas path.
@@ -136,6 +156,7 @@ export const useDoomLoader = ({
     classicReadyKeyRef.current = '';
     setClassicPlayState('idle');
     setMapLoadState('idle');
+    setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
   }, [renderBackend]);
 
   const mapNames = useMemo(() => {
@@ -242,7 +263,8 @@ export const useDoomLoader = ({
     };
   }, [wadPath, loaderReady, stackCacheKey, modPathsKey, modPaths, renderBackend]);
 
-  // GZDoom WASM gold capture (Phase 2c) — background; Play uses Classic WebGL immediately.
+  // GZDoom WASM gold capture (Phase 2c). Must NOT run while Play is active — two concurrent
+  // createGzdoomModule() instances corrupt WebGL and produce the tiny-corner / black viewport.
   useEffect(() => {
     if (!useGzdoomWasm || !captureGzdoomGold) {
       if (!isGzdoomWasmFamily(renderBackend)) setMapLoadState('idle');
@@ -255,6 +277,8 @@ export const useDoomLoader = ({
 
     const loadGen = ++mapLoadGenRef.current;
     setMapLoadState('loading');
+    setGoldCaptureStartedAt(Date.now());
+    setGzdoomGoldLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
     setGzdoomWasmError(null);
     setStatus((prev) => createGzdoomLaunchingStatus(prev, selectedMap));
 
@@ -266,7 +290,7 @@ export const useDoomLoader = ({
     // Do not touch classicPlayState — Play mode loads Classic WebGL in parallel.
 
     void withTimeout(
-      captureGzdoomViewerFrame(gzdoomCanvasRef?.current ?? null, wadPath, selectedMap),
+      captureGzdoomViewerFrame(null, wadPath, selectedMap, reportGzdoomGoldLoadProgress),
       GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
       `GZDoom WASM load for ${selectedMap}`,
     )
@@ -278,6 +302,7 @@ export const useDoomLoader = ({
         gzdoomFrameUrlRef.current = frame.objectUrl;
         setGzdoomFrameUrl(frame.objectUrl);
         setMapLoadState('ready');
+        setGoldCaptureStartedAt(null);
         setStatus((prev) => createGzdoomMapReadyStatus(prev, selectedMap));
       })
       .catch((error) => {
@@ -285,13 +310,24 @@ export const useDoomLoader = ({
         const message = error instanceof Error ? error.message : String(error);
         setGzdoomWasmError(message);
         setMapLoadState('error');
+        setGoldCaptureStartedAt(null);
         setStatus(createMapLoadErrorStatus(error, selectedMap));
       });
 
     return () => {
       mapLoadGenRef.current += 1;
+      stopGzdoomHostedPlay();
     };
-  }, [useGzdoomWasm, captureGzdoomGold, selectedMap, wadPath, gzdoomCanvasRef]);
+  }, [useGzdoomWasm, captureGzdoomGold, selectedMap, wadPath, reportGzdoomGoldLoadProgress]);
+
+  // Tear down hosted play when leaving the Play tab or switching away from gzdoom-wasm.
+  useEffect(() => {
+    if (!useGzdoomWasm) return;
+    if (loadGzdoomPlay) return;
+    stopGzdoomHostedPlay();
+    classicReadyKeyRef.current = '';
+    setClassicPlayState('idle');
+  }, [useGzdoomWasm, loadGzdoomPlay]);
 
   // GZDoom WASM hosted Play — GZDoom's renderer on canvas, NOT Classic TS.
   useEffect(() => {
@@ -300,50 +336,65 @@ export const useDoomLoader = ({
     }
     const canvas = gzdoomCanvasRef?.current;
     if (!selectedMap || !wadPath || !canvas) {
-      setClassicPlayState('idle');
       return;
     }
 
-    const loadKey = `${wadPath}::${selectedMap}::${gzdoomLayerKey}`;
+    const loadKey = `${wadPath}::${selectedMap}`;
     if (classicReadyKeyRef.current === loadKey) {
-      setClassicPlayState('ready');
-      setMapLoadState('ready');
-      return;
+      const mod = getHostedGzdoomModule();
+      if (mod?._gzr_is_ready?.() === 1) {
+        setClassicPlayState('ready');
+        return;
+      }
+      classicReadyKeyRef.current = '';
     }
 
     const loadGen = ++classicLoadGenRef.current;
     setClassicLoadStartedAt(Date.now());
     setClassicPlayState('loading');
-    // Do not push createGzdoomPlayInjectStatus — that reuses the WAD parse segmented bar (W_Init
-    // etc.) which must never appear for gzdoom-wasm play. Loading feedback is gzdoom-play-loading.
+    setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
 
     let cancelled = false;
-    void withTimeout(
-      startGzdoomHostedPlay(canvas, wadPath, selectedMap, renderLayerToggles),
-      GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
-      `GZDoom hosted play for ${selectedMap}`,
-    )
-      .then(({ lumpCount: _lumpCount }) => {
-        if (cancelled || classicLoadGenRef.current !== loadGen) return;
-        classicReadyKeyRef.current = loadKey;
-        setClassicPlayState('ready');
-        setClassicLoadStartedAt(null);
-        setMapLoadState('ready');
-        setStatus((prev) => createGzdoomPlayReadyStatus(prev, selectedMap));
-      })
-      .catch((error) => {
-        if (cancelled || classicLoadGenRef.current !== loadGen) return;
-        setClassicPlayState('error');
-        setClassicLoadStartedAt(null);
-        classicReadyKeyRef.current = '';
-        setGzdoomWasmError(error instanceof Error ? error.message : String(error));
-      });
+    let started = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      started = true;
+      void withTimeout(
+        startGzdoomHostedPlay(
+          canvas,
+          wadPath,
+          selectedMap,
+          renderLayerTogglesRef.current,
+          reportGzdoomLoadProgress,
+        ),
+        GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
+        `GZDoom hosted play for ${selectedMap}`,
+      )
+        .then(({ lumpCount: _lumpCount }) => {
+          if (cancelled || classicLoadGenRef.current !== loadGen) return;
+          classicReadyKeyRef.current = loadKey;
+          setClassicPlayState('ready');
+          setClassicLoadStartedAt(null);
+          setStatus((prev) => createGzdoomPlayReadyStatus(prev, selectedMap));
+        })
+        .catch((error) => {
+          if (cancelled || classicLoadGenRef.current !== loadGen) return;
+          setClassicPlayState('error');
+          setClassicLoadStartedAt(null);
+          classicReadyKeyRef.current = '';
+          setGzdoomWasmError(error instanceof Error ? error.message : String(error));
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
-      stopGzdoomHostedPlay();
+      window.clearTimeout(timer);
+      if (started) {
+        stopGzdoomHostedPlay();
+        classicReadyKeyRef.current = '';
+      }
     };
-  }, [useGzdoomWasm, loadGzdoomPlay, selectedMap, wadPath, gzdoomCanvasRef, gzdoomLayerKey]);
+  }, [useGzdoomWasm, loadGzdoomPlay, selectedMap, wadPath, gzdoomPlayCanvasLive, reportGzdoomLoadProgress]);
 
   // GZDoom (s) WASM Play — Node GZSTATE + stripped fork binary. NOTE: this effect must NOT depend
   // on `wad`. The (s) runtime (startGzdoomSPlay) fetches and parses the IWAD itself from wadPath
@@ -359,46 +410,64 @@ export const useDoomLoader = ({
       return;
     }
 
-    const loadKey = `${wadPath}::${selectedMap}::s::${gzdoomLayerKey}`;
+    const loadKey = `${wadPath}::${selectedMap}::s`;
     if (classicReadyKeyRef.current === loadKey) {
-      setClassicPlayState('ready');
-      setMapLoadState('ready');
-      return;
+      const mod = getGzdoomSModule();
+      if (mod?._gzr_is_ready?.() === 1) {
+        setClassicPlayState('ready');
+        return;
+      }
+      classicReadyKeyRef.current = '';
     }
 
     const loadGen = ++classicLoadGenRef.current;
     setClassicLoadStartedAt(Date.now());
     setClassicPlayState('loading');
+    setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
     setStatus((prev) => createGzdoomSPlayInjectStatus(prev, selectedMap, 0));
 
     let cancelled = false;
-    void withTimeout(
-      startGzdoomSPlay(canvas, wadPath, selectedMap, renderLayerToggles),
-      GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
-      `GZDoom (s) play for ${selectedMap}`,
-    )
-      .then(({ lumpCount, gzstateBytes }) => {
-        if (cancelled || classicLoadGenRef.current !== loadGen) return;
-        classicReadyKeyRef.current = loadKey;
-        setClassicPlayState('ready');
-        setClassicLoadStartedAt(null);
-        setMapLoadState('ready');
-        setStatus((prev) => createGzdoomSPlayReadyStatus(prev, selectedMap, lumpCount, gzstateBytes));
-      })
-      .catch((error) => {
-        if (cancelled || classicLoadGenRef.current !== loadGen) return;
-        if (error instanceof GzdoomSSessionSupersededError) return;
-        setClassicPlayState('error');
-        setClassicLoadStartedAt(null);
-        classicReadyKeyRef.current = '';
-        setGzdoomWasmError(error instanceof Error ? error.message : String(error));
-      });
+    let started = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      started = true;
+      void withTimeout(
+        startGzdoomSPlay(
+          canvas,
+          wadPath,
+          selectedMap,
+          renderLayerTogglesRef.current,
+          reportGzdoomLoadProgress,
+        ),
+        GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
+        `GZDoom (s) play for ${selectedMap}`,
+      )
+        .then(({ lumpCount, gzstateBytes }) => {
+          if (cancelled || classicLoadGenRef.current !== loadGen) return;
+          classicReadyKeyRef.current = loadKey;
+          setClassicPlayState('ready');
+          setClassicLoadStartedAt(null);
+          setStatus((prev) => createGzdoomSPlayReadyStatus(prev, selectedMap, lumpCount, gzstateBytes));
+        })
+        .catch((error) => {
+          if (cancelled || classicLoadGenRef.current !== loadGen) return;
+          if (error instanceof GzdoomSSessionSupersededError) return;
+          setClassicPlayState('error');
+          setClassicLoadStartedAt(null);
+          classicReadyKeyRef.current = '';
+          setGzdoomWasmError(error instanceof Error ? error.message : String(error));
+        });
+    }, 0);
 
     return () => {
       cancelled = true;
-      stopGzdoomSPlay();
+      window.clearTimeout(timer);
+      if (started) {
+        stopGzdoomSPlay();
+        classicReadyKeyRef.current = '';
+      }
     };
-  }, [useGzdoomSWasm, selectedMap, wadPath, gzdoomCanvasRef, gzdoomLayerKey]);
+  }, [useGzdoomSWasm, selectedMap, wadPath, gzdoomPlayCanvasLive, reportGzdoomLoadProgress]);
 
   // Classic WebGL — legacy backends only (never GZDoom WASM Play).
   useEffect(() => {
@@ -504,6 +573,11 @@ export const useDoomLoader = ({
 
   const refreshWad = useCallback(() => {
     if (!wadPath) return;
+    stopGzdoomHostedPlay();
+    stopGzdoomSPlay();
+    classicReadyKeyRef.current = '';
+    setClassicPlayState('idle');
+    setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
     const cacheKey = stackCacheKey ?? wadPath;
     deleteCachedWad(cacheKey);
     clearIwadLumpCache(wadPath);
@@ -538,6 +612,7 @@ export const useDoomLoader = ({
     classicReadyKeyRef.current = '';
     setClassicPlayState('idle');
     setClassicLoadStartedAt(null);
+    setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
     if (wadPath) {
       refreshWad();
     }
@@ -552,6 +627,9 @@ export const useDoomLoader = ({
     mapLoadState,
     classicPlayState,
     classicLoadStartedAt,
+    goldCaptureStartedAt,
+    gzdoomLoadProgress,
+    gzdoomGoldLoadProgress,
     gzdoomFrameUrl,
     gzdoomWasmError,
     setWadPath,

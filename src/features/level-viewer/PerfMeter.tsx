@@ -90,7 +90,7 @@ export const PerfMeter: FC<PerfMeterProps> = ({ active }) => {
   if (!active) return null;
 
   return (
-    <div className="perf-meter" aria-hidden>
+    <div className="perf-meter" data-testid="perf-meter" aria-label="Frame performance">
       <div className="perf-meter__readout">
         <span ref={fpsRef} className="perf-meter__value">
           –
@@ -102,7 +102,13 @@ export const PerfMeter: FC<PerfMeterProps> = ({ active }) => {
         </span>
         <span className="perf-meter__unit">ms</span>
       </div>
-      <canvas ref={canvasRef} className="perf-meter__chart" width={CHART_W} height={CHART_H} />
+      <canvas
+        ref={canvasRef}
+        className="perf-meter__chart"
+        data-testid="perf-meter-chart"
+        width={CHART_W}
+        height={CHART_H}
+      />
     </div>
   );
 };

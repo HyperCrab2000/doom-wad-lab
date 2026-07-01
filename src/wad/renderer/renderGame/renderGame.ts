@@ -44,6 +44,7 @@ import {
   readStoredRenderLayerToggles,
   type RenderLayerToggles,
 } from '@/wad/renderer/modular/renderLayerToggles';
+import { publishClassicLayerDiagnostics } from '@/wad/renderer/modular/classicLayerMapping';
 import { readRenderModularStageCap, isModularParityMode } from '@/wad/renderer/modular/modularRenderStage';
 import { getFederatedRuntime, resetFederatedRuntime, type FederatedSimulationMotion } from '@/wad/federated/GzFederatedRuntime';
 
@@ -670,6 +671,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   const setRenderLayerToggles = (toggles: RenderLayerToggles) => {
     renderLayerToggles = toggles;
     persistRenderLayerToggles(toggles);
+    publishClassicLayerDiagnostics(toggles);
     if (renderBackend === 'pathtrace') {
       lastPathTraceDrawAt = 0;
       void import('@/wad/renderer/rtgl/rtglRenderer').then(({ resetPathTraceGpu }) => resetPathTraceGpu());

@@ -14,6 +14,10 @@ import {
   loadGzdoomSPureWasm,
 } from './gzdoomPureWasmHost';
 import { prepareHostedPlayCanvas, type GzdoomWasmModule } from './gzdoomWasmHost';
+import {
+  reportGzdoomProgress,
+  type GzdoomLoadProgressReporter,
+} from '@/features/level-viewer/gzdoomPlayLoadProgress';
 
 export { GzdoomSPureWasmNotBuiltError };
 
@@ -148,6 +152,7 @@ export interface GzdoomSPlayOptions {
   gzstateBytes: Uint8Array;
   gzstateName: string;
   layerArgv?: readonly string[];
+  onProgress?: GzdoomLoadProgressReporter;
 }
 
 function buildSPlayArgv(opts: GzdoomSPlayOptions): string[] {
@@ -183,15 +188,33 @@ function buildSPlayArgv(opts: GzdoomSPlayOptions): string[] {
   ];
 }
 
-export async function loadGzdoomSWasm(canvas: HTMLCanvasElement): Promise<GzdoomWasmModule> {
+export async function loadGzdoomSWasm(
+  canvas: HTMLCanvasElement,
+  onProgress?: GzdoomLoadProgressReporter,
+): Promise<GzdoomWasmModule> {
   prepareHostedPlayCanvas(canvas);
+  reportGzdoomProgress(onProgress, {
+    phase: 'load-script',
+    label: 'Loading GZDoom (s) WASM script',
+    percent: 40,
+  });
   const kind = await resolveGzdoomSArtifactKind();
 
   if (kind === 'pure') {
+    reportGzdoomProgress(onProgress, {
+      phase: 'compile-wasm',
+      label: 'Compiling pure WASM module',
+      percent: 52,
+    });
     return loadGzdoomSPureWasm(canvas);
   }
 
   await loadGzdoomSScript(STRIPPED_BASE);
+  reportGzdoomProgress(onProgress, {
+    phase: 'compile-wasm',
+    label: 'Instantiating WASM module',
+    percent: 52,
+  });
   const create = window.createGzdoomModule;
   if (!create) {
     throw new Error('createGzdoomModule not on window after gzdoom-s.js load');
@@ -211,19 +234,39 @@ export async function loadGzdoomSWasm(canvas: HTMLCanvasElement): Promise<Gzdoom
 
 export async function runGzdoomSPlay(opts: GzdoomSPlayOptions): Promise<GzdoomWasmModule> {
   const argv = buildSPlayArgv(opts);
-  const module = await loadGzdoomSWasm(opts.canvas);
+  const module = await loadGzdoomSWasm(opts.canvas, opts.onProgress);
   if (!module.FS) {
     throw new Error('GZDoom (s) WASM module missing FS');
   }
   module.FS.mkdirTree('/wad');
-  for (const pk3 of PK3_FILES) {
+  const pk3Total = PK3_FILES.length;
+  for (let i = 0; i < pk3Total; i++) {
+    const pk3 = PK3_FILES[i]!;
+    reportGzdoomProgress(opts.onProgress, {
+      phase: 'load-pk3',
+      label: 'Loading renderer assets',
+      detail: `${i + 1}/${pk3Total}`,
+      percent: 58 + Math.round(((i + 1) / pk3Total) * 14),
+    });
     module.FS.writeFile(`/${pk3}`, await fetchPk3Bytes(pk3));
   }
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'mount-data',
+    label: 'Mounting NODE_LUMPS.WAD + GZSTATE',
+    detail: `${opts.iwadName} · ${opts.gzstateName}`,
+    percent: 76,
+  });
   module.FS.writeFile(`/wad/${opts.iwadName}`, opts.iwadBytes);
   module.FS.writeFile(`/wad/${opts.gzstateName}`, opts.gzstateBytes);
   if (typeof module.callMain !== 'function') {
     throw new Error('GZDoom (s) WASM missing callMain');
   }
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'init-engine',
+    label: 'Starting GZDoom engine',
+    detail: opts.map,
+    percent: 88,
+  });
   try {
     module.callMain(argv);
   } catch (err) {
@@ -231,6 +274,11 @@ export async function runGzdoomSPlay(opts: GzdoomSPlayOptions): Promise<GzdoomWa
     throw err;
   }
   await waitForReady(module);
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'ready',
+    label: 'Ready',
+    percent: 100,
+  });
   return module;
 }
 

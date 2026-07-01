@@ -33,7 +33,7 @@ flowchart LR
 4. **`npm run test:coverage`** — same tests with **≥90%** line/statement coverage on scoped engine code ([`vitest.config.ts`](../vitest.config.ts)).
 5. **`npm run test:integration`** — integration project; IWAD tests **skip** when no valid `DOOM.WAD` / `DOOM2.WAD` is present; synthetic line-special tests **always** run.
 6. **`npm run build`** — Vite production bundle (workers + lazy voxel chunk).
-7. **Smoke test** — `vite preview` on port 4173, then `npm run test:console` (Puppeteer loads the app shell only; does **not** require a commercial IWAD in CI).
+7. **Smoke test** — `vite preview` on port 4173, console smoke + **diamond E2E** (GZDoom scenarios skip when no IWAD on runner).
 
 ## Common failures (and fixes)
 

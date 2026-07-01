@@ -69,6 +69,7 @@ import {
   type RenderLayerToggles,
   type WireframeMode,
 } from '@/wad/renderer/modular/renderLayerToggles';
+import { publishClassicLayerDiagnostics } from '@/wad/renderer/modular/classicLayerMapping';
 import { EMPTY_LIGHT_UNIFORMS } from '@/wad/renderer/utils/precomputedLights';
 import { blitSoftwarePlayfieldFrame } from '@/wad/parity/frame/softwarePlayfieldBlit';
 import { renderSoftwarePlayfield } from '@/wad/parity/frame/softwarePlayfieldRenderer';
@@ -982,6 +983,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   }
 
   if (typeof window !== 'undefined') {
+    const layerDiag = renderLayerToggles ? publishClassicLayerDiagnostics(renderLayerToggles) : null;
     (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
       walls: frameWallDraws,
       flats: frameFlatDraws,
@@ -997,6 +999,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
         drawState?.flatSubsectorOrder.some(
           (ss) => (buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1) === 42
         ) ?? false,
+      layerPlan: layerPlan,
+      activeStages: layerDiag?.activeStages ?? [],
+      inactiveLayers: layerDiag?.layers.filter((l) => !l.active).map((l) => l.id) ?? [],
     };
   }
 

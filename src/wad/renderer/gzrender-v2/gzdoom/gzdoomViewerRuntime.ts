@@ -13,12 +13,17 @@ import {
 } from '@hypercrab2000/doom-wad-core';
 
 import { fetchRawIwad } from '@/wad/loader/iwadLumpAccess';
+import {
+  reportGzdoomProgress,
+  type GzdoomLoadProgressReporter,
+} from '@/features/level-viewer/gzdoomPlayLoadProgress';
 import { runGzdoomPlay, runGzdoomMap, type GzdoomWasmModule } from '@/gzdoom-oracle/gzdoomWasmHost';
 import {
   DEFAULT_RENDER_LAYER_TOGGLES,
   type RenderLayerToggles,
 } from '@/wad/renderer/modular/renderLayerToggles';
-import { buildGzdoomLayerArgv, gzdoomLayerSessionKey } from './applyGzdoomRenderLayers';
+import { buildGzdoomLayerArgv } from './applyGzdoomRenderLayers';
+import { applyGzdoomLayerTogglesLive } from './applyGzdoomLayerTogglesLive';
 
 export interface GzdoomViewerFrame {
   objectUrl: string;
@@ -105,14 +110,21 @@ export async function startGzdoomHostedPlay(
   iwadPath: string,
   map: string,
   layerToggles: RenderLayerToggles = DEFAULT_RENDER_LAYER_TOGGLES,
+  onProgress?: GzdoomLoadProgressReporter,
 ): Promise<GzdoomPlaySession> {
-  const layerKey = gzdoomLayerSessionKey(layerToggles);
-  const sessionKey = `${iwadPath}::${map}::${layerKey}`;
+  const sessionKey = `${iwadPath}::${map}`;
   if (activeHostedKey === sessionKey && activeHostedModule) {
+    applyGzdoomLayerTogglesLive(activeHostedModule, layerToggles);
     return { module: activeHostedModule, lumpCount: 0 };
   }
   stopGzdoomHostedPlay();
 
+  reportGzdoomProgress(onProgress, {
+    phase: 'fetch-iwad',
+    label: 'Fetching raw IWAD',
+    detail: iwadPath.split('/').pop(),
+    percent: 8,
+  });
   const { bytes: iwadBytes, name: iwadName } = await fetchRawIwad(iwadPath);
   console.log(
     `[gzdoom] Play: mounting raw IWAD (${iwadBytes.byteLength} bytes) as /wad/${iwadName} — GZDoom parses lumps`,
@@ -124,6 +136,7 @@ export async function startGzdoomHostedPlay(
     iwadName,
     map,
     layerArgv: buildGzdoomLayerArgv(layerToggles),
+    onProgress,
   });
   activeHostedKey = sessionKey;
   (window as unknown as { __gzPlayModule?: GzdoomWasmModule }).__gzPlayModule = activeHostedModule;
@@ -151,18 +164,28 @@ export async function captureGzdoomViewerFrame(
   canvas: HTMLCanvasElement | null | undefined,
   iwadPath: string,
   map: string,
+  onProgress?: GzdoomLoadProgressReporter,
 ): Promise<GzdoomViewerFrame> {
   revokeActiveUrl();
 
+  // Node GZSTATE prep is silent — gold overlay shows WASM pipeline only.
   const captureCanvas = acquireCaptureCanvas(canvas);
 
   const { bytes: iwadBytes, name: iwadName } = await extractAndEncodeIwadForGzstate(iwadPath);
+
   const iwadBuf = iwadBytes.buffer.slice(
     iwadBytes.byteOffset,
     iwadBytes.byteOffset + iwadBytes.byteLength,
   );
 
   const gzstate = await resolveGzstateBytes(iwadPath, map, iwadBuf);
+
+  reportGzdoomProgress(onProgress, {
+    phase: 'load-script',
+    label: 'Loading GZDoom WASM',
+    detail: 'Gold spawn capture',
+    percent: 12,
+  });
 
   const { refFrameBytes, canvasPngBytes } = await runGzdoomMap({
     canvas: captureCanvas,
@@ -171,6 +194,7 @@ export async function captureGzdoomViewerFrame(
     map,
     gzstateBytes: gzstate.bytes,
     gzstateName: gzstate.name,
+    onProgress,
   });
 
   const pngBytes = refFrameBytes?.length ? refFrameBytes : canvasPngBytes;
@@ -180,6 +204,14 @@ export async function captureGzdoomViewerFrame(
 
   const blob = new Blob([pngBytes], { type: 'image/png' });
   activeObjectUrl = URL.createObjectURL(blob);
+
+  reportGzdoomProgress(onProgress, {
+    phase: 'ready',
+    label: 'Gold capture',
+    detail: 'Spawn frame ready',
+    percent: 100,
+  });
+
   return { objectUrl: activeObjectUrl };
 }
 

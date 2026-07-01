@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Toggle GZDoom (s) layer checkboxes and verify the viewport stays full-frame (not corner-boxed).
+ * Toggle GZDoom (s) layer checkboxes LIVE (no refresh) and verify viewport stays full-frame.
  *
  * Usage: npx tsx tools/gzrender-v2/test-gzdoom-s-layers.mts
  * Requires: npm run dev (5150)
@@ -61,15 +61,22 @@ async function readFill(page: Page): Promise<{ fill: number; w: number; h: numbe
   });
 }
 
+async function collectConsoleUnknownCommands(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __gzTestLogs?: string[] };
+    return w.__gzTestLogs ?? [];
+  });
+}
+
 async function toggleWallsOff(page: Page): Promise<void> {
-  await page.click('.layer-drawer-toggle');
+  await page.click('.layer-rail__toggle');
   await sleep(300);
   await page.evaluate(() => {
-    const labels = Array.from(document.querySelectorAll('.render-layer-panel__row-item'));
-    const walls = labels.find((el) => /^Walls$/i.test(el.textContent?.trim() ?? ''));
-    const input = walls?.querySelector('input[type=checkbox]') as HTMLInputElement | null;
-    if (!input) throw new Error('Walls checkbox not found');
-    if (input.checked) input.click();
+    const groups = Array.from(document.querySelectorAll('.render-layer-panel__group'));
+    const geo = groups.find((g) => g.querySelector('h4')?.textContent?.trim() === 'Geometry');
+    const walls = geo?.querySelector('.render-layer-panel__row-item input[type=checkbox]') as HTMLInputElement | null;
+    if (!walls) throw new Error('Geometry Walls checkbox not found');
+    if (walls.checked) walls.click();
   });
 }
 
@@ -83,11 +90,23 @@ async function main(): Promise<void> {
   await forcePreserveDrawingBuffer(page);
   await page.setViewport({ width: 1280, height: 900 });
 
+  await page.evaluateOnNewDocument(() => {
+    (window as unknown as { __gzTestLogs?: string[] }).__gzTestLogs = [];
+    const orig = console.error.bind(console);
+    console.error = (...args: unknown[]) => {
+      const msg = args.map(String).join(' ');
+      if (msg.includes('Unknown command')) {
+        (window as unknown as { __gzTestLogs?: string[] }).__gzTestLogs?.push(msg);
+      }
+      orig(...args);
+    };
+  });
+
   const url = `${BASE}/?renderer=gzdoom-s-wasm&_=${Date.now()}`;
   console.log('nav:', url);
   await page.goto(url, { waitUntil: 'load', timeout: 120_000 });
   await waitPlayReady(page);
-  await sleep(1500);
+  await sleep(2000);
 
   const before = await readFill(page);
   console.log(`before toggle: ${before.w}x${before.h} fill=${before.fill.toFixed(3)} sig=${before.sig}`);
@@ -95,29 +114,47 @@ async function main(): Promise<void> {
     throw new Error(`initial frame not full (${(before.fill * 100).toFixed(1)}% fill) — corner-box bug`);
   }
 
+  const playStateBefore = await page.evaluate(() =>
+    document.querySelector('.level-viewer')?.getAttribute('data-classic-play-state'),
+  );
+  if (playStateBefore !== 'ready') {
+    throw new Error(`expected ready before toggle, got ${playStateBefore}`);
+  }
+
   await toggleWallsOff(page);
-  console.log('toggled Walls off — waiting for layer restart…');
-  await sleep(800);
-  await waitPlayReady(page);
+  console.log('toggled Walls off live (no refresh expected)…');
   await sleep(1500);
+
+  const playStateAfter = await page.evaluate(() =>
+    document.querySelector('.level-viewer')?.getAttribute('data-classic-play-state'),
+  );
+  if (playStateAfter !== 'ready') {
+    throw new Error(`live toggle must not reload WASM — play state became ${playStateAfter}`);
+  }
+
+  const unknownCmds = await collectConsoleUnknownCommands(page);
+  if (unknownCmds.length > 0) {
+    throw new Error(`Unknown CVAR commands during live toggle:\n${unknownCmds.join('\n')}`);
+  }
+
+  const rootLen = await page.evaluate(() => document.getElementById('root')?.innerHTML.length ?? 0);
+  if (rootLen < 100) {
+    throw new Error('React root wiped after layer toggle (crash)');
+  }
 
   const after = await readFill(page);
   console.log(`after toggle:  ${after.w}x${after.h} fill=${after.fill.toFixed(3)} sig=${after.sig}`);
   if (after.fill < 0.5) {
     throw new Error(`after layer toggle frame corner-boxed (${(after.fill * 100).toFixed(1)}% fill)`);
   }
+  if (after.sig === before.sig) {
+    throw new Error('layer toggle did not change the frame (walls off had no visible effect)');
+  }
   if (after.w !== 1280 || after.h !== 960) {
     throw new Error(`unexpected buffer size ${after.w}x${after.h} (expected 1280x960)`);
   }
 
-  const canvasClass = await page.evaluate(() =>
-    document.querySelector('canvas[data-gzdoom-s-wasm], canvas.gzdoom-wasm-play-canvas')?.className ?? '',
-  );
-  if (!canvasClass.includes('gzdoom-wasm-play-canvas')) {
-    throw new Error(`canvas not on play class after reload: ${canvasClass}`);
-  }
-
-  console.log('\n=== RESULT: PASS (layer toggle, full-frame preserved) ===');
+  console.log('\n=== RESULT: PASS (live layer toggle, full-frame preserved, no unknown CVARs) ===');
   await browser.close();
 }
 

@@ -19,7 +19,8 @@ import {
   DEFAULT_RENDER_LAYER_TOGGLES,
   type RenderLayerToggles,
 } from '@/wad/renderer/modular/renderLayerToggles';
-import { buildGzdoomLayerArgv, gzdoomLayerSessionKey } from './applyGzdoomRenderLayers';
+import { buildGzdoomLayerArgv } from './applyGzdoomRenderLayers';
+import { applyGzdoomLayerTogglesLive } from './applyGzdoomLayerTogglesLive';
 
 /** MEMFS path for the Node-built lump archive (not the raw disk IWAD). */
 export const GZDOOM_S_INJECTED_IWAD = 'NODE_LUMPS.WAD';
@@ -42,9 +43,15 @@ export class GzdoomSSessionSupersededError extends Error {
   }
 }
 
+import {
+  reportGzdoomProgress,
+  type GzdoomLoadProgressReporter,
+} from '@/features/level-viewer/gzdoomPlayLoadProgress';
+
 async function prepareNodeInjectedLumpsAndGzstate(
   iwadPath: string,
   map: string,
+  onProgress?: GzdoomLoadProgressReporter,
 ): Promise<{
   iwadBytes: Uint8Array;
   iwadName: string;
@@ -52,13 +59,38 @@ async function prepareNodeInjectedLumpsAndGzstate(
   gzstateBytes: Uint8Array;
   gzstateName: string;
 }> {
+  reportGzdoomProgress(onProgress, {
+    phase: 'fetch-iwad',
+    label: 'Fetching IWAD',
+    percent: 5,
+  });
   const res = await fetch(iwadPath);
   if (!res.ok) throw new Error(`Failed to fetch IWAD ${iwadPath} (${res.status})`);
   const buf = await res.arrayBuffer();
   validateWadMagic(buf, iwadPath);
 
+  reportGzdoomProgress(onProgress, {
+    phase: 'parse-wad',
+    label: 'Parsing WAD lumps',
+    detail: iwadPath.split('/').pop(),
+    percent: 18,
+  });
   const wad = loadWadFromArrayBuffer(buf.slice(0));
   const lumpCount = wad.lumpInfo.length;
+
+  reportGzdoomProgress(onProgress, {
+    phase: 'parse-wad',
+    label: 'Parsing WAD lumps',
+    detail: `${lumpCount} lumps · PLAYPAL, TEXTURES, maps…`,
+    percent: 28,
+  });
+
+  reportGzdoomProgress(onProgress, {
+    phase: 'export-gzstate',
+    label: 'Building GZSTATE',
+    detail: `${lumpCount} lumps → NODE_LUMPS.WAD · ${map}`,
+    percent: 38,
+  });
   const encoded = encodeWadToArrayBuffer(wad);
   const gzstateDoc = exportToGzstate(wad, map);
   const gzstateWire = writeGzstate(gzstateDoc);
@@ -81,16 +113,17 @@ export async function startGzdoomSPlay(
   iwadPath: string,
   map: string,
   layerToggles: RenderLayerToggles = DEFAULT_RENDER_LAYER_TOGGLES,
+  onProgress?: GzdoomLoadProgressReporter,
 ): Promise<GzdoomSPlaySession> {
-  const layerKey = gzdoomLayerSessionKey(layerToggles);
-  const sessionKey = `${iwadPath}::${map}::${layerKey}`;
+  const sessionKey = `${iwadPath}::${map}::s`;
   if (activeKey === sessionKey && activeModule) {
+    applyGzdoomLayerTogglesLive(activeModule, layerToggles);
     return { module: activeModule, lumpCount: 0, gzstateBytes: 0 };
   }
   stopGzdoomSPlay();
   const myGen = playGeneration;
 
-  const prepared = await prepareNodeInjectedLumpsAndGzstate(iwadPath, map);
+  const prepared = await prepareNodeInjectedLumpsAndGzstate(iwadPath, map, onProgress);
   if (myGen !== playGeneration) {
     throw new GzdoomSSessionSupersededError();
   }
@@ -103,6 +136,7 @@ export async function startGzdoomSPlay(
     gzstateBytes: prepared.gzstateBytes,
     gzstateName: prepared.gzstateName,
     layerArgv: buildGzdoomLayerArgv(layerToggles),
+    onProgress,
   });
   if (myGen !== playGeneration) {
     try {
@@ -114,6 +148,7 @@ export async function startGzdoomSPlay(
   }
   activeModule = module;
   activeKey = sessionKey;
+  (window as unknown as { __gzSPlayModule?: GzdoomWasmModule }).__gzSPlayModule = activeModule;
   canvas.focus();
   return {
     module: activeModule,
@@ -137,6 +172,7 @@ export function stopGzdoomSPlay(): void {
   }
   activeModule = null;
   activeKey = '';
+  delete (window as unknown as { __gzSPlayModule?: GzdoomWasmModule }).__gzSPlayModule;
 }
 
 function validateWadMagic(buffer: ArrayBuffer, path: string): void {

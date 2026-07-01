@@ -17,6 +17,16 @@ This project is **Doom only**. Yserbius / Twinion work lives in `yserbius_twinio
 ![SpessaSynth](https://img.shields.io/badge/spessasynth__core-4.3-8B5CF6)
 ![apl--easy--gl](https://img.shields.io/badge/apl--easy--gl-0.4-FF6B35)
 
+## Complete technical bibles
+
+| Bible | What you will learn |
+|-------|---------------------|
+| [**Master index — bible/**](./bible/README.md) | Hub for all bibles, gold-standard definition, repo map |
+| [**WAD Bible**](./bible/wad/README.md) | IWAD container, every map lump, graphics, palettes, sprites, switches, BSP, GZSTATE export, **68-map catalog** |
+| [**GZDoom Renderer Bible**](./bible/gzdoom/README.md) | GZDoom HW/GLES pipeline: level load → BSP → walls/flats/sky/lights/sprites → WASM gold gates |
+| [**Classic Layer Bible**](./bible/classic-layers/README.md) | Layers → Node geometry → WebGL2 stages, live toggles, Puppeteer tests, screenshots |
+| [**Project Chronicle**](./bible/chronicle/README.md) | Decision diary, 68-map deep dives, architectural *why* |
+
 ## Guides
 
 | Topic | What you will learn |

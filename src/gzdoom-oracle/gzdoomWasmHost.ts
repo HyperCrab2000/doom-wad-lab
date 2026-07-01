@@ -3,6 +3,10 @@
  */
 
 import { buildParityCaptureArgv, type DisplayModeId } from './parityDisplayModes';
+import {
+  reportGzdoomProgress,
+  type GzdoomLoadProgressReporter,
+} from '@/features/level-viewer/gzdoomPlayLoadProgress';
 
 declare global {
   interface Window {
@@ -28,8 +32,13 @@ export interface GzdoomWasmModule {
    * char pointer — a Number on wasm32 but a BigInt on MEMORY64 (wasm64), so callers must coerce.
    */
   _gzr_poll_sound_events?: () => number | bigint;
+  /** Run a GZDoom console command (e.g. `+gl_render_walls 0`) on the live module. */
+  _gzr_exec_cmd?: (cmdPtr: number | bigint) => void;
   /** Emscripten runtime helper to read a C string pointer from WASM memory. */
   UTF8ToString?: (ptr: number) => string;
+  stringToUTF8?: (str: string, outPtr: number, maxBytes?: number) => void;
+  stackAlloc?: (size: number) => number | bigint;
+  lengthBytesUTF8?: (str: string) => number;
   /**
    * Emscripten MainLoop.pause — halts this module's render/sim rAF loop. GZDoom WASM cannot cleanly
    * exit, so on teardown (e.g. switching renderers) we pause the old instance's loop; otherwise the
@@ -55,6 +64,7 @@ export interface GzdoomRunOptions {
   map: string;
   gzstateBytes?: Uint8Array;
   gzstateName?: string;
+  onProgress?: GzdoomLoadProgressReporter;
   /** Layered debug display mode (console CVAR overrides). */
   displayMode?: DisplayModeId;
   /** Playfield coords for `-gzrender_probe x,y` (320×168). */
@@ -209,6 +219,7 @@ export interface GzdoomPlayOptions {
   map: string;
   /** Layers panel → +cvar argv pairs applied at callMain (GZDoom parses, not JS). */
   layerArgv?: readonly string[];
+  onProgress?: GzdoomLoadProgressReporter;
 }
 
 /**
@@ -316,19 +327,39 @@ export async function runGzdoomHosted(opts: GzdoomHostedOptions): Promise<Gzdoom
  */
 export async function runGzdoomPlay(opts: GzdoomPlayOptions): Promise<GzdoomWasmModule> {
   const argv = buildPlayArgv(opts);
-  const module = await loadGzdoomWasm(opts.canvas);
+  const module = await loadGzdoomWasm(opts.canvas, opts.onProgress);
   if (!module.FS) {
     throw new Error('GZDoom WASM module missing FS (MEMFS not linked)');
   }
   module.FS.mkdirTree('/wad');
-  for (const pk3 of PK3_FILES) {
+  const pk3Total = PK3_FILES.length;
+  for (let i = 0; i < pk3Total; i++) {
+    const pk3 = PK3_FILES[i]!;
+    reportGzdoomProgress(opts.onProgress, {
+      phase: 'load-pk3',
+      label: 'Loading GZDoom assets',
+      detail: `${i + 1}/${pk3Total}`,
+      percent: 48 + Math.round(((i + 1) / pk3Total) * 22),
+    });
     const bytes = await fetchPk3Bytes(pk3);
     module.FS.writeFile(`/${pk3}`, bytes);
   }
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'mount-data',
+    label: 'Mounting raw IWAD',
+    detail: opts.iwadName,
+    percent: 74,
+  });
   module.FS.writeFile(`/wad/${opts.iwadName}`, opts.iwadBytes);
   if (typeof module.callMain !== 'function') {
     throw new Error('GZDoom WASM missing callMain');
   }
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'init-engine',
+    label: 'Starting GZDoom engine',
+    detail: opts.map,
+    percent: 86,
+  });
   try {
     module.callMain(argv);
   } catch (err) {
@@ -336,11 +367,29 @@ export async function runGzdoomPlay(opts: GzdoomPlayOptions): Promise<GzdoomWasm
     throw err;
   }
   await waitForHostedReady(module);
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'ready',
+    label: 'Ready',
+    percent: 100,
+  });
   return module;
 }
 
-export async function loadGzdoomWasm(canvas: HTMLCanvasElement): Promise<GzdoomWasmModule> {
+export async function loadGzdoomWasm(
+  canvas: HTMLCanvasElement,
+  onProgress?: GzdoomLoadProgressReporter,
+): Promise<GzdoomWasmModule> {
+  reportGzdoomProgress(onProgress, {
+    phase: 'load-script',
+    label: 'Loading GZDoom WASM script',
+    percent: 22,
+  });
   await loadGzdoomScript();
+  reportGzdoomProgress(onProgress, {
+    phase: 'compile-wasm',
+    label: 'Compiling WASM module',
+    percent: 38,
+  });
   const create = window.createGzdoomModule;
   if (!create) throw new Error('createGzdoomModule not on window after gzdoom.js load');
 
@@ -362,14 +411,22 @@ export async function runGzdoomMap(opts: GzdoomRunOptions): Promise<GzdoomRunRes
   const gzdrawDumpPath =
     opts.gzdrawDumpPath ?? (opts.renderView != null ? defaultGzdrawMemfsPath(opts.map, opts.probeId) : undefined);
   const argv = buildArgv({ ...opts, gzdrawDumpPath });
-  const module = await loadGzdoomWasm(opts.canvas);
+  const module = await loadGzdoomWasm(opts.canvas, opts.onProgress);
 
   if (!module.FS) {
     throw new Error('GZDoom WASM module missing FS (MEMFS not linked)');
   }
 
   module.FS.mkdirTree('/wad');
-  for (const pk3 of PK3_FILES) {
+  const pk3Total = PK3_FILES.length;
+  for (let i = 0; i < pk3Total; i++) {
+    const pk3 = PK3_FILES[i]!;
+    reportGzdoomProgress(opts.onProgress, {
+      phase: 'load-pk3',
+      label: 'Loading GZDoom assets',
+      detail: `${i + 1}/${pk3Total}`,
+      percent: 52 + Math.round(((i + 1) / pk3Total) * 20),
+    });
     const bytes = await fetchPk3Bytes(pk3);
     module.FS.writeFile(`/${pk3}`, bytes);
   }
@@ -381,6 +438,13 @@ export async function runGzdoomMap(opts: GzdoomRunOptions): Promise<GzdoomRunRes
   if (typeof module.callMain !== 'function') {
     throw new Error('GZDoom WASM missing callMain');
   }
+
+  reportGzdoomProgress(opts.onProgress, {
+    phase: 'init-engine',
+    label: 'Capturing spawn frame',
+    detail: opts.map,
+    percent: 88,
+  });
 
   let callMainError: unknown;
   try {

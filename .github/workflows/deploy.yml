@@ -84,6 +84,7 @@ jobs:
             sleep 1
           done
           TEST_URL=http://127.0.0.1:4173 npx --yes tsx scripts/capture-console-errors.ts
+          TEST_URL=http://127.0.0.1:4173 npx --yes tsx tools/gzrender-v2/diamond-e2e-suite.mts
           kill $PREVIEW_PID
 
       - name: Configure AWS credentials

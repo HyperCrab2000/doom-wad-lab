@@ -57,11 +57,15 @@ window.__measureVisibleGameCanvas = function(grid) {
   const visual = document.querySelector('.game-display') || document.querySelector('.game-canvas');
   const anchor = document.querySelector('.game-canvas');
   const game = visual || anchor;
-  const toolbar = document.querySelector('.level-toolbar');
+  const toolbar = document.querySelector('.level-chrome') || document.querySelector('.level-toolbar');
   const toolbarVisible =
     toolbar != null && getComputedStyle(toolbar).display !== 'none' && toolbar.clientHeight > 0;
   const viewer = document.querySelector('.level-viewer');
-  const fps = document.getElementById('fps-counter')?.textContent ?? null;
+  const fpsLegacy = document.getElementById('fps-counter')?.textContent ?? null;
+  const perfRoot = document.querySelector('[data-testid="perf-meter"]');
+  const perfFps = perfRoot?.querySelector('.perf-meter__value:not(.perf-meter__value--ms)')?.textContent?.trim() ?? null;
+  const perfMs = perfRoot?.querySelector('.perf-meter__value--ms')?.textContent?.trim() ?? null;
+  const fps = perfFps && perfFps !== '–' ? perfFps + ' fps · ' + perfMs + ' ms' : fpsLegacy;
 
   const meta = {
     hasGameDisplay: Boolean(visual),
@@ -83,7 +87,7 @@ window.__measureVisibleGameCanvas = function(grid) {
     mapLoadState: viewer?.getAttribute('data-map-load-state') ?? null,
     isPlaying: viewer?.getAttribute('data-is-playing') === 'true',
     fps,
-    fpsLive: fps != null && fps.includes('('),
+    fpsLive: (fps != null && fps.includes('(')) || (perfFps != null && perfFps !== '–' && perfMs != null && perfMs !== '–'),
     rendererError: document.querySelector('.renderer-error')?.textContent ?? null,
     hudVisible: false,
     hasWebgl: false,
@@ -118,6 +122,11 @@ window.__measureVisibleGameCanvas = function(grid) {
         ? gridBlackRatioFromReadPixels(gl, visual.width, visual.height, grid)
         : gridBlackRatioFromVisual(visual, grid);
     }
+  }
+
+  const gzdoomHud = document.querySelector('.gzdoom-wasm-hud');
+  if (gzdoomHud && gzdoomHud.textContent && gzdoomHud.textContent.trim().length > 4) {
+    meta.hudVisible = true;
   }
 
   const hud = document.querySelector('canvas.doom-hud');
