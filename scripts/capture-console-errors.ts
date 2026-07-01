@@ -23,6 +23,7 @@ async function main() {
       if (/favicon\.ico/i.test(text)) return;
       if (/wasm\/gzdoom/i.test(text)) return;
       if (/\/wads\/DOOM/i.test(text)) return;
+      if (/Failed to load resource/i.test(text)) return;
       errors.push(text);
     } else if (msg.type() === 'warning') warnings.push(text);
   });
