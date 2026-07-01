@@ -1,4 +1,4 @@
-import { createCanvas } from 'canvas';
+import { createCanvas, ImageData as NodeImageData } from 'canvas';
 
 const mockGl = {
   TEXTURE_2D: 0x0de1,
@@ -72,3 +72,6 @@ const mockGl = {
 
 (globalThis as typeof globalThis & { createImageBitmap?: typeof createImageBitmap }).createImageBitmap = async () =>
   ({ close: () => {} }) as ImageBitmap;
+
+(globalThis as typeof globalThis & { ImageData: typeof ImageData }).ImageData =
+  NodeImageData as unknown as typeof ImageData;
