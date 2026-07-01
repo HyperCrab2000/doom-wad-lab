@@ -126,12 +126,6 @@ export default defineConfig({
           if (id.includes('node_modules/three/examples')) {
             return 'three';
           }
-          if (id.includes('/wad/renderer/rtgl/')) {
-            return 'rtgl-renderer';
-          }
-          if (id.includes('/wad/renderer/gzrender-v2/')) {
-            return 'gzrender-federated';
-          }
         },
       },
     },
