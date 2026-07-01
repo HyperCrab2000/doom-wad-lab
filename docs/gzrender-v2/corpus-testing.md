@@ -16,6 +16,7 @@ Future: TNT.WAD, PLUTONIA.WAD, user PWAD fixtures.
 
 | Gate | Description | Status |
 |------|-------------|--------|
+| **0** | **WAD data parity (pre-renderer)** — lump bytes, map round-trip, wire REJECT/BLOCKMAP | **Closed** (`npm run test:wad-data`, 4 tiers × 68 maps) |
 | 1 | Single-map smoke (E1M1, MAP01) | Closed |
 | 2 | All maps in first target WAD | Closed |
 | 3 | Full IWAD corpus (DOOM + DOOM2) | **Closed** (`npm run test:corpus`) |

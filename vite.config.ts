@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import string from 'vite-plugin-string';
 import path from 'path';
 import { readFile } from 'fs/promises';
+import sirv from 'sirv';
 
 function patchOpl3StrictLoops(code: string): string {
   return code
@@ -47,19 +48,49 @@ function buildFederatedWasmPlugin(): Plugin {
     name: 'build-federated-wasm',
     async buildStart() {
       const { spawnSync } = await import('node:child_process');
+      const { existsSync } = await import('node:fs');
+      const outWasm = path.resolve(__dirname, 'public/wasm/gzrender_federated/gzrender_federated.wasm');
+      if (process.env.VITE_SKIP_WASM_BUILD === '1' && existsSync(outWasm)) {
+        return;
+      }
       const script = path.resolve(__dirname, 'tools/gzrender-v2/build-federated-wasm.mjs');
       const result = spawnSync(process.execPath, [script], {
         cwd: __dirname,
         stdio: 'inherit',
       });
       if (result.status !== 0) {
+        if (existsSync(outWasm)) {
+          console.warn('[build-federated-wasm] build failed; using existing gzrender_federated.wasm');
+          return;
+        }
         throw new Error('build-federated-wasm failed');
       }
     },
   };
 }
 
+function serveArtifactsDir(): Plugin {
+  const artifactsDir = path.resolve(__dirname, 'artifacts');
+  return {
+    name: 'serve-artifacts',
+    configureServer(server) {
+      server.middlewares.use(
+        '/artifacts',
+        sirv(artifactsDir, { dev: true, etag: true, single: false }),
+      );
+    },
+  };
+}
+
 export default defineConfig({
+  server: {
+    host: true,
+    port: 5150,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
   plugins: [
     react(),
     string({
@@ -68,6 +99,7 @@ export default defineConfig({
     fixOpl3StrictLoops(),
     copyOpl3BrowserBundle(),
     buildFederatedWasmPlugin(),
+    serveArtifactsDir(),
   ],
   resolve: {
     alias: [
@@ -76,12 +108,16 @@ export default defineConfig({
     ]
   },
   optimizeDeps: {
-    entries: ['index.html'],
+    entries: ['index.html', 'gzdoom-oracle.html'],
     exclude: ['spessasynth_core'],
   },
   assetsInclude: ['**/*.wad','**/*.kvx', '**/*.kvx?arrayBuffer'],
   build: {
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        gzdoomOracle: path.resolve(__dirname, 'gzdoom-oracle.html'),
+      },
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/three')) {

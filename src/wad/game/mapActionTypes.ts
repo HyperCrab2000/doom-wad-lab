@@ -1,17 +1,13 @@
-import type { MapActionSoundKind } from '@/wad/game/mapActionSounds';
 import type { TeleportDestination } from './teleportSystem';
 
 export interface MapActionResult {
   triggered: boolean;
   playSwitch?: boolean;
-  /** Exit switch (special 11) uses DSSWTCHX; default is DSSWTCHN. */
-  switchVariant?: 'on' | 'off';
   playOpen?: boolean;
   playClose?: boolean;
   playStart?: boolean;
-  playStop?: boolean;
   playTeleport?: boolean;
-  sound?: MapActionSoundKind;
+  sound?: 'door' | 'blaze' | 'lift' | 'mover';
   teleport?: TeleportDestination;
   /** Vanilla exit line (11, 51, 52, 124). */
   requestExit?: boolean;

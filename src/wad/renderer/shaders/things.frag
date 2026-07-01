@@ -16,14 +16,24 @@ uniform float centerClipW;
 
 in vec3 vPos;
 in vec2 vUv;
+in float vParitySpanT;
 
 out vec4 fragColor;
+
+#include "colormapParity.glsl"
 
 void main(void) {
   vec4 col = texture(tex, vUv);
 
   if (col.a < 0.1) {
     discard;
+  }
+
+  if (parityColormap != 0) {
+    float visibility = spriteVisibility();
+    fragColor = vec4(sampleColormapParity(col, sectorLightLevel, visibility), col.a);
+    gl_FragDepth = centerClipZ / centerClipW * 0.5 + 0.5;
+    return;
   }
 
   float flameMask = emissiveFullColumn > 0.5

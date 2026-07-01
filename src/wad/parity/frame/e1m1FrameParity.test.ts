@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { diffPlayfieldPngFiles, doomPlayfieldRegion, formatFrameDiff, loadPng } from '@/wad/parity/frame/frameDiff';
+import { diffPlayfieldPngFiles, doomPlayfieldRegion, formatFrameDiff, gzdoomViewRegion, loadPng } from '@/wad/parity/frame/frameDiff';
 
 const ROOT = process.cwd();
 const GZDOOM_FRAME = path.join(ROOT, 'artifacts/gzrender-v2/gzdoom/E1M1.png');
@@ -12,6 +12,10 @@ describe('frame diff helpers', () => {
   it('doomPlayfieldRegion matches 640x480 vanilla layout at scale 2', () => {
     const region = doomPlayfieldRegion(640, 480, 2);
     expect(region).toEqual({ x: 0, y: 40, width: 640, height: 336 });
+  });
+
+  it('gzdoomViewRegion matches screenblocks 10 at 640×480', () => {
+    expect(gzdoomViewRegion(640, 480)).toEqual({ x: 0, y: 0, width: 640, height: 403 });
   });
 });
 
@@ -33,7 +37,7 @@ describe('E1M1 frame parity (Stage 2 gate)', () => {
 
     const result = await diffPlayfieldPngFiles(GZDOOM_FRAME, WADLAB_FRAME, { tolerance: 0 });
     // eslint-disable-next-line no-console
-    console.log(`E1M1 frame parity: ${formatFrameDiff(result)} (${result.leftSize} vs ${result.rightSize})`);
+    console.log(`E1M1 frame parity: ${formatFrameDiff(result)} (${result.leftSize} vs ${result.rightSize}, layout ${result.layout})`);
 
     // Baseline recorded 2026-06-17 — Stage 2 gate open until mismatch → 0
     if (!process.env.GZFRAME_PARITY_REQUIRED) {

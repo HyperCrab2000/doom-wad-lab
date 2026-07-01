@@ -30,6 +30,14 @@ import { doomAngleToYaw } from '@/wad/renderer/controls/playerView';
 import { createVoxelThingFrameMap, createVoxelCatalogView, type VoxelCatalogView, type VoxelThingFrameMap } from './voxelThingMeshes';
 import { createHeightTextureSet, propagateWallHeightRelief, propagateFlatHeightRelief, clearHeightUrlMissCache } from './heightTextures';
 import { drawFlat as rasterizeFlat } from '@/wad/renderer/drawAssets/drawFlat';
+import { readFrameParityModeFromLocation } from '@/wad/parity/frame/frameParity';
+import { uploadColormapLutTexture } from '@/wad/parity/frame/colormapParity';
+import {
+  rasterizeFlatIndex,
+  rasterizePatchIndex,
+  rasterizeTextureIndex,
+  uploadIndexRasterTexture,
+} from '@/wad/parity/raster/rasterizeIndex';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
 import { buildSectorTriangleHash, TriangleHashObject } from '@/wad/renderer/utils/sectorLookup';
 import { buildSectorVisibilityIndex, finalizeSectorVisibilityIndex } from '@/wad/renderer/utils/sectorVisibility';
@@ -37,11 +45,15 @@ import { buildSortedFlats } from '@/wad/renderer/geometry/geometryCache';
 import { buildRenderableThings, RenderableThing } from './renderableThings';
 import { Sector } from '@/wad/interfaces/Sector';
 import {
+  deleteCachedMapLoad,
   getCachedMapLoad,
   mapLoadCacheKey,
   setCachedMapLoad,
   type CachedMapGeometry,
 } from '@/wad/renderer/renderGame/mapLoadCache';
+import { withTimeout } from '@/utils/promiseTimeout';
+
+const SHARED_MAP_GEOMETRY_TIMEOUT_MS = 120_000;
 
 export interface LoadedWadData {
   wad: Wad;
@@ -73,6 +85,7 @@ export interface LoadedWadData {
   wallTexturesByName: Record<string, WallTexture>;
   floorTextureColors: Map<string, [number, number, number]>;
   wallTextureColors: Map<string, [number, number, number]>;
+  colormapLut?: WebGLTexture;
 }
 
 export async function loadWad(
@@ -82,11 +95,21 @@ export async function loadWad(
   mapName: string,
   wadPath?: string | null,
   modPaths: readonly string[] = [],
+  opts: { useIndexTextures?: boolean } = {},
 ): Promise<LoadedWadData> {
-  const cacheKey = mapLoadCacheKey(wadPath, mapName);
+  const frameParity = readFrameParityModeFromLocation();
+  const useIndexTextures = opts.useIndexTextures ?? frameParity;
+  const cacheKey = mapLoadCacheKey(wadPath, mapName, frameParity, useIndexTextures);
   let sharedPromise = getCachedMapLoad(cacheKey);
   if (!sharedPromise) {
-    sharedPromise = buildSharedMapGeometry(gl, wad, map, mapName, wadPath);
+    sharedPromise = withTimeout(
+      buildSharedMapGeometry(gl, wad, map, mapName, wadPath, useIndexTextures),
+      SHARED_MAP_GEOMETRY_TIMEOUT_MS,
+      `Map geometry for ${mapName}`,
+    ).catch((error) => {
+      deleteCachedMapLoad(cacheKey);
+      throw error;
+    });
     setCachedMapLoad(cacheKey, sharedPromise);
   }
 
@@ -107,6 +130,7 @@ interface RuntimeLoadedParams {
   voxelCatalog: VoxelCatalogView;
   floorTextureColors?: Map<string, [number, number, number]>;
   wallTextureColors?: Map<string, [number, number, number]>;
+  colormapLut?: WebGLTexture;
 }
 
 function relinkMapBuffers(buffers: MapBuffers, map: WadMap): void {
@@ -177,6 +201,7 @@ function hydrateLoadedMap(
     wallTexturesByName: shared.wallTexturesByName,
     floorTextureColors: shared.floorTextureColors,
     wallTextureColors: shared.wallTextureColors,
+    colormapLut: shared.colormapLut,
     voxelThingFrames: createVoxelThingFrameMap(map, { wad, modPaths, catalog: voxelCatalog }),
     voxelCatalog,
   });
@@ -196,6 +221,7 @@ function buildRuntimeLoadedData(params: RuntimeLoadedParams): LoadedWadData {
     voxelCatalog,
     floorTextureColors,
     wallTextureColors,
+    colormapLut,
   } = params;
 
   const playerStartThing = map.THINGS.find((thing) => thing.type === 1);
@@ -263,6 +289,7 @@ function buildRuntimeLoadedData(params: RuntimeLoadedParams): LoadedWadData {
     wallTexturesByName,
     floorTextureColors: floorTextureColors ?? new Map(),
     wallTextureColors: wallTextureColors ?? new Map(),
+    colormapLut: params.colormapLut,
   };
 }
 
@@ -271,7 +298,8 @@ async function buildSharedMapGeometry(
   wad: Wad,
   map: WadMap,
   mapName: string,
-  wadPath?: string | null
+  wadPath?: string | null,
+  useIndexTextures = readFrameParityModeFromLocation(),
 ): Promise<CachedMapGeometry> {
   const wadAssets = getCachedWadAssets(wad, map, mapName, wadPath);
   const sortedFramesByThingName = extractFramesFromSprites(wadAssets.spritesByName);
@@ -285,7 +313,6 @@ async function buildSharedMapGeometry(
   const wallNameList = [...wallNames];
   const flatNameList = [...flatNames];
   const currentSky = selectSkyTexture(mapName);
-
   clearHeightUrlMissCache();
 
   const heightSources = {
@@ -346,12 +373,33 @@ async function buildSharedMapGeometry(
   };
 
   for (const flat of wadAssets.flats) {
+    if (useIndexTextures) {
+      const lump = wad.flats[flat.name] ?? wad.flats[flat.name.toUpperCase()];
+      if (lump) {
+        textures.flats[flat.name] = uploadIndexRasterTexture(gl, rasterizeFlatIndex(lump));
+        continue;
+      }
+    }
     textures.flats[flat.name] = createEnhancedTexture(gl, flat.graphics.canvas);
   }
   for (const tex of wadAssets.textures) {
+    if (useIndexTextures) {
+      const wallTex = wad.textures[tex.name] ?? wad.textures[tex.name.toUpperCase()];
+      if (wallTex) {
+        textures.walls[tex.name] = uploadIndexRasterTexture(gl, rasterizeTextureIndex(wallTex, wad));
+        continue;
+      }
+    }
     textures.walls[tex.name] = createEnhancedTexture(gl, tex.graphics.canvas);
   }
   for (const sprite of wadAssets.sprites) {
+    if (useIndexTextures) {
+      const lump = wad.sprites[sprite.name] ?? wad.sprites[sprite.name.toUpperCase()];
+      if (lump) {
+        textures.things[sprite.name] = uploadIndexRasterTexture(gl, rasterizePatchIndex(lump));
+        continue;
+      }
+    }
     textures.things[sprite.name] = canvasToTexture(gl, sprite.graphics.canvas, {
       minFilter: gl.NEAREST,
       magFilter: gl.NEAREST,
@@ -395,6 +443,7 @@ async function buildSharedMapGeometry(
     wallTextureColors,
     triangleHash,
     sectorVisibility: sectorVisibility!,
+    colormapLut: useIndexTextures ? uploadColormapLutTexture(gl, wad.playpal, wad.colormap) : undefined,
   };
 }
 

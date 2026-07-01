@@ -24,10 +24,14 @@ export interface ModularStageSnapshot {
   bspHash: string | null;
 }
 
+/** Where spawn-time geometry came from — wasm-federated must use `gzstate`, not shared WAD harness. */
+export type ModularGeometrySource = 'wad' | 'gzstate';
+
 export interface ModularFrameSnapshot {
   frameIndex: number;
   backend: RenderBackend;
   mapName: string;
+  geometrySource: ModularGeometrySource;
   stageCap: ModularRenderStage | null;
   stages: Partial<Record<ModularRenderStage, ModularStageSnapshot>>;
   fullHash: string;

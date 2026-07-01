@@ -3,7 +3,12 @@ import type { RenderBackend } from '@/wad/renderer/renderBackend';
 import type { ModularRenderStage } from '@/wad/renderer/modular/modularRenderStage';
 import { MODULAR_STAGE_ORDER } from '@/wad/renderer/modular/modularRenderStage';
 
-import type { ModularFrameSnapshot, ModularStageSnapshot, StageDrawCounts } from './stageSnapshotTypes';
+import type {
+  ModularFrameSnapshot,
+  ModularGeometrySource,
+  ModularStageSnapshot,
+  StageDrawCounts,
+} from './stageSnapshotTypes';
 
 let globalFrameIndex = 0;
 
@@ -44,7 +49,7 @@ export class StageSnapshotRecorder {
     });
   }
 
-  finalize(): ModularFrameSnapshot {
+  finalize(geometrySource: ModularGeometrySource = 'wad'): ModularFrameSnapshot {
     const stages: Partial<Record<ModularRenderStage, ModularStageSnapshot>> = {};
     for (const [key, value] of this.stages) {
       stages[key] = value;
@@ -54,6 +59,7 @@ export class StageSnapshotRecorder {
       frameIndex: this.frameIndex,
       backend: this.backend,
       mapName: this.mapName,
+      geometrySource,
       stageCap: this.stageCap,
       stages,
       fullHash,

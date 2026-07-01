@@ -1,5 +1,5 @@
-;; Federated GZRender WASM host — validates GZSTATE magic, stores map stats for JS/WebGL backend.
-;; Full render crates (Rust) replace this module when wasm-pack is available in CI.
+;; Federated GZRender WASM host — validates GZSTATE magic/version and tracks map stats.
+;; Full section parse: renderer-v2/federated/crates/gzrender-wasm (wasm-pack) when available.
 
 (module
   (memory (export "memory") 64)

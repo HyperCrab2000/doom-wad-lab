@@ -12,6 +12,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=gzdoom-paths.sh
 source "$SCRIPT_DIR/gzdoom-paths.sh"
+# shellcheck source=gzdoom-run-batch.sh
+source "$SCRIPT_DIR/gzdoom-run-batch.sh"
+# shellcheck source=gzdoom-parity-args.sh
+source "$SCRIPT_DIR/gzdoom-parity-args.sh"
 GZDOOM="$(resolve_gzdoom_bin)" || GZDOOM=""
 IWAD="${1:-$ROOT/public/wads/DOOM.WAD}"
 MAP="${2:-E1M1}"
@@ -29,9 +33,7 @@ die() {
   log "======== CAPTURE FAILED ========"
   log "$*"
   log "Full log: $LOG_FILE"
-  log ""
-  log "Fatal lines from GZDoom output:"
-  rg -n "Execution could not continue|I_FatalError|Cannot find|Unable to load|Could not find map|ERROR" "$LOG_FILE" 2>/dev/null | tail -30 || tail -30 "$LOG_FILE"
+  dump_gzdoom_failure "$LOG_FILE" | tee -a "$LOG_FILE"
   exit 1
 }
 
@@ -68,6 +70,13 @@ resolve_map_args() {
 
 MAP_ARGS=($(resolve_map_args "$MAP"))
 
+# Disable macOS Retina framebuffer scaling so PNG matches vid_defwidth × vid_defheight.
+export SDL_VIDEO_HIGHDPI_DISABLED="${SDL_VIDEO_HIGHDPI_DISABLED:-1}"
+
+# Ephemeral HOME avoids macOS config restoring vid_hidpi after +vid_hidpi 0.
+GZDOOM_HOME="$(mktemp -d 2>/dev/null || mktemp -d -t gzdoom-parity)"
+trap 'rm -rf "$GZDOOM_HOME"' EXIT
+
 log "capture-gzdoom-ref-frame"
 log "  iwad:   $IWAD"
 log "  map:    $MAP"
@@ -75,16 +84,19 @@ log "  args:   ${MAP_ARGS[*]}"
 log "  state:  $OUT_STATE"
 log "  frame:  $OUT_FRAME"
 log "  gzdoom: $GZDOOM"
+log "  timeout: ${GZDOOM_TIMEOUT:-45}s"
 log ""
 
-set +e
-"$GZDOOM" -batchout /dev/null -nosound -windowed \
-  +wipetype 0 +screenblocks 11 +screenshot_quiet 1 \
-  +vid_fullscreen 0 +vid_defwidth 640 +vid_defheight 480 +vid_hidpi 0 \
+HOME="$GZDOOM_HOME" GZDOOM_BIN="$GZDOOM" run_gzdoom_batch "$LOG_FILE" -- \
+  "${GZDOOM_PARITY_ARGS[@]}" \
   -iwad "$IWAD" "${MAP_ARGS[@]}" \
-  -dumpgzstate "$OUT_STATE" -gzstate_refframe "$OUT_FRAME" >>"$LOG_FILE" 2>&1
+  -dumpgzstate "$OUT_STATE" \
+  -gzrender_only -gzstate_refframe "$OUT_FRAME"
 GZ_EXIT=$?
-set -e
+
+if [[ $GZ_EXIT -eq 124 ]]; then
+  die "gzdoom timed out after ${GZDOOM_TIMEOUT:-45}s"
+fi
 
 if [[ $GZ_EXIT -ne 0 ]]; then
   die "gzdoom exited $GZ_EXIT"
@@ -108,6 +120,17 @@ fi
 
 STATE_BYTES=$(wc -c <"$OUT_STATE" | tr -d ' ')
 FRAME_BYTES=$(wc -c <"$OUT_FRAME" | tr -d ' ')
+
+FRAME_W=""
+FRAME_H=""
+if command -v sips >/dev/null 2>&1; then
+  FRAME_W=$(sips -g pixelWidth "$OUT_FRAME" 2>/dev/null | awk '/pixelWidth:/ {print $2}')
+  FRAME_H=$(sips -g pixelHeight "$OUT_FRAME" 2>/dev/null | awk '/pixelHeight:/ {print $2}')
+fi
+
 log "SUCCESS: state $STATE_BYTES bytes -> $OUT_STATE"
-log "SUCCESS: frame $FRAME_BYTES bytes -> $OUT_FRAME"
+log "SUCCESS: frame $FRAME_BYTES bytes -> $OUT_FRAME (${FRAME_W:-?}x${FRAME_H:-?})"
+if [[ -n "$FRAME_W" && -n "$FRAME_H" && ( "$FRAME_W" != "640" || "$FRAME_H" != "480" ) ]]; then
+  die "frame PNG is ${FRAME_W}x${FRAME_H}, expected 640x480 (GAP-0001) — check +vid_hidpi 0 and SDL_VIDEO_HIGHDPI_DISABLED"
+fi
 log "log: $LOG_FILE"

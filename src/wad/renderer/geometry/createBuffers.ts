@@ -163,8 +163,14 @@ export async function createMapBuffersAsync(
   map: WadMap,
   texturesByName: Record<string, WallTexture>
 ): Promise<{ buffers: MapBuffers; geometry: CpuMapGeometry }> {
-  const geometry = await buildMapGeometryInWorker(map, texturesByName);
-  return { buffers: uploadCpuGeometry(gl, map, geometry), geometry };
+  try {
+    const geometry = await buildMapGeometryInWorker(map, texturesByName);
+    return { buffers: uploadCpuGeometry(gl, map, geometry), geometry };
+  } catch (error) {
+    console.warn('[createMapBuffersAsync] worker path failed; using sync CPU fallback:', error);
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    return { buffers: uploadCpuGeometry(gl, map, geometry), geometry };
+  }
 }
 
 export function attachMapBufferIndexes(

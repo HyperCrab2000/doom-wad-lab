@@ -29,9 +29,10 @@ export function updatePlayfieldCamera(
   cameraNear: number,
   cameraFar: number,
   viewMatrix: mat4,
-  modelMatrix: mat4
+  modelMatrix: mat4,
+  layoutOverride?: GameViewLayout,
 ): void {
-  camera.layout = computeGameViewLayout(canvasWidth, canvasHeight);
+  camera.layout = layoutOverride ?? computeGameViewLayout(canvasWidth, canvasHeight);
   mat4.perspective(
     camera.projectionMatrix,
     (cameraFov / 180) * Math.PI,
@@ -49,11 +50,15 @@ export function bindPlayfieldViewport(gl: WebGL2RenderingContext, layout: GameVi
   gl.viewport(layout.offsetX, layout.glY, layout.width, layout.height);
 }
 
-export function clearPlayfieldChrome(gl: WebGL2RenderingContext): void {
+export function clearPlayfieldChrome(gl: WebGL2RenderingContext, chromaKey = true): void {
   const w = gl.canvas.width;
   const h = gl.canvas.height;
   gl.viewport(0, 0, w, h);
-  gl.clearColor(1.0, 0.0, 1.0, 1.0);
+  if (chromaKey) {
+    gl.clearColor(1.0, 0.0, 1.0, 1.0);
+  } else {
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+  }
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
 

@@ -9,12 +9,14 @@ uniform float timeSeconds;
 uniform float liquidStrength;
 
 out vec2 vUv;
+out float vParitySpanT;
 out vec3 vNormal;
 out float vWorldY;  // <-- just grouped with the rest
 out vec3 vWorldPos;
 
 void main() {
   vUv = aPosition.xz;
+  vParitySpanT = 0.0;
   vNormal = aNormal;
   vec3 position = aPosition;
   if (liquidStrength > 0.0) {

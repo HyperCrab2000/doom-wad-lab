@@ -73,6 +73,7 @@ export function listIwadMaps(): MapRef[] {
   const refs: MapRef[] = [];
   for (const wadName of [DOOM1_WAD, DOOM2_WAD]) {
     const wadPath = path.resolve(process.cwd(), `public/wads/${wadName}`);
+    if (!fs.existsSync(wadPath)) continue;
     const buf = fs.readFileSync(wadPath);
     const wad = loadWadFromArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
     for (const mapName of Object.keys(wad.maps).sort()) {

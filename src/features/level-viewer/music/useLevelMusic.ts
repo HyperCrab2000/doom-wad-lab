@@ -79,7 +79,7 @@ export function useLevelMusic(
     const expected = getMusicLumpForMap(currentMap);
     setCurrentLump(lump?.name ?? expected);
     setStatus(
-      lump ? `Ready: ${lump.name} (music off)` : `Expected ${expected}, but it is not in this WAD`
+      lump ? `Ready: ${lump.name}` : `Expected ${expected}, but it is not in this WAD`
     );
   }, []);
 
@@ -157,7 +157,7 @@ export function useLevelMusic(
         if (wadRef.current !== wad || mapRef.current !== mapName) return;
         setIsPrepared(true);
         if (!enabledRef.current) {
-          setStatus(`Ready: ${lump.name} (music off)`);
+          setStatus(`Ready: ${lump.name}`);
         }
       })
       .catch((error) => {

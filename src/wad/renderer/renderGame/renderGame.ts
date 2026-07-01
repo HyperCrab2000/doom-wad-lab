@@ -5,12 +5,23 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import { setupCamera, updateCameraFromViewMatrix } from './camera';
 import { drawScene } from './drawScene';
-import { clearPathTraceLetterbox, clearPlayfieldChrome, createPlayfieldCamera, updatePlayfieldCamera } from '@/wad/renderer/renderGame/playfieldCamera';
+import {
+  bindPlayfieldViewport,
+  clearPathTraceLetterbox,
+  clearPlayfieldChrome,
+  createPlayfieldCamera,
+  updatePlayfieldCamera,
+} from '@/wad/renderer/renderGame/playfieldCamera';
+import {
+  doomVerticalFovDegrees,
+  readFrameParityModeFromLocation,
+  resolvePlayfieldLayout,
+} from '@/wad/parity/frame/frameParity';
 import { clearPathTraceCanvas } from '@/wad/renderer/rtgl/pathTraceGpu';
 import { LoadedWadData, loadWad } from './loadWad';
 import { Thing } from '@/wad/interfaces/Thing';
 import { Sector } from '@/wad/interfaces/Sector';
-import { getViewAnglesFromViewMatrix, writePlayerViewMatrix } from '@/wad/renderer/controls/playerView';
+import { getViewAnglesFromViewMatrix, writePlayerViewMatrix, type PlayerViewState } from '@/wad/renderer/controls/playerView';
 import { doomPlayerControls, findSectorAt, PlayerSnapshot } from '@/wad/renderer/controls/doomPlayerControls';
 import { invalidateBlockingSegmentCache } from '@/wad/renderer/controls/doomCollision';
 import { MapActionController, MapActionResult } from '@/wad/game/mapActionController';
@@ -22,7 +33,10 @@ import {
 import { DoomSfxPlayer } from '@/features/level-viewer/sfx/doomSfxPlayer';
 import { refreshDoorWallGeometry } from '@/wad/renderer/geometry/refreshMapGeometry';
 import type { RenderBackend } from '@/wad/renderer/renderBackend';
-import { readDefaultRenderBackend } from '@/wad/renderer/renderBackend';
+import { backendForMapLoad, readDefaultRenderBackend } from '@/wad/renderer/renderBackend';
+import { withTimeout } from '@/utils/promiseTimeout';
+
+const PREWARM_TIMEOUT_MS = 45_000;
 import {
   pathTraceNeedsHybridOverlay,
   pathTraceNeedsGpuTrace,
@@ -42,7 +56,8 @@ let mapActions: MapActionController | null = null;
 let liquidWake: { x: number; z: number; strength: number; startedAt: number } | null = null;
 let sfxPlayer: DoomSfxPlayer | null = null;
 let playerControls: ReturnType<typeof doomPlayerControls> | null = null;
-let renderBackend: RenderBackend = readDefaultRenderBackend();
+let renderBackend: RenderBackend =
+  typeof window !== 'undefined' ? backendForMapLoad(readDefaultRenderBackend()) : 'classic';
 let renderLayerToggles: RenderLayerToggles = readStoredRenderLayerToggles();
 /** Cap path-trace GPU work (~10 Hz) so the laptop stays responsive. */
 const PATH_TRACE_FRAME_INTERVAL_MS = 100;
@@ -156,7 +171,8 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   } = setupCamera(gl, canvas);
 
   const playfieldCamera = createPlayfieldCamera();
-  gl.clearColor(1.0, 0.0, 1.0, 1.0); // CHROMAKEY
+  const frameParityMode = readFrameParityModeFromLocation();
+  gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
   gl.cullFace(gl.BACK);
@@ -178,6 +194,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   let lastFrameTime = performance.now();
   const lastRefreshedCeilings = new Map<number, number>();
   let forceDoorGeometryRefresh = false;
+  let paritySpawnView: PlayerViewState | null = null;
 
   const refreshDoorGeometry = () => {
     if (!wadData || !currentMap || !mapActions) return;
@@ -292,11 +309,15 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     wadPath?: string | null,
     modPaths: readonly string[] = [],
   ): Promise<void> => {
-    presentationVisible = false;
+    if (!frameParityMode) {
+      presentationVisible = false;
+    }
     currentMapName = mapName;
     currentWadPath = wadPath ?? null;
     const gameMap = structuredClone(map);
-    return loadWad(gl, wad, gameMap, mapName, wadPath, modPaths).then(async (loaded) => {
+    return loadWad(gl, wad, gameMap, mapName, wadPath, modPaths, {
+      useIndexTextures: frameParityMode,
+    }).then(async (loaded) => {
       wadData = loaded;
       currentMap = gameMap;
       mapActions = new MapActionController(gameMap);
@@ -305,17 +326,49 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       forceDoorGeometryRefresh = false;
       sfxPlayer = sfxPlayer ?? new DoomSfxPlayer();
 
-      if (renderBackend === 'pathtrace') {
-        await prewarmPathTraceGeometry(wadPath ?? null, mapName, gameMap, loaded);
+      let loadBackend = backendForMapLoad(renderBackend);
+
+      if (loadBackend === 'pathtrace') {
+        try {
+          await withTimeout(
+            prewarmPathTraceGeometry(wadPath ?? null, mapName, gameMap, loaded),
+            PREWARM_TIMEOUT_MS,
+            'Path trace prewarm',
+          );
+        } catch (error) {
+          console.warn('[render] pathtrace prewarm failed; falling back to classic draw:', error);
+          loadBackend = 'classic';
+          renderBackend = 'classic';
+        }
       }
 
-      if (renderBackend === 'wasm-federated') {
-        await prewarmFederatedWasmGeometry(wad, mapName, gameMap);
+      if (loadBackend === 'wasm-federated') {
+        try {
+          await withTimeout(
+            prewarmFederatedWasmGeometry(wad, mapName, gameMap),
+            PREWARM_TIMEOUT_MS,
+            'Federated WASM prewarm',
+          );
+        } catch (error) {
+          console.warn('[render] federated WASM prewarm failed; falling back to classic draw:', error);
+          loadBackend = 'classic';
+          renderBackend = 'classic';
+        }
       }
 
       const { playerStart, playerZ, cameraAngle } = wadData;
       const startSector = findSectorAt(gameMap, loaded.buffers, playerStart);
-      writePlayerViewMatrix(viewMatrix, {
+      paritySpawnView = frameParityMode
+        ? {
+            x: playerStart.x,
+            y: playerStart.y,
+            yaw: cameraAngle,
+            pitch: 0,
+            worldFeetZ: startSector?.floorheight ?? playerZ,
+            sector: startSector,
+          }
+        : null;
+      writePlayerViewMatrix(viewMatrix, paritySpawnView ?? {
         x: playerStart.x,
         y: playerStart.y,
         yaw: cameraAngle,
@@ -327,29 +380,37 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       vec3.set(camera.pos, spawnInv[12], spawnInv[13], spawnInv[14]);
 
       unbindControls?.();
-      playerControls = doomPlayerControls({
-        canvas,
-        viewMatrix,
-        map: gameMap,
-        buffers: wadData.buffers,
-        start: { x: playerStart.x, y: playerStart.y, angle: cameraAngle },
-        isAutomapActive: () => automapActive,
-        onLiquidTransition: (event) => {
-          if (event.kind === 'enter') {
-            liquidWake = {
-              x: event.worldX,
-              z: event.worldZ,
-              strength: 1,
-              startedAt: performance.now(),
-            };
-          }
-        },
-        mapActions,
-        onLineAction: handleLineAction,
-      });
-      unbindControls = playerControls.unbind;
+      if (!frameParityMode) {
+        playerControls = doomPlayerControls({
+          canvas,
+          viewMatrix,
+          map: gameMap,
+          buffers: wadData.buffers,
+          start: { x: playerStart.x, y: playerStart.y, angle: cameraAngle },
+          isAutomapActive: () => automapActive,
+          onLiquidTransition: (event) => {
+            if (event.kind === 'enter') {
+              liquidWake = {
+                x: event.worldX,
+                z: event.worldZ,
+                strength: 1,
+                startedAt: performance.now(),
+              };
+            }
+          },
+          mapActions,
+          onLineAction: handleLineAction,
+        });
+        unbindControls = playerControls.unbind;
+      } else {
+        playerControls = null;
+        unbindControls = null;
+      }
 
       lastFrameTime = performance.now();
+      if (frameParityMode) {
+        presentationVisible = true;
+      }
       if (frameRequest === null) {
         frameRequest = requestAnimationFrame(renderFrame);
       }
@@ -367,21 +428,30 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
     animateWallIndex = Math.floor(time / (1000 / animatedWallFps));
     animateSpriteIndex = Math.floor(time / (1000 / animatedSpriteFps));
 
+    if (paritySpawnView) {
+      writePlayerViewMatrix(viewMatrix, paritySpawnView);
+    }
+
     updateCameraFromViewMatrix(viewMatrix, invViewMatrix, camera);
 
     mat4.identity(modelMatrix);
+    const layout = resolvePlayfieldLayout(gl.canvas.width, gl.canvas.height, frameParityMode);
+    const parityFov = frameParityMode
+      ? doomVerticalFovDegrees(layout.width, layout.height)
+      : camera.fov;
     updatePlayfieldCamera(
       playfieldCamera,
       gl.canvas.width,
       gl.canvas.height,
-      camera.fov,
+      parityFov,
       camera.near,
       camera.far,
       viewMatrix,
-      modelMatrix
+      modelMatrix,
+      layout,
     );
 
-    if (presentationVisible && wadData && currentMap && mapActions) {
+    if (presentationVisible && wadData && currentMap && mapActions && !frameParityMode) {
       const dtSeconds = Math.min(dt / 1000, 0.05);
       let motion: FederatedSimulationMotion = {
         playOpen: false,
@@ -429,7 +499,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
       }
     }
 
-    if (presentationVisible && wadData && currentMap && mapActions && !automapActive) {
+    if ((presentationVisible || frameParityMode) && wadData && currentMap && mapActions && !automapActive) {
       const start = performance.now();
       const player = getPlayerState();
 
@@ -477,6 +547,8 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
               }
             : null,
           renderLayerToggles,
+          frameParityMode,
+          colormapLut: wadData.colormapLut ?? null,
       };
 
       const modularStageCap = readRenderModularStageCap();
@@ -557,7 +629,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
   }
 
   const setRenderBackend = (backend: RenderBackend) => {
-    renderBackend = backend;
+    renderBackend = backendForMapLoad(backend);
     lastPathTraceDrawAt = 0;
     if (backend === 'pathtrace') {
       void ensurePathTraceModule();

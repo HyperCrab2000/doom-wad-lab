@@ -15,6 +15,17 @@ export interface GameViewLayout {
   glY: number;
 }
 
+/** GZDoom `screenblocks 10` @ 640×480: 3D view top-aligned, status bar below (not overlaid). */
+export function computeGzdoomParityViewLayout(canvasWidth: number, canvasHeight: number): GameViewLayout {
+  const scale = Math.max(1, Math.floor(canvasWidth / VANILLA_SCREEN_WIDTH));
+  const width = VANILLA_SCREEN_WIDTH * scale;
+  const height = Math.round((canvasHeight * VANILLA_3D_HEIGHT) / VANILLA_SCREEN_HEIGHT);
+  const offsetX = Math.round((canvasWidth - width) / 2);
+  const offsetY = 0;
+  const glY = canvasHeight - offsetY - height;
+  return { scale, offsetX, offsetY, width, height, glY };
+}
+
 export function computeGameViewLayout(canvasWidth: number, canvasHeight: number): GameViewLayout {
   const scale = Math.max(1, Math.floor(canvasWidth / VANILLA_SCREEN_WIDTH));
   const width = VANILLA_SCREEN_WIDTH * scale;

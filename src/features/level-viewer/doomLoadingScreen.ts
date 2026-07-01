@@ -28,6 +28,19 @@ export function titlepicScaleForCanvas(canvasWidth: number, picWidth = TITLEPIC_
   return Math.max(1, Math.floor(canvasWidth / picWidth));
 }
 
+/** Split pickup / HUD strings on spaces (STCFN has no space glyph). */
+export function splitStcfnWords(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean);
+}
+
+/** Loading overlay segments: LOADING, optional map id, optional ellipsis. */
+export function buildLoadingStatusSegments(mapName: string | undefined, dotCount: number): string[] {
+  const segments = ['LOADING'];
+  if (mapName) segments.push(mapName);
+  if (dotCount > 0) segments.push('.'.repeat(Math.max(1, dotCount)));
+  return segments;
+}
+
 interface StcfnGlyph {
   patch: CanvasRenderingContext2D;
   width: number;

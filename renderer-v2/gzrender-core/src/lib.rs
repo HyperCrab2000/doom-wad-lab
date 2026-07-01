@@ -4,6 +4,13 @@ pub const GZSTATE_MAGIC: u32 = 0x5453_5A47; // 'GZST'
 pub const GZSTATE_VERSION: u32 = 1;
 pub const HEADER_SIZE: usize = 64;
 
+pub const SECTION_VERTICES: u32 = 2;
+pub const SECTION_SECTORS: u32 = 3;
+pub const SECTION_LINEDEFS: u32 = 5;
+pub const SECTION_SEGS: u32 = 6;
+pub const SECTION_MAP_REJECT: u32 = 22;
+pub const SECTION_MAP_BLOCKMAP: u32 = 23;
+
 #[derive(Debug, Clone)]
 pub struct GzHeader {
     pub map_name: String,
@@ -18,10 +25,22 @@ pub struct SectionEntry {
     pub crc32: u32,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct GzDrawStats {
+    pub vertex_count: u32,
+    pub sector_count: u32,
+    pub linedef_count: u32,
+    pub seg_count: u32,
+    pub section_count: u32,
+    pub has_map_reject: bool,
+    pub has_map_blockmap: bool,
+}
+
 #[derive(Debug)]
 pub struct GzDocument {
     pub header: GzHeader,
     pub sections: Vec<SectionEntry>,
+    pub stats: GzDrawStats,
     pub bytes: Vec<u8>,
 }
 
@@ -53,14 +72,44 @@ pub fn read_gzstate(data: &[u8]) -> Result<GzDocument, &'static str> {
         });
         off += 16;
     }
+
+    let mut stats = GzDrawStats {
+        section_count,
+        ..Default::default()
+    };
+    for entry in &sections {
+        let count = section_element_count(data, entry);
+        match entry.id {
+            SECTION_VERTICES => stats.vertex_count = count,
+            SECTION_SECTORS => stats.sector_count = count,
+            SECTION_LINEDEFS => stats.linedef_count = count,
+            SECTION_SEGS => stats.seg_count = count,
+            SECTION_MAP_REJECT => stats.has_map_reject = entry.size > 4,
+            SECTION_MAP_BLOCKMAP => stats.has_map_blockmap = entry.size > 4,
+            _ => {}
+        }
+    }
+
     Ok(GzDocument {
         header: GzHeader {
             map_name,
             section_count,
         },
         sections,
+        stats,
         bytes: data.to_vec(),
     })
+}
+
+fn section_element_count(data: &[u8], entry: &SectionEntry) -> u32 {
+    if entry.size < 4 {
+        return 0;
+    }
+    let off = entry.offset as usize;
+    if off + 4 > data.len() {
+        return 0;
+    }
+    u32::from_le_bytes(data[off..off + 4].try_into().unwrap())
 }
 
 fn read_fixed_ascii(bytes: &[u8]) -> String {
@@ -85,5 +134,7 @@ mod tests {
         let doc = read_gzstate(&data).unwrap();
         assert_eq!(doc.header.map_name, "E1M1");
         assert!(doc.sections.len() >= 20);
+        assert!(doc.stats.vertex_count > 0);
+        assert!(doc.stats.sector_count > 0);
     }
 }

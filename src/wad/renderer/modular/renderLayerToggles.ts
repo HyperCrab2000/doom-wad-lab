@@ -46,7 +46,9 @@ export const DEFAULT_RENDER_LAYER_TOGGLES: RenderLayerToggles = {
   voxels: true,
 };
 
-const STORAGE_KEY = 'doom-render-layers-v5';
+// v6 intentionally does not read v5: older sessions can persist debugging states that hide core
+// Classic passes (walls/sky/textures), making the renderer look catastrophically incomplete.
+const STORAGE_KEY = 'doom-render-layers-v6';
 
 interface LegacyRenderLayerToggles {
   wireframe?: boolean;
@@ -93,10 +95,32 @@ export function readStoredRenderLayerToggles(): RenderLayerToggles {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem('doom-render-layers-v4');
     if (!raw) return { ...DEFAULT_RENDER_LAYER_TOGGLES };
-    return migrateStoredToggles(JSON.parse(raw) as Partial<RenderLayerToggles> & LegacyRenderLayerToggles);
+    return sanitizeRenderLayerToggles(
+      migrateStoredToggles(JSON.parse(raw) as Partial<RenderLayerToggles> & LegacyRenderLayerToggles),
+    );
   } catch {
     return { ...DEFAULT_RENDER_LAYER_TOGGLES };
   }
+}
+
+/** Prevent persisted debug states that leave Classic looking catastrophically incomplete. */
+export function sanitizeRenderLayerToggles(toggles: RenderLayerToggles): RenderLayerToggles {
+  if (toggles.wireframeMode !== 'off') return toggles;
+
+  if (!hasCompositeGeometry(toggles)) {
+    return { ...DEFAULT_RENDER_LAYER_TOGGLES };
+  }
+
+  // Floors/ceilings without walls reads as floating shards in a black void — common accidental toggle.
+  const missingWallsWithSolids =
+    !toggles.solidWalls && (toggles.solidFloors || toggles.solidCeilings);
+  if (!missingWallsWithSolids) return toggles;
+
+  return {
+    ...toggles,
+    solidWalls: true,
+    wallTextures: toggles.wallTextures || true,
+  };
 }
 
 export function persistRenderLayerToggles(toggles: RenderLayerToggles): void {

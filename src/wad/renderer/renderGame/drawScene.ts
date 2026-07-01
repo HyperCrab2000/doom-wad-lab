@@ -70,6 +70,14 @@ import {
   type WireframeMode,
 } from '@/wad/renderer/modular/renderLayerToggles';
 import { EMPTY_LIGHT_UNIFORMS } from '@/wad/renderer/utils/precomputedLights';
+import { blitSoftwarePlayfieldFrame } from '@/wad/parity/frame/softwarePlayfieldBlit';
+import { renderSoftwarePlayfield } from '@/wad/parity/frame/softwarePlayfieldRenderer';
+import { drawParityPsprite } from '@/wad/parity/frame/drawParityPsprite';
+import {
+  doomViewCoordsFromCamera,
+  spriteColumnVisibility,
+  wallColumnVisibilityRange,
+} from '@/wad/parity/frame/gzdoomScreenZ';
 
 const pointLightGrid = new PointLightGrid();
 let cachedMap: WadMap | null = null;
@@ -182,6 +190,27 @@ export interface DrawSceneParams {
   pathTraceOverlay?: boolean;
   /** When set, records per-stage draw/BSP snapshots for modular parity. */
   stageSnapshotRecorder?: StageSnapshotRecorder;
+  /** Stage 2 capture: full-bleed layout, GZDoom FOV, flat sector lighting. */
+  frameParityMode?: boolean;
+  colormapLut?: WebGLTexture | null;
+}
+
+function parityColormapUniforms(
+  parityLighting: boolean,
+  colormapLut: WebGLTexture | null | undefined,
+): Record<string, number | WebGLTexture> {
+  if (!parityLighting || !colormapLut) {
+    return { parityColormap: 0, parityUseColumnVis: 0, parityShadeOffset: 0 };
+  }
+  return {
+    parityColormap: 1,
+    colormapLut,
+    parityUseColumnVis: 0,
+    parityWallVisLeft: 0,
+    parityWallVisRight: 0,
+    paritySpriteVis: 0,
+    parityShadeOffset: 0,
+  };
 }
 
 function wireframeDebugActive(cap: ModularRenderStage | null | undefined): boolean {
@@ -249,10 +278,15 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     modularStageCap: stageCap = null,
     modularStageMin: stageMin = null,
     skipPlayfieldClear = false,
+    renderBackend,
     renderLayerToggles,
     pathTraceOverlay = false,
     stageSnapshotRecorder,
+    frameParityMode = false,
   } = params;
+
+  const parityLighting = frameParityMode;
+  const effectivePointLights = parityLighting ? [] : pointLights;
 
   const layerPlan = renderLayerToggles ? buildRenderLayerDrawPlan(renderLayerToggles) : null;
 
@@ -288,7 +322,10 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   };
 
   if (!skipPlayfieldClear) {
-    clearPlayfieldChrome(gl);
+    // Do not expose the old magenta chroma-key clear during normal play. If sky/flat coverage has
+    // a gap, black is a sane fallback; magenta makes the Classic renderer look catastrophically
+    // broken and should only be used by explicit parity/debug flows.
+    clearPlayfieldChrome(gl, false);
     bindPlayfieldViewport(gl, playfieldLayout);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   } else {
@@ -301,9 +338,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     sectorLightCache.clear();
   }
 
-  if (pointLights !== cachedPointLights) {
-    cachedPointLights = pointLights;
-    pointLightGrid.rebuild(pointLights);
+  if (effectivePointLights !== cachedPointLights) {
+    cachedPointLights = effectivePointLights;
+    pointLightGrid.rebuild(effectivePointLights);
   }
 
   mat4.identity(modelMatrix);
@@ -311,6 +348,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
 
   const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
+  const parityViewCoords = parityLighting ? doomViewCoordsFromCamera(cameraPos) : null;
   const courtyardSky = renderLayerToggles?.courtyardSky ?? true;
   const drawState = buffers.bspRenderIndex
     ? buildGzdoomDrawState({
@@ -326,6 +364,50 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
   const resolvedCameraSectorIndex = drawState?.cameraSectorIndex ?? -1;
   const visibleSectors = drawState?.visibleSectors ?? null;
+
+  if (
+    parityLighting &&
+    drawState &&
+    !pathTraceOverlay &&
+    !wireframeDebugActive(stageCap)
+  ) {
+    const rgba = renderSoftwarePlayfield({
+      width: playfieldLayout.width,
+      height: playfieldLayout.height,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix: params.modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex,
+      animateWallIndex,
+      timeSeconds,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      renderableThings,
+      sortedFramesByThingName,
+      animateSpriteIndex,
+      visibleSectors: drawState.visibleSectors,
+    });
+    blitSoftwarePlayfieldFrame(gl, playfieldLayout, rgba, playfieldLayout.width, playfieldLayout.height);
+    if (params.colormapLut && resolvedCameraSectorIndex >= 0) {
+      const cameraSector = map.SECTORS[resolvedCameraSectorIndex] ?? null;
+      drawParityPsprite({
+        gl,
+        thingShader: shaders.things,
+        layout: playfieldLayout,
+        textures: textures.things,
+        sector: cameraSector,
+        timeSeconds,
+        colormapLut: params.colormapLut,
+      });
+    }
+    recordModularStageBoundary(stageSnapshotRecorder, 'sprites', drawState, makeStageDrawCounts());
+    return;
+  }
 
   const stageDrawCounts = makeStageDrawCounts();
   recordModularStageBoundary(stageSnapshotRecorder, 'clear', drawState, stageDrawCounts);
@@ -383,7 +465,12 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   recordModularStageBoundary(stageSnapshotRecorder, 'meshWireframe', drawState, stageDrawCounts);
 
   const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
-  if (runStage('sky') && skyTexture && shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)) {
+  if (
+    runStage('sky') &&
+    skyTexture &&
+    shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)
+  ) {
+    bindPlayfieldViewport(gl, playfieldLayout);
     drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, viewAngles.yaw, viewAngles.pitch);
     gl.depthFunc(gl.LESS);
   }
@@ -399,7 +486,11 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
   const flatShader = shaders.flats;
   gl.useProgram(flatShader.program);
-  flatShader.setUniforms({ modelViewProj: modelViewProjMatrix });
+  flatShader.setUniforms({
+    modelViewProj: modelViewProjMatrix,
+    playfieldHeight: playfieldLayout.height,
+    ...parityColormapUniforms(parityLighting, params.colormapLut),
+  });
 
   gl.disable(gl.CULL_FACE);
 
@@ -416,6 +507,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       timeSeconds,
       cameraPos,
       liquidWake: params.liquidWake,
+      parityLighting,
       recordFlatDraw: () => {
         frameFlatDraws++;
       },
@@ -428,7 +520,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
         if (isFloorFlat && !layerPlan.drawFloorFlats) return;
         if (!isFloorFlat && !layerPlan.drawCeilingFlats) return;
         const liquid = isFloorFlat ? getFloorLiquidDrawUniforms(flat.sector.floorpic) : null;
-        if (layerPlan.liquidAnimated && liquid) {
+        // Liquid floors always use the textured flat shader so slime/nukage get proper color even
+        // when the Liquid animation toggle is off (that toggle only disables ripple/wake effects).
+        if (liquid && liquid.liquidStrength > 0) {
           drawFlat(flat, { ...flatDrawCtx, layerPlan }, batch);
           return;
         }
@@ -522,7 +616,11 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     }
   } else if (drawWallsTextured) {
   gl.useProgram(wallShader.program);
-  wallShader.setUniforms({ modelViewProj: modelViewProjMatrix, uCameraPos: cameraPos });
+  wallShader.setUniforms({
+    modelViewProj: modelViewProjMatrix,
+    uCameraPos: cameraPos,
+    ...parityColormapUniforms(parityLighting, params.colormapLut),
+  });
 
   let wallUniformBatchKey = '';
   let wallLightKey = '';
@@ -556,28 +654,48 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
         lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds),
         shouldClip: wadAssets.texturesByName[textureName]?.transparent ?? false,
         repeatVertical: wall.repeatVertical,
-        ambientColor:
+        ambientColor: parityLighting ? [1, 1, 1] : (
           layerPlan && !layerPlan.coloredLights
             ? [1, 1, 1]
-            : (wall.sector.ambientColor ?? [1, 1, 1]),
-        fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
-        fogDensity: wall.sector.fogDensity ?? 0.25,
-        visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-        reliefStrength: getWallReliefStrength(
-          textureName,
-          textures.reliefWalls,
-          textures.heightWallLoaded
+            : (wall.sector.ambientColor ?? [1, 1, 1])
         ),
+        fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
+        fogDensity: parityLighting ? 0 : (wall.sector.fogDensity ?? 0.25),
+        visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
+        reliefStrength: parityLighting
+          ? 0
+          : getWallReliefStrength(textureName, textures.reliefWalls, textures.heightWallLoaded),
         surfaceGlowColor: surfaceGlow?.color ?? [0, 0, 0],
-        surfaceGlowStrength: surfaceGlow?.strength ?? 0,
-        surfaceGlowPulse: surfaceGlow?.animated ? 1 : 0,
+        surfaceGlowStrength: parityLighting ? 0 : (surfaceGlow?.strength ?? 0),
+        surfaceGlowPulse: parityLighting ? 0 : (surfaceGlow?.animated ? 1 : 0),
         timeSeconds,
+        colormapBandV: 0,
+        sectorLightLevel: parityLighting
+          ? getEffectiveSectorLightLevel(wall.sector, timeSeconds)
+          : 0,
+        ...(parityLighting && parityViewCoords
+          ? (() => {
+              const columnVis = wallColumnVisibilityRange(
+                map,
+                wall,
+                parityViewCoords.viewX,
+                parityViewCoords.viewY,
+                viewAngles.yaw,
+              );
+              return {
+                parityUseColumnVis: 1,
+                parityWallVisLeft: columnVis.visLeft,
+                parityWallVisRight: columnVis.visRight,
+                parityShadeOffset: 0,
+              };
+            })()
+          : {}),
       });
     }
     if (nextLightKey !== wallLightKey) {
       wallLightKey = nextLightKey;
       wallShader.setUniforms(
-        layerPlan && !layerPlan.dynamicLights
+        parityLighting || (layerPlan && !layerPlan.dynamicLights)
           ? EMPTY_LIGHT_UNIFORMS
           : pointLightGrid.queryUniforms(wall.center)
       );
@@ -728,6 +846,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   if (runStage('sprites')) {
   gl.useProgram(thingShader.program);
   gl.activeTexture(gl.TEXTURE0);
+  thingShader.setUniforms({
+    ...parityColormapUniforms(parityLighting, params.colormapLut),
+  });
   thingShader.setAttributes({ aPosition: buffers.thing.position, aUv: buffers.thing.uv });
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -783,25 +904,66 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     const thingWorldPos: [number, number, number] = [thingObj.x, thingYPos, -thingObj.y];
     const emissive = getThingEmissiveUniforms(thingObj);
 
+    const spriteVis =
+      parityLighting && parityViewCoords
+        ? spriteColumnVisibility(
+            thingObj.x,
+            thingObj.y,
+            parityViewCoords.viewX,
+            parityViewCoords.viewY,
+            viewAngles.yaw,
+          )
+        : 0;
+
     thingShader.setUniforms({
       shouldMirror: thingSprite.mirror,
       modelViewProj: scratchModelViewProjMatrix,
       centerClipZ: centerClip[2],
       centerClipW: centerClip[3],
       tex: thingTexture,
-      lightIntensity: thingSector.lightIntensity,
+      lightIntensity: parityLighting
+        ? getEffectiveSectorLightLevel(thingSector, timeSeconds) / 255
+        : thingSector.lightIntensity,
       fogColor: thingSector.fogColor ?? [0.025, 0.022, 0.02],
-      fogDensity: thingSector.fogDensity ?? 0.25,
+      fogDensity: parityLighting ? 0 : (thingSector.fogDensity ?? 0.25),
       visibilityDistance: thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-      nearbyLight: computeDynamicLightAt(pointLights, thingWorldPos, { excludeThing: thingObj }),
-      emissiveColor: emissive.emissiveColor,
-      emissiveTopExtent: emissive.emissiveTopExtent,
-      emissiveFullColumn: emissive.emissiveFullColumn,
-      emissiveStrength: emissive.emissiveStrength,
+      nearbyLight: parityLighting
+        ? [0, 0, 0]
+        : computeDynamicLightAt(effectivePointLights, thingWorldPos, { excludeThing: thingObj }),
+      emissiveColor: parityLighting ? [0, 0, 0] : emissive.emissiveColor,
+      emissiveTopExtent: parityLighting ? 0 : emissive.emissiveTopExtent,
+      emissiveFullColumn: parityLighting ? 0 : emissive.emissiveFullColumn,
+      emissiveStrength: parityLighting ? 0 : emissive.emissiveStrength,
+      sectorLightLevel: parityLighting
+        ? getEffectiveSectorLightLevel(thingSector, timeSeconds)
+        : 0,
+      ...(parityLighting
+        ? {
+            parityUseColumnVis: 1,
+            paritySpriteVis: spriteVis,
+            parityShadeOffset: 0,
+            parityWallVisLeft: 0,
+            parityWallVisRight: 0,
+          }
+        : {}),
     });
 
     buffers.thing.indices.draw();
     frameSpriteDraws++;
+  }
+  if (parityLighting && params.colormapLut && resolvedCameraSectorIndex >= 0) {
+    const cameraSector = map.SECTORS[resolvedCameraSectorIndex] ?? null;
+    if (drawParityPsprite({
+      gl,
+      thingShader,
+      layout: playfieldLayout,
+      textures: textures.things,
+      sector: cameraSector,
+      timeSeconds,
+      colormapLut: params.colormapLut,
+    })) {
+      frameSpriteDraws++;
+    }
   }
   gl.enable(gl.CULL_FACE);
   gl.depthMask(true);
@@ -1141,6 +1303,7 @@ function drawFlat(
     liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
     recordFlatDraw?: () => void;
     layerPlan?: RenderLayerDrawPlan;
+    parityLighting?: boolean;
   },
   batch: FlatDrawBatch
 ) {
@@ -1154,7 +1317,9 @@ function drawFlat(
   const wallAmbient = flat.sector.ambientColorFromWall ?? ambient;
   const skyTint = flat.sector.skyLightTint ?? [0, 0, 0];
 
-  const finalAmbient: [number, number, number] = ctx.layerPlan && !ctx.layerPlan.coloredLights
+  const finalAmbient: [number, number, number] = ctx.parityLighting
+    ? [1, 1, 1]
+    : ctx.layerPlan && !ctx.layerPlan.coloredLights
     ? [1, 1, 1]
     : [
         (ambient[0] + wallAmbient[0] + skyTint[0]) / 3,
@@ -1164,18 +1329,38 @@ function drawFlat(
 
   const isFloorFlat =
     normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
-  const floorLiquid = isFloorFlat ? getFloorLiquidDrawUniforms(flat.sector.floorpic) : null;
-  const liquidOn = ctx.layerPlan ? ctx.layerPlan.liquidAnimated : true;
-  const liquidStrength = liquidOn && floorLiquid ? floorLiquid.liquidStrength : 0;
-  const liquidEmissive = liquidOn && floorLiquid ? floorLiquid.liquidEmissive : 0;
+  const sectorFloorLiquid = getFloorLiquidDrawUniforms(flat.sector.floorpic);
+  const drawnFlatLiquid = getFloorLiquidDrawUniforms(flatName);
+  const originalFlatLiquid = getFloorLiquidDrawUniforms(flat.flatName);
+  const hasSectorFloorLiquid = sectorFloorLiquid.liquidStrength > 0;
+  const hasDrawnLiquid = drawnFlatLiquid.liquidStrength > 0;
+  const hasOriginalLiquid = originalFlatLiquid.liquidStrength > 0;
+  // Animated liquid flats may be drawn as NUKAGE1/2 while the sector stores NUKAGE3 (or vice versa).
+  // Classify by both the sector floor and the actually drawn flat; any liquid floor should never
+  // fall back to raw flat sampling (which is how the old E1M1 pit showed blue).
+  const floorLiquid =
+    isFloorFlat && hasSectorFloorLiquid
+      ? sectorFloorLiquid
+      : hasDrawnLiquid
+        ? drawnFlatLiquid
+        : hasOriginalLiquid
+          ? originalFlatLiquid
+          : null;
+  const liquidEffectsOn = !ctx.parityLighting && (ctx.layerPlan ? ctx.layerPlan.liquidAnimated : true);
+  // A liquid floor should always be colored as liquid. The layer toggle only disables animation /
+  // wakes / extra emissive effects; otherwise E1M1 nukage can fall back to the raw sampled flat and
+  // show as blue if the flat sampling path is wrong.
+  const liquidStrength = !ctx.parityLighting && floorLiquid ? floorLiquid.liquidStrength : 0;
+  const liquidEmissive =
+    !ctx.parityLighting && floorLiquid
+      ? (liquidEffectsOn ? floorLiquid.liquidEmissive : Math.min(floorLiquid.liquidEmissive, 0.25))
+      : 0;
 
   const surfaceGlow = getTextureSurfaceGlow(flatName);
   const flatReliefKey = flatName.toUpperCase();
-  const heightStrength = getFlatReliefStrength(
-    flatName,
-    ctx.textures.reliefFlats,
-    ctx.textures.heightFlatLoaded
-  );
+  const heightStrength = ctx.parityLighting
+    ? 0
+    : getFlatReliefStrength(flatName, ctx.textures.reliefFlats, ctx.textures.heightFlatLoaded);
 
   const flatTexture =
     ctx.textures.flats[flatName] ??
@@ -1201,11 +1386,15 @@ function drawFlat(
         surfaceGlow?.color ??
         floorLiquid?.glowColor ??
         (isFloorFlat ? (flat.sector.glowColor ?? [0, 0, 0]) : [0, 0, 0]),
-      glowStrength: surfaceGlow?.strength ?? (floorLiquid?.liquidEmissive ? 0.75 : 0.45),
-      glowPulse: surfaceGlow?.animated || (floorLiquid?.liquidEmissive ?? 0) > 0 ? 1 : 0,
+      glowStrength: ctx.parityLighting
+        ? 0
+        : (surfaceGlow?.strength ?? (floorLiquid?.liquidEmissive ? 0.75 : 0.45)),
+      glowPulse: ctx.parityLighting
+        ? 0
+        : (liquidEffectsOn && (surfaceGlow?.animated || (floorLiquid?.liquidEmissive ?? 0) > 0) ? 1 : 0),
       glowHeight: surfaceGlow ? 512.0 : 36.0,
       fogColor: flat.sector.fogColor ?? [0.025, 0.022, 0.02],
-      fogDensity: flat.sector.fogDensity ?? 0.25,
+      fogDensity: ctx.parityLighting ? 0 : (flat.sector.fogDensity ?? 0.25),
       visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
       liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
       liquidStrength,
@@ -1216,14 +1405,18 @@ function drawFlat(
       liquidWakePos: ctx.liquidWake
         ? [ctx.liquidWake.x, ctx.liquidWake.z]
         : [0, 0],
-      liquidWakeStrength: ctx.liquidWake?.strength ?? 0,
+      liquidWakeStrength: liquidEffectsOn ? (ctx.liquidWake?.strength ?? 0) : 0,
       liquidWakeAge: ctx.liquidWake?.ageSeconds ?? 0,
+      colormapBandV: 0,
+      sectorLightLevel: ctx.parityLighting
+        ? getEffectiveSectorLightLevel(flat.sector, ctx.timeSeconds)
+        : 0,
     });
   }
   if (nextLightKey !== batch.lightKey) {
     batch.lightKey = nextLightKey;
     ctx.flatShader.setUniforms(
-      ctx.layerPlan && !ctx.layerPlan.dynamicLights
+      ctx.parityLighting || (ctx.layerPlan && !ctx.layerPlan.dynamicLights)
         ? EMPTY_LIGHT_UNIFORMS
         : pointLightGrid.queryUniforms(flat.center)
     );

@@ -5,17 +5,22 @@ import type { DrawSceneParams } from '@/wad/renderer/renderGame/drawScene';
 import { loadGzstateFromWad } from './stateLoader';
 import { clearFederatedWasmInstanceCache, loadFederatedWasmInstance } from './wasmHost';
 import { drawFederatedWebGl2Frame } from './webgl2Backend';
-import type { FederatedMapState, FederatedWasmDebugInfo } from './types';
-
-let mapState: FederatedMapState | null = null;
-let loadError: string | undefined;
+import type { FederatedWasmDebugInfo } from './types';
+import {
+  getFederatedLoadError,
+  getFederatedMapState,
+  resetFederatedMapState,
+  setFederatedLoadError,
+  setFederatedMapState,
+} from './mapStateStore';
+import { gzstateToWadMap } from './gzstateToWadMap';
 
 export async function prewarmFederatedWasmMap(
   wad: Wad,
   mapName: string,
   _map: WadMap,
 ): Promise<void> {
-  loadError = undefined;
+  setFederatedLoadError(undefined);
   try {
     const wasm = await loadFederatedWasmInstance();
     const { doc, bytes } = loadGzstateFromWad(wad, mapName);
@@ -23,25 +28,51 @@ export async function prewarmFederatedWasmMap(
     const ptr = wasm.copyGzstateBytes(bytes);
     const valid = wasm.validateGzstate(ptr, bytes.byteLength);
     if (!valid) {
-      throw new Error('WASM rejected GZSTATE buffer (bad magic or version)');
+      throw new Error('WASM rejected GZSTATE buffer (bad magic, version, or parse failure)');
     }
-    wasm.setCounts(doc.vertices.length, doc.sectors.length);
-    mapState = {
+    const fullParse = wasm.hasFullGzstateParse?.() ?? false;
+    if (!fullParse && wasm.getVertexCount() === 0) {
+      wasm.setCounts?.(doc.vertices.length, doc.sectors.length);
+    }
+    const vertexCount = wasm.getVertexCount();
+    const sectorCount = wasm.getSectorCount();
+    if (vertexCount !== doc.vertices.length || sectorCount !== doc.sectors.length) {
+      throw new Error(
+        `WASM GZSTATE counts mismatch: wasm ${vertexCount}/${sectorCount} vs doc ${doc.vertices.length}/${doc.sectors.length}`,
+      );
+    }
+    if (fullParse && wasm.getLinedefCount && wasm.getLinedefCount() !== doc.linedefs.length) {
+      throw new Error(
+        `WASM linedef count mismatch: wasm ${wasm.getLinedefCount()} vs doc ${doc.linedefs.length}`,
+      );
+    }
+    const rejectPresent = doc.mapReject != null && doc.mapReject.byteLength > 0;
+    const blockmapPresent = doc.mapBlockmapRaw != null && doc.mapBlockmapRaw.byteLength > 0;
+    const roundtripMap = gzstateToWadMap(doc);
+    if (rejectPresent && !roundtripMap.REJECT) {
+      throw new Error('GZSTATE wire missing REJECT after round-trip to WadMap');
+    }
+    if (blockmapPresent && !roundtripMap.BLOCKMAP) {
+      throw new Error('GZSTATE wire missing BLOCKMAP after round-trip to WadMap');
+    }
+    setFederatedMapState({
       mapName: doc.header.mapName,
       gzstate: doc,
       gzstateBytes: bytes,
+      gzstateMap: roundtripMap,
       wasmLoaded: wasm.isLoaded() === 1,
-    };
+    });
   } catch (err) {
-    loadError = err instanceof Error ? err.message : String(err);
-    mapState = null;
+    const message = err instanceof Error ? err.message : String(err);
+    setFederatedLoadError(message);
+    setFederatedMapState(null);
     throw err;
   }
 }
 
 export function drawFederatedWasmFrame(params: DrawSceneParams): void {
-  if (!mapState) {
-    throw new Error(loadError ?? 'Federated WASM map not loaded');
+  if (!getFederatedMapState()) {
+    throw new Error(getFederatedLoadError() ?? 'Federated WASM map not loaded');
   }
   const wasmPromise = loadFederatedWasmInstance();
   void wasmPromise.then((wasm) => wasm.tick());
@@ -54,6 +85,7 @@ export function getFederatedWasmDebugInfo(): FederatedWasmDebugInfo | null {
       ? ((window as unknown as { __doomDrawStats?: Record<string, number> }).__doomDrawStats ?? null)
       : null;
 
+  const mapState = getFederatedMapState();
   if (!mapState) {
     return {
       backend: 'wasm-federated',
@@ -64,7 +96,7 @@ export function getFederatedWasmDebugInfo(): FederatedWasmDebugInfo | null {
       wasmLoaded: false,
       voxelsDrawn: drawStats?.voxels,
       voxelsPending: drawStats?.voxelsPending,
-      error: loadError ?? 'not loaded',
+      error: getFederatedLoadError() ?? 'not loaded',
     };
   }
   return {
@@ -76,16 +108,13 @@ export function getFederatedWasmDebugInfo(): FederatedWasmDebugInfo | null {
     wasmLoaded: mapState.wasmLoaded,
     voxelsDrawn: drawStats?.voxels,
     voxelsPending: drawStats?.voxelsPending,
-    error: loadError,
+    error: getFederatedLoadError(),
   };
 }
 
 export function resetFederatedWasmBackend(): void {
-  mapState = null;
-  loadError = undefined;
+  resetFederatedMapState();
   clearFederatedWasmInstanceCache();
 }
 
-export function getFederatedMapState(): FederatedMapState | null {
-  return mapState;
-}
+export { getFederatedMapState } from './mapStateStore';

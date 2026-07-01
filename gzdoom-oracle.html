@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GZDoom Browser Oracle</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #111;
+        color: #eee;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 1rem;
+      }
+      h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 0.75rem; }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        align-items: center;
+      }
+      select, button, input[type="file"] { font: inherit; padding: 0.35rem 0.5rem; }
+      #status { font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; max-width: 640px; }
+      canvas {
+        border: 1px solid #333;
+        image-rendering: pixelated;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>GZDoom Browser Oracle (stripped WASM)</h1>
+    <p id="status">Load DOOM.WAD or DOOM2.WAD, pick a map — renders via GZDoom HW path, not hand-ported WebGL.</p>
+    <div class="controls">
+      <label>IWAD <input id="iwad-file" type="file" accept=".wad,.WAD" /></label>
+      <label>GZSTATE <input id="gzstate-file" type="file" accept=".gzstate" /></label>
+      <select id="map-select" disabled>
+        <option value="">— map —</option>
+      </select>
+      <button id="run-btn" disabled>Load &amp; render</button>
+    </div>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <script src="/wasm/gzdoom/gzdoom.js"></script>
+    <script type="module" src="/src/gzdoom-oracle/main.ts"></script>
+  </body>
+</html>

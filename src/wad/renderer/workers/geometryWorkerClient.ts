@@ -17,6 +17,7 @@ export interface GeometryWorkerResponse {
 
 type WorkerMessage = GeometryWorkerRequest | GeometryWorkerResponse;
 
+const GEOMETRY_WORKER_TIMEOUT_MS = 20_000;
 let worker: Worker | null = null;
 let requestId = 0;
 const pending = new Map<number, { resolve: (geometry: CpuMapGeometry) => void; reject: (error: Error) => void }>();
@@ -69,6 +70,21 @@ export function buildMapGeometryInWorker(
 
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
+    const timer = window.setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`Geometry worker timed out after ${GEOMETRY_WORKER_TIMEOUT_MS / 1000}s`));
+    }, GEOMETRY_WORKER_TIMEOUT_MS);
+    const entry = pending.get(id)!;
+    pending.set(id, {
+      resolve: (geometry) => {
+        window.clearTimeout(timer);
+        entry.resolve(geometry);
+      },
+      reject: (error) => {
+        window.clearTimeout(timer);
+        entry.reject(error);
+      },
+    });
     getWorker().postMessage({
       id,
       type: 'build',

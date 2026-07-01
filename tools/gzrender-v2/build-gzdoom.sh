@@ -42,6 +42,15 @@ if [[ ! -f "$BUILD_DIR/build.ninja" ]]; then
   die "No cmake build at $BUILD_DIR — configure first, e.g.: cd $GZDOOM_ROOT && cmake -B build -G Ninja"
 fi
 
+# Reconfigure when the tree moved (stale CMakeCache from old IdeaProjects/gzdoom-project path).
+if [[ -f "$BUILD_DIR/CMakeCache.txt" ]] && rg -q "IdeaProjects/gzdoom-project" "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+  log "Stale CMake cache detected — wiping and reconfiguring $BUILD_DIR"
+  rm -f "$BUILD_DIR/CMakeCache.txt" "$BUILD_DIR/build.ninja"
+  if ! (cd "$GZDOOM_ROOT" && cmake -B build -G Ninja >>"$LOG_FILE" 2>&1); then
+    die "cmake reconfigure failed (stale cache)"
+  fi
+fi
+
 log "build-gzdoom: GZDOOM_ROOT=$GZDOOM_ROOT"
 log "build-gzdoom: BUILD_DIR=$BUILD_DIR"
 log "build-gzdoom: log=$LOG_FILE"

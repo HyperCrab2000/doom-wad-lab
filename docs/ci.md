@@ -63,9 +63,8 @@ Requires IWADs in `public/wads/` and generated corpus artifacts. See [TESTING.md
 
 ```bash
 npm run corpus:parity:all
-npm run test:corpus
-npm run test:modular
-npx vitest run --project unit src/wad/renderer/bsp/vanilla/vanillaBspParity.test.ts
+npm run test:parity-gates          # corpus + modular + federated + frame (soft)
+GZFRAME_PARITY_REQUIRED=1 npm run test:frame   # required for gzrender-v2 PR merge
 ```
 
 ## IWAD vs synthetic tests

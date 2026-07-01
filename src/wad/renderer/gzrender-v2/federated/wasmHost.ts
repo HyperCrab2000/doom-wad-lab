@@ -6,25 +6,41 @@ type WasmExports = {
   memory: WebAssembly.Memory;
   init: () => number;
   validate_gzstate: (ptr: number, len: number) => number;
-  set_counts: (vertices: number, sectors: number) => void;
+  set_counts?: (vertices: number, sectors: number) => void;
   clear_state: () => void;
   get_vertex_count: () => number;
   get_sector_count: () => number;
+  get_linedef_count?: () => number;
+  get_seg_count?: () => number;
+  get_section_count?: () => number;
+  has_full_gzstate_parse?: () => number;
   is_loaded: () => number;
   tick: () => number;
 };
 
+function hasFullGzstateParse(exports: WasmExports): boolean {
+  if (typeof exports.has_full_gzstate_parse === 'function') {
+    return exports.has_full_gzstate_parse() === 1;
+  }
+  return typeof exports.get_section_count === 'function' && typeof exports.get_linedef_count === 'function';
+}
+
 let instancePromise: Promise<FederatedWasmInstance> | null = null;
 
 function wrapExports(exports: WasmExports): FederatedWasmInstance {
+  const fullParse = hasFullGzstateParse(exports);
   return {
     memory: exports.memory,
     init: () => exports.init(),
     validateGzstate: (ptr, len) => exports.validate_gzstate(ptr, len),
-    setCounts: (vertices, sectors) => exports.set_counts(vertices, sectors),
+    setCounts: (vertices, sectors) => exports.set_counts?.(vertices, sectors),
     clearState: () => exports.clear_state(),
     getVertexCount: () => exports.get_vertex_count(),
     getSectorCount: () => exports.get_sector_count(),
+    getLinedefCount: () => exports.get_linedef_count?.() ?? 0,
+    getSegCount: () => exports.get_seg_count?.() ?? 0,
+    getSectionCount: () => exports.get_section_count?.() ?? 0,
+    hasFullGzstateParse: () => fullParse,
     isLoaded: () => exports.is_loaded(),
     tick: () => exports.tick(),
     copyGzstateBytes(bytes: Uint8Array): number {

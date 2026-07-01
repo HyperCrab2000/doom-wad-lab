@@ -3,7 +3,11 @@ import { snapshotFromDrawState } from '@/wad/renderer/bsp/vanilla/bspSnapshot';
 import type { RenderBackend } from '@/wad/renderer/renderBackend';
 import { MODULAR_STAGE_ORDER, type ModularRenderStage } from '@/wad/renderer/modular/modularRenderStage';
 import { StageSnapshotRecorder } from '@/wad/renderer/modular/stageSnapshotCollector';
-import type { ModularFrameSnapshot, StageDrawCounts } from '@/wad/renderer/modular/stageSnapshotTypes';
+import type {
+  ModularFrameSnapshot,
+  ModularGeometrySource,
+  StageDrawCounts,
+} from '@/wad/renderer/modular/stageSnapshotTypes';
 
 export function emptyStageDrawCounts(): StageDrawCounts {
   return {
@@ -51,8 +55,9 @@ export function buildFrameSnapshotFromDrawState(
   drawState: GzdoomDrawState,
   counts: StageDrawCounts = drawCountsFromDrawState(drawState),
   stageCap: ModularRenderStage | null = null,
+  geometrySource: ModularGeometrySource = 'wad',
 ): ModularFrameSnapshot {
   const recorder = new StageSnapshotRecorder(backend, mapName, stageCap);
   recordDrawStateStages(recorder, drawState, counts);
-  return recorder.finalize();
+  return recorder.finalize(geometrySource);
 }

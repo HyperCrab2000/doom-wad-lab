@@ -1,45 +1,34 @@
 # GZRender-V2 Task Board
 
-**Last updated:** 2026-06-17 (retrace session)
+**Last updated:** 2026-06-22
 
-## Active gate — Stage 2 frame parity (E1M1)
+## Active gate — Step 2 (GZDoom WASM ≡ gold)
 
-- [x] Frame diff tool (`tools/gzrender-v2/diff-frame.ts`)
-- [x] WAD Lab capture script (`capture-wadlab-ref-frame.mts`)
-- [x] E1M1 frame parity test (soft gate; `GZFRAME_PARITY_REQUIRED=1` for hard)
-- [x] Fix browser break: `node:crypto` leak via `drawScene` → split `bspSnapshot.ts`
-- [ ] E1M1 playfield pixels match GZDoom reference (currently **open** — run `npm run diff:frame`)
-- [ ] Import renderer harness in `renderer-v2/` (native OpenGL; charter order)
+**2c frame corpus:** **32/68 strict** — see [phase-2c-breakdown.md](./phase-2c-breakdown.md)
 
-## Done — Stage 1
+| Sub | Maps | Target strict | Status |
+|-----|------|---------------|--------|
+| **2c-0** Infra | 68 | capture + eval | [x] Done |
+| **2c-a** Micro colormap | 8 | 40/68 | [ ] Open |
+| **2c-b** Edge pixels | 14 | 54/68 | [ ] Open |
+| **2c-c** Horizon | 8 | 62/68 | [ ] Open |
+| **2c-d** Outdoor | 6 | 68/68 | [ ] Open |
+| **2c-z** Full gate | 68 | `gzdoom-wasm:corpus:all:strict` | [ ] Blocked |
 
-- [x] GZSTATE v1 reader/writer/diff + tests
-- [x] GZDoom `-dumpgzstate` + `-gzstate_refframe`
-- [x] Build/dump/capture scripts with error logs
-- [x] E1M1 GZSTATE + reference PNG artifacts
+- [x] **2d — GZDRAW spawn 68/68** — `gzdraw-corpus:spawn:eval`; full multi-probe grid optional
+- [x] **2e — Level Viewer GZDoom WASM** — Play + Gold, MEMFS capture
 
-## Done — Stage 4 (completed ahead of Stage 2)
+## Done — Step 2 headless / oracle
 
-- [x] `@hypercrab2000/doom-wad-core` GZSTATE export
-- [x] **68/68 maps** Node vs GZDoom state parity (`npm run test:corpus`)
-- [x] Corpus runner + static WAD verify
+- [x] GZDoom WASM build + pk3s (`npm run build:gzdoom-wasm`)
+- [x] `gzdoom-oracle.html` + Puppeteer capture
+- [x] `verify:gzdraw-wasm` (E1M1 spawn native ≡ WASM GZDRAW)
+- [x] Gold-standard tree (68 × `gzdoom.gzstate` + `ref.png`)
+- [x] Native import oracle 68/68
 
-## Done — prep for Stage 5 (premature until Stage 2 closes)
+## Legacy (not Step 2 gates)
 
-- [x] WASM federated UI option (loads; validates GZSTATE)
-- [x] Modular stage snapshots + Classic↔WASM BSP tests (`npm run test:modular`)
-- [ ] WASM **independent** draw path (must not call Classic `drawScene`)
-
-## Not started
-
-- Stage 3 — strip renderer deps
-- Event parity harness
-- Frame parity corpus (68 maps)
-- Native OpenGL import renderer
-
-## Blocked
-
-- **Stage 5 meaningful parity** blocked on Stage 2 frame gate + independent WASM draw
-- **100% clone claim** blocked on frame parity corpus
+- [x] WASM Federated UI option — **debug only**; TS WebGL draw, not GZDoom WASM
+- [x] Modular stage snapshots Classic↔WASM BSP (`npm run test:modular`) — compares TS paths, not gold
 
 See [RETRACE.md](./RETRACE.md) for prompt order recovery.

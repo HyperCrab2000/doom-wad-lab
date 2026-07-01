@@ -30,6 +30,8 @@ export const GZSTATE_SECTION = {
   FLAT_RASTERS: 19,
   SPRITE_RASTERS: 20,
   TEXTURE_RASTERS: 21,
+  MAP_REJECT: 22,
+  MAP_BLOCKMAP: 23,
 } as const;
 
 /** Lump category codes — keep in sync with src/wad/catalog/categorizeLump.ts order. */
@@ -76,6 +78,8 @@ export const GZSTATE_SECTION_NAMES: Record<number, string> = {
   [GZSTATE_SECTION.FLAT_RASTERS]: 'FLAT_RASTERS',
   [GZSTATE_SECTION.SPRITE_RASTERS]: 'SPRITE_RASTERS',
   [GZSTATE_SECTION.TEXTURE_RASTERS]: 'TEXTURE_RASTERS',
+  [GZSTATE_SECTION.MAP_REJECT]: 'MAP_REJECT',
+  [GZSTATE_SECTION.MAP_BLOCKMAP]: 'MAP_BLOCKMAP',
 };
 
 /** Doom-format node child subsector flag (also used in GZSTATE v1 node export). */

@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import goldenCatalog from '@/wad/renderer/bsp/vanilla/bspGoldenSnapshots.json';
 import {
@@ -18,6 +20,8 @@ import {
 
 const catalog = goldenCatalog as BspGoldenCatalog;
 
+const HAS_STOCK_IWAD = fs.existsSync(path.join(process.cwd(), 'public/wads/DOOM.WAD'));
+
 const E1M1_COURTYARD_VIEWS = [
   { key: 'window43-south', x: -192, y: -3128, yawDeg: 180 },
   { key: 'window43-east', x: -192, y: -3128, yawDeg: 90 },
@@ -26,7 +30,7 @@ const E1M1_COURTYARD_VIEWS = [
   { key: 'spawn', x: -896, y: -3616, yawDeg: 90 },
 ] as const;
 
-describe('BSP golden snapshots (regression lock on RenderBSP output)', () => {
+describe.skipIf(!HAS_STOCK_IWAD)('BSP golden snapshots (regression lock on RenderBSP output)', () => {
   beforeAll(() => {
     preloadAllIwadMaps();
   });

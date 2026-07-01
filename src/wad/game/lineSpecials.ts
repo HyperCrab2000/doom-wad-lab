@@ -60,6 +60,12 @@ export const DOOR_SPECIALS: Record<number, DoorSpecialDef> = {
   114: { activation: 'switch', repeat: 'repeat', action: 'openWaitClose', speed: 'turbo', waitSeconds: 4, sound: 'blaze', remote: true },
   115: { activation: 'switch', repeat: 'repeat', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
   116: { activation: 'switch', repeat: 'repeat', action: 'close', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  99: { activation: 'switch', repeat: 'repeat', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  133: { activation: 'switch', repeat: 'once', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  134: { activation: 'switch', repeat: 'repeat', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  135: { activation: 'switch', repeat: 'once', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  136: { activation: 'switch', repeat: 'repeat', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
+  137: { activation: 'switch', repeat: 'once', action: 'open', speed: 'turbo', waitSeconds: 0, sound: 'blaze', remote: true },
 };
 
 export function getDoorSpecial(special: number): DoorSpecialDef | null {

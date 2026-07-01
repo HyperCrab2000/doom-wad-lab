@@ -21,7 +21,7 @@ if (!refPath || !candPath) {
 async function main(): Promise<void> {
   const result = await diffPlayfieldPngFiles(path.resolve(refPath), path.resolve(candPath), { tolerance });
   console.log(formatFrameDiff(result));
-  console.log(`source: ref ${result.leftSize} | cand ${result.rightSize}`);
+  console.log(`source: ref ${result.leftSize} | cand ${result.rightSize} | layout ${result.layout}`);
   process.exit(result.identical ? 0 : 1);
 }
 

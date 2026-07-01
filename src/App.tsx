@@ -16,12 +16,7 @@ export const App = () => {
   return (
     <div className="app-shell">
       <header className="hero">
-        <div className="hero-brand">
-          <DoomHeaderLogo />
-          <p className="hero-tagline">
-            Browser WebGL2 renderer for IWAD maps — built with Node, drawn in the GPU.
-          </p>
-        </div>
+        <DoomHeaderLogo />
 
         <nav className="mode-tabs" aria-label="Viewer mode">
           <button

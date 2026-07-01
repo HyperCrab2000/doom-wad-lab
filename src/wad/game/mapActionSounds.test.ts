@@ -21,9 +21,9 @@ describe('mapActionSounds', () => {
     expect(doorMotionLumps('blaze', 'close')).toBe(DOOM_MAP_SOUNDS.blazeClose);
   });
 
-  it('assigns plat specials platStart not door open', () => {
-    expect(getFloorMoverSpecial(10)?.sound).toBe('platStart');
-    expect(getFloorMoverSpecial(21)?.sound).toBe('platStart');
-    expect(getFloorMoverSpecial(5)?.sound).toBe('floorMove');
+  it('assigns plat specials lift not door open', () => {
+    expect(getFloorMoverSpecial(10)?.sound).toBe('lift');
+    expect(getFloorMoverSpecial(21)?.sound).toBe('lift');
+    expect(getFloorMoverSpecial(5)?.sound).toBe('mover');
   });
 });

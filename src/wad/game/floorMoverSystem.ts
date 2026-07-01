@@ -2,6 +2,11 @@ import { getLineSector } from '@/wad/renderer/controls/doomCollision';
 import { LineDef } from '@/wad/interfaces/LineDef';
 import { Sector } from '@/wad/interfaces/Sector';
 import { WadMap } from '@/wad/interfaces/WadMap';
+import type { CrusherSystem } from './crusherSystem';
+import {
+  findHighestFloorSurrounding,
+  findLowestFloorSurrounding,
+} from './floorSurrounding';
 import { FloorMoverDef, getFloorMoverSpecial } from './floorMoverSpecials';
 
 export type MoverDirection = 'up' | 'down' | 'wait';
@@ -37,7 +42,10 @@ export class FloorMoverSystem {
   private dirty = false;
   private readonly dirtySectorIndices = new Set<number>();
 
-  constructor(private readonly map: WadMap) {}
+  constructor(
+    private readonly map: WadMap,
+    private readonly crushers: CrusherSystem | null = null
+  ) {}
 
   isDirty(): boolean {
     return this.dirty;
@@ -56,9 +64,50 @@ export class FloorMoverSystem {
     return this.movers.size;
   }
 
+  /** Move a sector floor toward an absolute height (stairs, scripts). */
+  startFloorMoveTo(sectorIndex: number, targetFloor: number, speed: number): boolean {
+    const sector = this.map.SECTORS[sectorIndex];
+    if (!sector || this.movers.has(sectorIndex)) return false;
+    if (Math.abs(sector.floorheight - targetFloor) <= HEIGHT_EPS) return false;
+
+    const mover: ActiveFloorMover = {
+      sectorIndex,
+      sector,
+      kind: 'floorUp',
+      speed,
+      direction: targetFloor > sector.floorheight ? 'up' : 'down',
+      waitRemaining: 0,
+      floorTarget: targetFloor,
+      ceilingTarget: sector.ceilingheight,
+      platHigh: sector.floorheight,
+      platLow: sector.floorheight,
+      platPhase: 'idle',
+      waitAtSeconds: 3,
+    };
+    this.movers.set(sectorIndex, mover);
+    this.markDirty(sectorIndex);
+    return true;
+  }
+
+  /** Start a standard floor mover on one sector (donut pillar / ring). */
+  startFloorMoveKind(sectorIndex: number, kind: 'floorUp' | 'floorDown'): boolean {
+    const sector = this.map.SECTORS[sectorIndex];
+    if (!sector) return false;
+    const def = {
+      activation: 'switch' as const,
+      repeat: 'once' as const,
+      remote: false,
+      kind,
+      speed: 35,
+      waitSeconds: 0,
+      sound: 'mover' as const,
+    };
+    return this.startMover(sectorIndex, sector, def);
+  }
+
   tryUseLine(lineIndex: number, line: LineDef): MoverTriggerResult {
     const def = getFloorMoverSpecial(line.special);
-    if (!def || def.activation !== 'switch') return emptyResult();
+    if (!def || (def.activation !== 'switch' && def.activation !== 'gun')) return emptyResult();
     if (def.repeat === 'once' && this.usedOnceLines.has(lineIndex)) return emptyResult();
     return this.triggerLine(lineIndex, line, def, true);
   }
@@ -146,6 +195,9 @@ export class FloorMoverSystem {
             this.movers.delete(mover.sectorIndex);
           }
         } else {
+          if (mover.kind === 'floorUpCrush' && this.crushers) {
+            this.crushers.startCrusherOnSector(mover.sectorIndex, mover.sector, 35);
+          }
           this.movers.delete(mover.sectorIndex);
         }
       }
@@ -199,8 +251,8 @@ export class FloorMoverSystem {
 
     switch (def.kind) {
       case 'plat': {
-        mover.platLow = lowestNeighborFloor(this.map, sectorIndex);
-        mover.platHigh = highestNeighborFloor(this.map, sectorIndex) - 8;
+        mover.platLow = findLowestFloorSurrounding(this.map, sectorIndex);
+        mover.platHigh = findHighestFloorSurrounding(this.map, sectorIndex) - 8;
         if (mover.platHigh <= mover.platLow + HEIGHT_EPS) {
           mover.platHigh = sector.ceilingheight - 8;
         }
@@ -210,11 +262,12 @@ export class FloorMoverSystem {
         break;
       }
       case 'floorUp':
+      case 'floorUpCrush':
         mover.floorTarget = lowestNeighborCeiling(this.map, sectorIndex) - 8;
         mover.direction = 'up';
         break;
       case 'floorDown':
-        mover.floorTarget = lowestNeighborFloor(this.map, sectorIndex);
+        mover.floorTarget = findLowestFloorSurrounding(this.map, sectorIndex);
         mover.direction = 'down';
         break;
       case 'ceilingDown':
@@ -225,8 +278,44 @@ export class FloorMoverSystem {
         mover.ceilingTarget = highestNeighborCeiling(this.map, sectorIndex);
         mover.direction = 'up';
         break;
+      case 'floorUpNhEF': {
+        const target = nextHighestNeighborFloor(this.map, sectorIndex);
+        if (target <= sector.floorheight + HEIGHT_EPS) return false;
+        mover.floorTarget = target;
+        mover.direction = 'up';
+        break;
+      }
+      case 'floorDownHEF': {
+        mover.floorTarget = findHighestFloorSurrounding(this.map, sectorIndex);
+        mover.direction = 'down';
+        break;
+      }
+      case 'floorDownHEF8': {
+        const hef = findHighestFloorSurrounding(this.map, sectorIndex);
+        mover.floorTarget =
+          Math.abs(hef - sector.floorheight) > HEIGHT_EPS ? hef + 8 : hef;
+        mover.direction = 'down';
+        break;
+      }
+      case 'floorUpDelta':
+        mover.floorTarget = sector.floorheight + (def.delta ?? 24);
+        mover.direction = 'up';
+        break;
+      case 'floorUpShortestLowerTex':
+        mover.floorTarget = sector.floorheight + shortestLowerTextureRise(this.map, sectorIndex);
+        mover.direction = 'up';
+        break;
       default:
         return false;
+    }
+
+    if (
+      mover.kind !== 'plat' &&
+      mover.kind !== 'ceilingDown' &&
+      mover.kind !== 'ceilingUp' &&
+      Math.abs(mover.floorTarget - sector.floorheight) <= HEIGHT_EPS
+    ) {
+      return false;
     }
 
     this.movers.set(sectorIndex, mover);
@@ -258,7 +347,11 @@ export class FloorMoverSystem {
     def: FloorMoverDef
   ): Array<{ sectorIndex: number; sector: Sector }> {
     if (def.remote) {
-      const tag = line.tag ?? 0;
+      let tag = line.tag ?? 0;
+      if (def.tagFromSector) {
+        const back = getLineSector(this.map, line, 1);
+        tag = back?.tag ?? 0;
+      }
       if (tag === 0) return [];
       return this.map.SECTORS.map((sector, sectorIndex) => ({ sector, sectorIndex })).filter(
         ({ sector }) => sector.tag === tag
@@ -270,36 +363,6 @@ export class FloorMoverSystem {
     if (sectorIndex < 0) return [];
     return [{ sectorIndex, sector: back }];
   }
-}
-
-function lowestNeighborFloor(map: WadMap, sectorIndex: number): number {
-  let min = map.SECTORS[sectorIndex].floorheight;
-  for (const line of map.LINEDEFS) {
-    for (const sideIndex of line.sidenum) {
-      if (sideIndex < 0) continue;
-      if (map.SIDEDEFS[sideIndex].sector !== sectorIndex) continue;
-      const otherSide = line.sidenum[0] === sideIndex ? line.sidenum[1] : line.sidenum[0];
-      if (otherSide < 0) continue;
-      const other = map.SECTORS[map.SIDEDEFS[otherSide].sector];
-      if (other) min = Math.min(min, other.floorheight);
-    }
-  }
-  return min;
-}
-
-function highestNeighborFloor(map: WadMap, sectorIndex: number): number {
-  let max = map.SECTORS[sectorIndex].floorheight;
-  for (const line of map.LINEDEFS) {
-    for (const sideIndex of line.sidenum) {
-      if (sideIndex < 0) continue;
-      if (map.SIDEDEFS[sideIndex].sector !== sectorIndex) continue;
-      const otherSide = line.sidenum[0] === sideIndex ? line.sidenum[1] : line.sidenum[0];
-      if (otherSide < 0) continue;
-      const other = map.SECTORS[map.SIDEDEFS[otherSide].sector];
-      if (other) max = Math.max(max, other.floorheight);
-    }
-  }
-  return max;
 }
 
 function lowestNeighborCeiling(map: WadMap, sectorIndex: number): number {
@@ -319,6 +382,24 @@ function lowestNeighborCeiling(map: WadMap, sectorIndex: number): number {
   return min;
 }
 
+function nextHighestNeighborFloor(map: WadMap, sectorIndex: number): number {
+  const current = map.SECTORS[sectorIndex].floorheight;
+  let best = Number.POSITIVE_INFINITY;
+  for (const line of map.LINEDEFS) {
+    for (const sideIndex of line.sidenum) {
+      if (sideIndex < 0) continue;
+      if (map.SIDEDEFS[sideIndex].sector !== sectorIndex) continue;
+      const otherSide = line.sidenum[0] === sideIndex ? line.sidenum[1] : line.sidenum[0];
+      if (otherSide < 0) continue;
+      const other = map.SECTORS[map.SIDEDEFS[otherSide].sector];
+      if (other && other.floorheight > current + HEIGHT_EPS) {
+        best = Math.min(best, other.floorheight);
+      }
+    }
+  }
+  return Number.isFinite(best) ? best : current;
+}
+
 function highestNeighborCeiling(map: WadMap, sectorIndex: number): number {
   let max = map.SECTORS[sectorIndex].ceilingheight;
   for (const line of map.LINEDEFS) {
@@ -332,6 +413,21 @@ function highestNeighborCeiling(map: WadMap, sectorIndex: number): number {
     }
   }
   return max;
+}
+
+function shortestLowerTextureRise(map: WadMap, sectorIndex: number): number {
+  let clearance = 24;
+  for (const line of map.LINEDEFS) {
+    for (const sideIndex of line.sidenum) {
+      if (sideIndex < 0) continue;
+      if (map.SIDEDEFS[sideIndex].sector !== sectorIndex) continue;
+      const tex = map.SIDEDEFS[sideIndex].lowerTexture;
+      if (tex && tex !== '-') {
+        clearance = Math.max(clearance, 24);
+      }
+    }
+  }
+  return clearance;
 }
 
 function emptyResult(): MoverTriggerResult {

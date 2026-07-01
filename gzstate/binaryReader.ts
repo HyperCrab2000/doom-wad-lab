@@ -40,6 +40,12 @@ export class BinaryReader {
     return value;
   }
 
+  readFloat32(): number {
+    const value = this.view.getFloat32(this.offset, true);
+    this.offset += 4;
+    return value;
+  }
+
   readBytes(length: number): Uint8Array {
     const out = new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, length);
     this.offset += length;

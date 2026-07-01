@@ -105,19 +105,44 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem 1rem;
+  gap: 0.75rem;
   flex-shrink: 0;
-  margin-bottom: 0.25rem;
-  min-height: 3.5rem;
-  padding: 0.5rem 0.7rem;
+  margin-bottom: 0;
+  min-height: 3rem;
+  padding: 0.35rem 0.65rem;
   overflow: visible;
   border: 2px solid #202020;
+  border-bottom: none;
   background:
     linear-gradient(90deg, rgba(8, 8, 8, 0.98), rgba(60, 0, 0, 0.76)),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 6px);
   box-shadow:
     inset 0 0 0 1px #000,
-    0 4px 16px rgba(0, 0, 0, 0.4);
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.hero--compact {
+  min-height: 2.35rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.hero--compact .doom-wordmark-logo {
+  height: 1.75rem;
+  max-width: 4.5rem;
+}
+
+.hero--compact .doom-wordmark-sub {
+  font-size: 0.62rem;
+  padding: 0.14rem 0.28rem 0.12rem;
+}
+
+.hero--compact .mode-tabs button {
+  padding: 0.22rem 0.45rem;
+  font-size: 0.66rem;
+}
+
+.hero--hidden {
+  display: none;
 }
 
 .hero-brand {
@@ -278,6 +303,32 @@ input {
   image-rendering: crisp-edges;
 }
 
+/* Square icon-only button (e.g. the music mute toggle) — keeps a fixed footprint so toggling
+   does not reflow neighbouring controls. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.85rem;
+  min-height: 1.85rem;
+  padding: 0;
+}
+
+.icon-button .mute-icon {
+  display: block;
+}
+
+.music-mute,
+.sfx-mute {
+  color: #9a9a9a;
+}
+
+.music-mute.active,
+.sfx-mute.active {
+  color: #fff;
+}
+
 .music-status--compact {
   flex-shrink: 0;
   padding: 0.35rem 0.5rem;
@@ -320,11 +371,108 @@ input {
 .level-viewer {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0;
   height: 100%;
   min-height: 0;
   padding: 0.3rem;
   overflow: hidden;
+}
+
+.level-viewer__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 2px solid #202020;
+  border-top: none;
+  background: #030303;
+}
+
+.level-viewer__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layer-drawer {
+  flex-shrink: 0;
+  width: 0;
+  overflow: hidden;
+  border-right: none;
+  background: #080808;
+  transition: width 0.2s ease;
+}
+
+.layer-drawer--open {
+  width: min(15.5rem, 38vw);
+  border-right: 1px solid #2a2a2a;
+}
+
+.layer-drawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.65rem;
+  padding: 0.2rem 0.45rem;
+  margin-right: 0.15rem;
+  border: 1px solid #444;
+  background: #111;
+  box-shadow: none;
+  color: #ddd;
+  font-family: "Arial Narrow", Arial, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.layer-drawer-toggle--open,
+.layer-drawer-toggle:hover:not(:disabled) {
+  border-color: #c01818;
+  background: linear-gradient(180deg, #2a0808, #140404);
+  color: #fff;
+}
+
+.layer-drawer-toggle__bars {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 0.85rem;
+  height: 0.75rem;
+}
+
+.layer-drawer-toggle__bars span {
+  display: block;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.layer-drawer-toggle__label {
+  line-height: 1;
+}
+
+.layer-drawer-toggle__hint {
+  color: #888;
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.level-viewer--playing .layer-drawer-toggle__hint {
+  display: none;
 }
 
 .voxel-viewer {
@@ -440,10 +588,187 @@ input {
   flex-shrink: 0;
 }
 
-.level-toolbar {
+.level-chrome {
+  flex-shrink: 0;
+  padding: 0.35rem 0.55rem;
+  border: 2px solid #202020;
+  border-top: 1px solid #2a2a2a;
+  background: #060606;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.level-chrome__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.45rem 0.75rem;
+}
+
+.level-chrome__selects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  min-width: 0;
+}
+
+.level-chrome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.level-chrome__audio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-left: auto;
+}
+
+.control-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.control-field__label {
+  flex-shrink: 0;
+  width: 2.75rem;
+  color: #777;
+  font-family: "Arial Narrow", Arial, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.control-field__input {
+  min-width: 0;
+  min-height: 1.65rem;
+  padding: 0.18rem 0.35rem;
+  font-size: 0.74rem;
+  border-width: 1px;
+}
+
+.control-field__input--map {
+  width: 5.5rem;
+}
+
+.control-field__input--engine {
+  width: 9.5rem;
+}
+
+.segmented-control {
+  display: inline-flex;
+  border: 1px solid #444;
+  background: #0a0a0a;
+}
+
+.segmented-control button {
+  margin: 0;
+  padding: 0.22rem 0.55rem;
+  min-height: 1.65rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: #aaa;
+}
+
+.segmented-control button + button {
+  border-left: 1px solid #444;
+}
+
+.segmented-control button.active {
+  color: #fff;
+  background: linear-gradient(180deg, var(--doom-red-hot), var(--doom-red-dark));
+}
+
+.segmented-control button:disabled {
+  opacity: 0.45;
+}
+
+.chrome-btn {
+  min-height: 1.65rem;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.chrome-btn--ghost {
+  color: #aaa;
+  background: #111;
+  border-color: #333;
+}
+
+.audio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.12rem 0.35rem 0.12rem 0.15rem;
+  border: 1px solid #2a2a2a;
+  background: #080808;
+  min-height: 1.65rem;
+}
+
+.audio-chip__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  border: 1px solid #333;
+  border-radius: 0;
+  box-shadow: none;
+  background: #141414;
+  flex-shrink: 0;
+}
+
+.audio-chip__btn.active {
+  border-color: #c01818;
+  background: linear-gradient(180deg, var(--doom-red-hot), var(--doom-red-dark));
+}
+
+.audio-chip__btn:disabled {
+  opacity: 0.4;
+}
+
+.audio-chip__label {
+  color: #666;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.audio-chip__status {
+  color: #ccc;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.62rem;
+  max-width: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-chip .music-viz {
+  width: 48px;
+  height: 14px;
+}
+
+.level-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 0.35rem 0.5rem;
   flex-shrink: 0;
@@ -488,8 +813,11 @@ input {
   flex-shrink: 0;
 }
 
-.level-toolbar__music {
-  align-items: center;
+.level-toolbar__music,
+.level-toolbar__sfx {
+  align-items: flex-end;
+  gap: 0.4rem 0.5rem;
+  flex-wrap: nowrap;
 }
 
 .level-toolbar__group--end {
@@ -893,12 +1221,8 @@ input {
   width: 100vw;
   max-width: none;
   height: 100vh;
-  padding: 0;
+  padding: 0.15rem 0.2rem 0;
   margin: 0;
-}
-
-.hero--hidden {
-  display: none;
 }
 
 .app-shell--playing .app-main > .doom-panel {
@@ -910,6 +1234,14 @@ input {
 .level-viewer--playing {
   gap: 0;
   padding: 0;
+}
+
+.level-viewer--playing .level-chrome {
+  padding: 0.22rem 0.4rem;
+}
+
+.level-viewer--playing .control-field__input--engine {
+  width: 8rem;
 }
 
 .level-viewer--playing .level-controls,
@@ -972,6 +1304,99 @@ input {
   opacity: 0.35;
 }
 
+.game-canvas--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.gzdoom-wasm-capture-canvas {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Specificity must beat `.canvas-card canvas { width/height: 100% }` (0,1,1). */
+.game-card__viewport canvas.gzdoom-wasm-play-canvas {
+  /* The element itself is a true 4:3 box (matches GZDoom's 1280x960 frame), centered in the
+     viewport via margin:auto. It grows to the largest 4:3 that fits within the available
+     height, with symmetric letterboxing and no phantom clickable area. */
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  display: block;
+  z-index: 5;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+.gzdoom-wasm-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  z-index: 4;
+  background: #000;
+}
+
+.level-viewer[data-map-load-state='ready'] .game-stage {
+  flex: 1;
+  min-height: min(75vh, calc(100vh - 7rem));
+}
+
+.level-viewer--gzdoom-gold .game-stage,
+.level-viewer--playing .game-stage {
+  flex: 1;
+  min-height: min(80vh, calc(100vh - 4rem));
+}
+
+.level-viewer--gzdoom-gold .game-card__viewport {
+  min-height: min(80vh, calc(100vh - 5rem));
+}
+
+.level-viewer--playing.level-viewer--gzdoom-gold .game-stage {
+  min-height: min(85vh, calc(100vh - 3rem));
+}
+
+.gzdoom-play-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9fd3ff;
+  background: rgba(0, 0, 0, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.gzdoom-subview-toggle {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.gzdoom-subview-toggle .doom-button {
+  min-width: 4.5rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.gzdoom-gold-diff-hud {
+  color: #c8ffb0;
+}
+
 .automap-canvas {
   z-index: 2;
   pointer-events: none;
@@ -1020,6 +1445,63 @@ input {
   font-size: 0.72rem;
   letter-spacing: 0.08em;
   pointer-events: none;
+}
+
+.perf-meter {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.18rem;
+  padding: 0.3rem 0.4rem;
+  background: rgba(0, 0, 0, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+  pointer-events: none;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+.perf-meter__readout {
+  display: flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  line-height: 1;
+}
+
+.perf-meter__value {
+  color: #33ff5a;
+  font-weight: 700;
+  font-size: 0.82rem;
+  min-width: 1.6ch;
+  text-align: right;
+}
+
+.perf-meter__value--ms {
+  color: #cfe9ff;
+  min-width: 2.6ch;
+}
+
+.perf-meter__unit {
+  color: #8a8a8a;
+  font-size: 0.62rem;
+}
+
+.perf-meter__sep {
+  color: #5a5a5a;
+  font-size: 0.7rem;
+}
+
+.perf-meter__chart {
+  display: block;
+  width: 84px;
+  height: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #050505;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .canvas-grid {
@@ -1223,6 +1705,11 @@ input {
   visibility: hidden;
 }
 
+/* GZDoom hosted play canvas owns the viewport even when the Classic game canvas is hidden. */
+.game-card--hidden .game-card__viewport canvas.gzdoom-wasm-play-canvas {
+  visibility: visible;
+}
+
 .doom-level-transition {
   position: absolute;
   inset: 0;
@@ -1249,63 +1736,149 @@ input {
 }
 
 .render-layer-panel {
-  margin-top: 0.65rem;
-  padding: 0.55rem 0.65rem;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 0.72rem;
+  color: #ececec;
 }
 
-.render-layer-panel__header {
+.render-layer-panel--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.render-layer-panel__head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 0.45rem;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  padding: 0.45rem 0.55rem 0.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .render-layer-panel__title {
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.render-layer-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.35rem 0.55rem 0.55rem;
+}
+
+.render-layer-panel__note {
+  margin: 0 0 0.5rem;
+  font-size: 0.65rem;
+  color: #999;
+  line-height: 1.35;
+}
+
+.render-layer-panel__group {
+  margin-bottom: 0.55rem;
+}
+
+.render-layer-panel__group--debug {
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.render-layer-panel__group-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.58rem;
+  font-weight: 600;
   text-transform: uppercase;
-  color: #c8c8c8;
+  letter-spacing: 0.06em;
+  color: #777;
 }
 
-.render-layer-panel__backend {
-  font-size: 0.72rem;
-  color: #8fd4ff;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+.render-layer-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
 }
 
-.render-layer-panel__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: 0.25rem 0.75rem;
-}
-
-.render-layer-panel__item {
+.render-layer-panel__row-item {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.82rem;
-  color: #ececec;
+  padding: 0.18rem 0.2rem;
+  font-size: 0.72rem;
   cursor: pointer;
   user-select: none;
+  color: #ddd;
+  border-radius: 2px;
 }
 
-.render-layer-panel__item input {
+.render-layer-panel__row-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.render-layer-panel__row-item input {
   accent-color: #47ff58;
+  margin: 0;
+  width: 0.82rem;
+  height: 0.82rem;
+  flex-shrink: 0;
 }
 
-.render-layer-panel__item--warn {
-  color: #ffb347;
+.render-layer-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.68rem;
 }
 
-.render-layer-panel__warn {
-  margin: 0.35rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: #ffb347;
+.render-layer-panel__field span {
+  color: #888;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.render-layer-panel__field select,
+.render-layer-panel__stage {
+  width: 100%;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.3rem;
+  background: #111;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 2px;
+}
+
+.render-layer-panel__reset {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  padding: 0.25rem 0.45rem;
+  background: #222;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 2px;
+  cursor: pointer;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.render-layer-panel__reset:disabled {
+  cursor: not-allowed;
+}
+
+.render-layer-panel__backend {
+  font-size: 0.58rem;
+  color: #7ec8ff;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid rgba(126, 200, 255, 0.35);
+  border-radius: 3px;
 }
 
 .fps-counter,
@@ -1354,6 +1927,15 @@ input {
 
   .mode-tabs button {
     flex: 1;
+  }
+
+  .level-chrome__row {
+    align-items: stretch;
+  }
+
+  .level-chrome__audio {
+    margin-left: 0;
+    width: 100%;
   }
 
   .level-toolbar {

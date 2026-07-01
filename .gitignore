@@ -27,6 +27,12 @@ public/wads/*.wad
 # Large binary assets
 public/soundfonts/*.sf2
 
+# GZDoom WASM (bootstrap via npm run bootstrap:gzdoom-s / build:gzdoom-wasm)
+public/wasm/gzdoom/
+public/wasm/gzdoom-s/*
+!public/wasm/gzdoom-s/README.md
+public/wads/*.log.txt
+
 # Editor directories and files
 .cursor/
 .vscode/*
