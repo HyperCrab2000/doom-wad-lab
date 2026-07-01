@@ -51,6 +51,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install Chrome for Puppeteer
+        run: npx puppeteer browsers install chrome
+
       - name: Smoke test (no console errors)
         run: |
           npm run preview -- --host 127.0.0.1 --port 4173 &

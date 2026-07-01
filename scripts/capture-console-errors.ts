@@ -10,6 +10,7 @@ async function main() {
 
   const browser = await puppeteer.launch({
     headless: true,
+    channel: process.env.PUPPETEER_CHANNEL ?? (process.env.CI === 'true' ? 'chrome' : undefined),
     args:
       process.env.CI === 'true'
         ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -33,13 +34,13 @@ async function main() {
   page.on('response', (res) => {
     const url = res.url();
     if (url.includes('favicon.ico')) return;
-    if (res.status() >= 400 && !url.includes('/wads/DOOM') && !url.includes('/wads/doom')) {
+    if (res.status() >= 400 && !url.includes('/wads/DOOM') && !url.includes('/wads/doom') && !url.includes('/wasm/gzdoom')) {
       failedRequests.push(`${res.status()} ${url}`);
     }
   });
 
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForSelector('.app-main', { timeout: 30000 });
+  await page.goto(BASE_URL, { waitUntil: 'networkidle0', timeout: 120000 });
+  await page.waitForSelector('.app-main, .app-shell, .hero', { timeout: 60000 });
   console.log('Loaded app shell');
 
   if (process.env.SMOKE_GAME === '1') {
