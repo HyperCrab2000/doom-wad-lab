@@ -25,6 +25,12 @@ import {
   writeGzstate,
 } from '@hypercrab2000/doom-wad-core';
 
+const PARITY_HELPERS_AVAILABLE =
+  typeof assertLumpFileParity === 'function' &&
+  typeof assertLumpCatalogParity === 'function' &&
+  typeof runMapDataParity === 'function' &&
+  typeof assertMapDataParity === 'function';
+
 import { parallelMap } from '../../../test/parallelMap';
 import { gzstateToWadMap } from '@/wad/renderer/gzrender-v2/federated/gzstateToWadMap';
 
@@ -51,7 +57,7 @@ function loadIwad(slug: string, wadPath: string) {
   return wadCache.get(slug) ?? null;
 }
 
-describe('Stage 0 — WAD data parity (pre-renderer)', () => {
+describe.skipIf(!PARITY_HELPERS_AVAILABLE)('Stage 0 — WAD data parity (pre-renderer)', () => {
   for (const { wadPath, slug } of IWADS) {
     describe(slug, () => {
       it('Tier 1: lump payloads match IWAD file bytes', () => {

@@ -25,10 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build doom-wad-core (file dependency)
+      - name: Build sibling packages (file dependencies)
         run: |
           git clone --depth 1 https://github.com/HyperCrab2000/doom-wad-core.git ../doom-wad-core
           cd ../doom-wad-core && npm ci && npm run build
+          git clone --depth 1 https://github.com/HyperCrab2000/doom-gzengine-core.git ../doom-gzengine-core
+          cd ../doom-gzengine-core && npm ci && npm run build
 
       - uses: actions/setup-node@v4
         with:

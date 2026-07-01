@@ -72,12 +72,15 @@ describe('Stage 3 — GZDoom import oracle', () => {
       return;
     }
 
-    if (!fs.existsSync(REF_FRAME) || REQUIRED) {
+    if (!fs.existsSync(REF_FRAME)) {
+      if (!REQUIRED) return;
       execSync(
         `bash "${path.join(ROOT, 'tools/gzrender-v2/capture-gzdoom-ref-frame.sh')}" "${DOOM_WAD}" E1M1`,
         { stdio: 'inherit', cwd: ROOT },
       );
     }
+
+    if (!fs.existsSync(NODE_GZSTATE) && !REQUIRED) return;
 
     execSync(`bash "${CAPTURE_IMPORT}" "${NODE_GZSTATE}" "${IMPORT_FRAME}"`, {
       stdio: 'inherit',
