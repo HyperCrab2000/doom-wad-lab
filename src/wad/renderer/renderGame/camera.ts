@@ -16,15 +16,19 @@ import thingsFrag from '@/wad/renderer/shaders/things.frag';
 import voxelColorVert from '@/wad/renderer/shaders/voxelColor.vert';
 import voxelColorFrag from '@/wad/renderer/shaders/voxelColor.frag';
 import voxelParallaxGlsl from '@/wad/renderer/shaders/voxelParallax.glsl';
+import colormapParityGlsl from '@/wad/renderer/shaders/colormapParity.glsl';
 
 import { createSkyboxBuffers } from '@/wad/renderer/drawAssets/drawSkybox';
 
 function resolveShaderIncludes(source: string): string {
-  return source.replace('#include "voxelParallax.glsl"', voxelParallaxGlsl);
+  return source
+    .replace('#include "voxelParallax.glsl"', voxelParallaxGlsl)
+    .replace('#include "colormapParity.glsl"', colormapParityGlsl);
 }
 
 const wallsFragSource = resolveShaderIncludes(wallsFrag);
 const flatFragSource = resolveShaderIncludes(flatFrag);
+const thingsFragSource = resolveShaderIncludes(thingsFrag);
 
 export interface Camera {
   pos: vec3;
@@ -70,7 +74,7 @@ export function setupCamera(gl: WebGL2RenderingContext, canvas: HTMLCanvasElemen
     flats: createProgram(gl, flatVert, flatFragSource),
     sky: createProgram(gl, skyVert, skyFrag),
     skybox: createProgram(gl, skyboxVert, skyboxFrag),
-    things: createProgram(gl, thingsVert, thingsFrag),
+    things: createProgram(gl, thingsVert, thingsFragSource),
     voxelThings: createProgram(gl, voxelColorVert, voxelColorFrag),
   };
 

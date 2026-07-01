@@ -35,11 +35,13 @@ uniform float uPointLightIntensity2;
 uniform float uPointLightIntensity3;
 
 in vec2 vUv;
+in float vParitySpanT;
 in vec3 vWorldNormal;
 in vec3 vWorldPos;
 
 out vec4 fragColor;
 
+#include "colormapParity.glsl"
 #include "voxelParallax.glsl"
 
 vec3 radialLight(vec3 pos, vec3 color, float radius, float intensity, vec3 worldPos, bool enabled) {
@@ -51,17 +53,29 @@ vec3 radialLight(vec3 pos, vec3 color, float radius, float intensity, vec3 world
 }
 
 void main() {
-  vec3 N = normalize(vWorldNormal);
-  mat3 tbn = GetTBN(N, vWorldPos, vUv);
-  vec2 sampleUv = ParallaxOcclusionMap(heightTex, tbn, vUv, uCameraPos, vWorldPos, reliefStrength);
-
-  if (!repeatVertical) {
+  vec2 sampleUv = vUv;
+  if (parityColormap == 0) {
+    vec3 N = normalize(vWorldNormal);
+    mat3 tbn = GetTBN(N, vWorldPos, vUv);
+    sampleUv = ParallaxOcclusionMap(heightTex, tbn, vUv, uCameraPos, vWorldPos, reliefStrength);
+    if (!repeatVertical) {
+      sampleUv.y = clamp(sampleUv.y, 0.0, 1.0);
+    }
+  } else if (!repeatVertical) {
     sampleUv.y = clamp(sampleUv.y, 0.0, 1.0);
   }
 
   vec4 texColor = texture(tex, sampleUv);
   if (shouldClip && texColor.a < 0.1) discard;
 
+  if (parityColormap != 0) {
+    float visibility = wallVisibility();
+    fragColor = vec4(sampleColormapParity(texColor, sectorLightLevel, visibility), texColor.a);
+    return;
+  }
+
+  vec3 N = normalize(vWorldNormal);
+  mat3 tbn = GetTBN(N, vWorldPos, vUv);
   float heightCenter = GetHeightTexAt(heightTex, sampleUv);
   float heightRight = GetHeightTexAt(heightTex, sampleUv + vec2(0.004, 0.0));
   float heightUp = GetHeightTexAt(heightTex, sampleUv + vec2(0.0, 0.004));

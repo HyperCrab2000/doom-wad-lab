@@ -31,6 +31,8 @@ This project is **Doom only**. Yserbius / Twinion work lives in `yserbius_twinio
 | [**Line specials**](./line-specials.md) | Doors, switches, lifts, crushers, teleports, exits — activation and tests |
 | [**Game content**](./game-content.md) | Sounds, music, sprites, story text, thing catalog, WAD audit script |
 | [**CI/CD**](./ci.md) | GitHub Actions gates, smoke test, IWAD vs synthetic integration |
+| [**Testing**](./TESTING.md) | Vitest projects, parity commands, parallelization, env vars |
+| [**GZRender-V2**](./gzrender-v2/README.md) | Opt-in GZDoom-derived renderer pipeline (native parity → WASM) |
 
 ## Repository layout (high level)
 

@@ -88,11 +88,31 @@ describe('supplementWallDrawFromTrace', () => {
       playerStart.y,
       viewYaw,
       bsp.wallDrawOrder,
-      bsp.visibleSubsectors
+      bsp.visibleSubsectors,
+      bsp.flatSubsectorOrder
     );
 
     expect(supplemented.length).toBeGreaterThanOrEqual(bsp.wallDrawOrder.length);
     expect(supplemented.length).toBeGreaterThan(0);
+  });
+
+  it('does not toggle E1M1 line 454 when the camera nudges across a subsector lip', () => {
+    const map = loadE1M1();
+    const index = buildBspRenderIndex(map)!;
+
+    function has454(viewY: number) {
+      const state = buildGzdoomDrawState({
+        map,
+        buffers: { bspRenderIndex: index } as never,
+        viewX: -280,
+        viewY,
+        viewYaw: 0,
+        cameraPos: [-280, 41, -viewY],
+      });
+      return state!.wallDrawOrder.some((entry) => entry.lineIndex === 454);
+    }
+
+    expect(has454(-3264)).toBe(has454(-3256));
   });
 });
 

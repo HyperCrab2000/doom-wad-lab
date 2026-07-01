@@ -113,11 +113,22 @@ export function renderGzdoomFlats(
 ): void {
   const batch = { batchKey: '', lightKey: '' };
 
+  if (drawState.flatDrawMode === 'subsector-bsp' && buffers.subsectorFlats.length > 0) {
+    const flatsBySubsector =
+      cachedFlatsBySubsector ?? buildFlatsBySubsector(buffers.subsectorFlats);
+    for (const subsectorIndex of drawState.flatSubsectorOrder) {
+      const subsectorFlats = flatsBySubsector.get(subsectorIndex);
+      if (!subsectorFlats) continue;
+      for (const flat of subsectorFlats) {
+        ctx.drawFlat(flat, batch);
+      }
+    }
+    return;
+  }
+
   const flatsBySector =
     cachedFlatsBySector ?? buildFlatsBySector(buffers.flats);
 
-  // Always draw full sector flats first as a base layer so the entire sector polygon
-  // is covered. Without this, BSP-unvisited subsectors leave gaps in the floor.
   for (const sectorIndex of drawState.flatSectorOrder) {
     const sectorFlats = flatsBySector.get(sectorIndex);
     if (!sectorFlats) continue;
@@ -126,7 +137,6 @@ export function renderGzdoomFlats(
     }
   }
 
-  // Subsector flats drawn on top for higher precision (correct seam alignment).
   if (buffers.subsectorFlats.length > 0) {
     const flatsBySubsector =
       cachedFlatsBySubsector ?? buildFlatsBySubsector(buffers.subsectorFlats);
@@ -140,7 +150,7 @@ export function renderGzdoomFlats(
   }
 }
 
-function wallSliceForEntry(
+export function wallSliceForEntry(
   buffers: MapBuffers,
   map: WadMap,
   lineIndex: number,

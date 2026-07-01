@@ -1,0 +1,16 @@
+import puppeteer from 'puppeteer';
+const BASE = 'http://localhost:5150';
+const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'], channel: 'chrome' });
+const page = await browser.newPage();
+page.on('console', msg => console.log('CONSOLE', msg.type(), msg.text()));
+page.on('pageerror', err => console.log('PAGEERROR', err.message));
+await page.setViewport({ width: 640, height: 480 });
+await page.goto(BASE + '/?renderer=classic', { waitUntil: 'networkidle0', timeout: 120000 });
+await new Promise(r => setTimeout(r, 3000));
+const html = await page.content();
+console.log('HAS level-viewer:', html.includes('level-viewer'));
+console.log('HAS app-shell:', html.includes('app-shell'));
+console.log('TITLE:', await page.title());
+const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500));
+console.log('BODY:', bodyText);
+await browser.close();

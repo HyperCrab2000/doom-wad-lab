@@ -1,8 +1,13 @@
 import { VOXEL_HEIGHT_ROOT } from '@/config/doomAssets';
+import { runPool } from '@/utils/promiseTimeout';
 
 const heightUrlMissCache = new Set<string>();
 const MAX_PROC_WALL = 96;
 const MAX_PROC_FLAT = 48;
+/** One stalled fetch must not block P_SetupLevel forever. */
+const HEIGHT_FETCH_TIMEOUT_MS = 5000;
+/** E1M1 can request 80+ height PNGs — unbounded Promise.all stalls some browsers. */
+const HEIGHT_FETCH_CONCURRENCY = 8;
 
 function getVoxelHeightUrl(textureName: string, kind: 'walls' | 'flats'): string {
   return `${VOXEL_HEIGHT_ROOT}/${kind}/${textureName.toUpperCase()}.png`;
@@ -83,49 +88,48 @@ export async function createHeightTextureSet(
   const reliefWalls = new Set<string>();
   const reliefFlats = new Set<string>();
 
-  await Promise.all([
-    ...wallNames.map(async (name) => {
-      const key = normalizeTextureName(name);
-      const size = sources.wallSizes?.[name] ?? sources.wallSizes?.[key];
-      const width = size?.width ?? 128;
-      const height = size?.height ?? 128;
-      const result = await resolveHeightTexture(
-        gl,
-        getVoxelHeightUrl(key, 'walls'),
-        sources.wallCanvases?.[name] ?? sources.wallCanvases?.[key],
-        width,
-        height,
-        fallback,
-        'wall'
-      );
-      walls[key] = result.texture;
-      walls[name] = result.texture;
-      if (result.fromVoxel) loadedWalls.add(key);
-      if (result.hasRelief) {
-        reliefWalls.add(key);
-        reliefWalls.add(name);
-      }
-    }),
-    ...flatNames.map(async (name) => {
-      const key = normalizeTextureName(name);
-      const result = await resolveHeightTexture(
-        gl,
-        getVoxelHeightUrl(key, 'flats'),
-        sources.flatCanvases?.[name] ?? sources.flatCanvases?.[key],
-        64,
-        64,
-        fallback,
-        'flat'
-      );
-      flats[key] = result.texture;
-      flats[name] = result.texture;
-      if (result.fromVoxel) loadedFlats.add(key);
-      if (result.hasRelief) {
-        reliefFlats.add(key);
-        reliefFlats.add(name);
-      }
-    }),
-  ]);
+  await runPool(wallNames, HEIGHT_FETCH_CONCURRENCY, async (name) => {
+    const key = normalizeTextureName(name);
+    const size = sources.wallSizes?.[name] ?? sources.wallSizes?.[key];
+    const width = size?.width ?? 128;
+    const height = size?.height ?? 128;
+    const result = await resolveHeightTexture(
+      gl,
+      getVoxelHeightUrl(key, 'walls'),
+      sources.wallCanvases?.[name] ?? sources.wallCanvases?.[key],
+      width,
+      height,
+      fallback,
+      'wall',
+    );
+    walls[key] = result.texture;
+    walls[name] = result.texture;
+    if (result.fromVoxel) loadedWalls.add(key);
+    if (result.hasRelief) {
+      reliefWalls.add(key);
+      reliefWalls.add(name);
+    }
+  });
+
+  await runPool(flatNames, HEIGHT_FETCH_CONCURRENCY, async (name) => {
+    const key = normalizeTextureName(name);
+    const result = await resolveHeightTexture(
+      gl,
+      getVoxelHeightUrl(key, 'flats'),
+      sources.flatCanvases?.[name] ?? sources.flatCanvases?.[key],
+      64,
+      64,
+      fallback,
+      'flat',
+    );
+    flats[key] = result.texture;
+    flats[name] = result.texture;
+    if (result.fromVoxel) loadedFlats.add(key);
+    if (result.hasRelief) {
+      reliefFlats.add(key);
+      reliefFlats.add(name);
+    }
+  });
 
   return { walls, flats, fallback, loadedWalls, loadedFlats, reliefWalls, reliefFlats };
 }
@@ -174,7 +178,10 @@ async function resolveHeightTexture(
 async function tryLoadVoxelHeightBitmap(url: string): Promise<ImageBitmap | null> {
   if (heightUrlMissCache.has(url)) return null;
   try {
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timer = globalThis.setTimeout(() => controller.abort(), HEIGHT_FETCH_TIMEOUT_MS);
+    const response = await fetch(url, { signal: controller.signal });
+    globalThis.clearTimeout(timer);
     if (!response.ok) {
       heightUrlMissCache.add(url);
       return null;

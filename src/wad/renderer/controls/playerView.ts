@@ -50,12 +50,27 @@ function normalizeRadians(value: number): number {
   return ((value % fullTurn) + fullTurn) % fullTurn;
 }
 
-/** Rotate the top-down automap so player forward points up on screen. */
-export function automapRotationRadians(yaw: number): number {
+/** Canvas rotation (Y-down) for a Doom yaw on north-up automap / player arrow. */
+export function doomYawToCanvasAngle(yaw: number): number {
   return Math.PI / 2 - yaw;
 }
 
-/** BSP debug overlay — rotate the map so player forward points up (same as automap). */
+/** Project a Doom XY offset to north-up automap canvas coords (Y-down, north at top). */
+export function projectDoomOffsetToAutomapCanvas(dx: number, dy: number): { x: number; y: number } {
+  return { x: dx, y: -dy };
+}
+
+/** Rotate north-up automap so player forward points toward the top of the screen. */
+export function automapFollowRotationRadians(yaw: number): number {
+  return yaw - Math.PI / 2;
+}
+
+/** @deprecated Use automapFollowRotationRadians for follow-mode map rotation. */
+export function automapRotationRadians(yaw: number): number {
+  return doomYawToCanvasAngle(yaw);
+}
+
+/** BSP debug overlay — rotate the map so player forward points up (follow mode). */
 export function bspDebugMapRotationRadians(yaw: number): number {
-  return automapRotationRadians(yaw);
+  return automapFollowRotationRadians(yaw);
 }

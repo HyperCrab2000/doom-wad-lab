@@ -9,6 +9,7 @@ uniform bool shouldMirror;
 
 out vec3 vPos;
 out vec2 vUv;
+out float vParitySpanT;
 
 void main(void) {
   vPos = aPosition;
@@ -18,6 +19,7 @@ void main(void) {
     outUv.x = 1.0 - outUv.x;
   }
   vUv = outUv;
+  vParitySpanT = outUv.x;
 
   gl_Position = modelViewProj * vec4(aPosition, 1.0);
 }

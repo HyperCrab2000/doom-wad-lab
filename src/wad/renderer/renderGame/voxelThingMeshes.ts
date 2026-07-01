@@ -1,5 +1,8 @@
-import { getVoxelAnimationEntriesForSprite, VoxelCatalogEntry } from '@/wad/voxels/voxelCatalog';
+import { getVoxelAnimationEntriesForSprite, hasVoxelDefinitionForSprite } from '@/wad/voxels/voxelCatalog';
+import { createVoxelCatalogView, type VoxelCatalogView } from '@/wad/voxels/voxelModCatalog';
+import { resolveKvxBuffer } from '@/wad/voxels/resolveKvxBuffer';
 import { WadMap } from '@/wad/interfaces/WadMap';
+import { Wad } from '@/wad/interfaces/Wad';
 import { DOOM_THING_MAP_BY_ID } from '@/wad/constants/doomThingMap';
 import { ThingKind } from '@/wad/constants/ThingTypes';
 import { hasValidFlags } from '@/wad/renderer/utils/hasValidFlags';
@@ -20,15 +23,23 @@ export interface RuntimeVoxelMesh {
 }
 
 export interface VoxelThingFrame {
-  entry: VoxelCatalogEntry;
+  entry: import('@/wad/voxels/voxelCatalog').VoxelCatalogEntry;
   mesh?: RuntimeVoxelMesh;
 }
 
 export type VoxelThingFrameMap = Map<string, VoxelThingFrame[]>;
 
-const KVX_ASSET_VERSION = '2026-05-24-doom2-voxels';
+export interface VoxelThingLoadOptions {
+  wad?: Wad | null;
+  modPaths?: readonly string[];
+  catalog?: VoxelCatalogView;
+}
 
-export function createVoxelThingFrameMap(map: WadMap): VoxelThingFrameMap {
+export function createVoxelThingFrameMap(
+  map: WadMap,
+  options: VoxelThingLoadOptions = {},
+): VoxelThingFrameMap {
+  const catalog = options.catalog ?? createVoxelCatalogView(options.wad);
   const framesBySprite = new Map<string, VoxelThingFrame[]>();
   const sprites = new Set<string>();
 
@@ -41,13 +52,13 @@ export function createVoxelThingFrameMap(map: WadMap): VoxelThingFrameMap {
   }
 
   for (const sprite of sprites) {
-    const entries = getVoxelAnimationEntriesForSprite(sprite);
+    const entries = catalog.getAnimationEntriesForSprite(sprite);
     if (entries.length > 0) {
       framesBySprite.set(sprite, entries.map((entry) => ({ entry })));
     }
   }
 
-  void hydrateVoxelThingMeshes(framesBySprite);
+  void hydrateVoxelThingMeshes(framesBySprite, options.wad, options.modPaths);
   return framesBySprite;
 }
 
@@ -63,7 +74,11 @@ function shouldUseVoxelForThing(thingType: NonNullable<(typeof DOOM_THING_MAP_BY
   return true;
 }
 
-async function hydrateVoxelThingMeshes(framesBySprite: VoxelThingFrameMap): Promise<void> {
+async function hydrateVoxelThingMeshes(
+  framesBySprite: VoxelThingFrameMap,
+  wad?: Wad | null,
+  modPaths: readonly string[] = [],
+): Promise<void> {
   const uniqueFrames = new Map<string, VoxelThingFrame>();
   for (const frames of framesBySprite.values()) {
     for (const frame of frames) {
@@ -74,9 +89,8 @@ async function hydrateVoxelThingMeshes(framesBySprite: VoxelThingFrameMap): Prom
   await Promise.all(
     [...uniqueFrames.values()].map(async (frame) => {
       try {
-        const response = await fetch(`/voxels/${frame.entry.fileName}.kvx?v=${KVX_ASSET_VERSION}`);
-        if (!response.ok) return;
-        const buffer = await response.arrayBuffer();
+        const buffer = await resolveKvxBuffer(frame.entry, wad, modPaths);
+        if (!buffer) return;
         const result = await buildKvxMeshInPool(buffer);
         frame.mesh = {
           positions: result.positions,
@@ -88,9 +102,9 @@ async function hydrateVoxelThingMeshes(framesBySprite: VoxelThingFrameMap): Prom
           floorLift: result.floorLift,
         };
       } catch {
-        // Sprite fallback will handle missing or invalid voxel frames.
+        // Sprite fallback handles missing meshes.
       }
-    })
+    }),
   );
 
   for (const frames of framesBySprite.values()) {
@@ -99,3 +113,20 @@ async function hydrateVoxelThingMeshes(framesBySprite: VoxelThingFrameMap): Prom
     }
   }
 }
+
+/** Whether a sprite should draw as voxel (catalog-aware, with bundled fallback). */
+export function shouldPreferVoxelSprite(
+  sprite: string | undefined,
+  catalog?: VoxelCatalogView | null,
+): boolean {
+  if (!sprite) return false;
+  if (catalog?.hasDefinitionForSprite(sprite)) return true;
+  return hasVoxelDefinitionForSprite(sprite);
+}
+
+/** Re-export for callers that only have sprite names. */
+export function getDefaultVoxelAnimationEntries(sprite: string) {
+  return getVoxelAnimationEntriesForSprite(sprite);
+}
+
+export { createVoxelCatalogView, type VoxelCatalogView };

@@ -1,11 +1,12 @@
-import { Texture } from '@/wad/interfaces/Texture';
-import { WallTexture } from '@/wad/interfaces/WallTexture';
-import { Wad } from '@/wad/interfaces/Wad';
+import type { Texture } from '@/wad/interfaces/Texture';
+import type { WallTexture } from '@/wad/interfaces/WallTexture';
+import type { Wad } from '@/wad/interfaces/Wad';
+import { rasterizeTexture as coreRasterizeTexture } from '@hypercrab2000/doom-wad-core';
 
 import { roundToPow2 } from '@/wad/utils/math';
 import { getOrBuildPatch } from '@/wad/renderer/drawAssets/drawPatch';
+import { rasterImageToCanvas } from '@/wad/adapters/rasterToCanvas';
 
-//some doom textures actually contain transparency when they shouldn't (MAP30), use a threshold to determine if it should be transparent or not (in pixels)
 const texturePixelsThreshold = 2;
 
 export const drawTexture = (
@@ -13,59 +14,41 @@ export const drawTexture = (
   wad: Wad,
   patchesByName: Record<string, CanvasRenderingContext2D>
 ): WallTexture => {
-  const textureCanvas = document.createElement('canvas');
-  const textureContext = textureCanvas.getContext('2d')!;
-
-  textureCanvas.width = texture.texWidth;
-  textureCanvas.height = texture.texHeight;
-
-  //draw the texture by drawing on the patches
-  textureContext.clearRect(0, 0, texture.texWidth, texture.texHeight);
-  const patches = texture.patches;
-
-  for (let k = 0; k < patches.length; k++) {
-    const patch = patches[k];
+  // Warm patch cache for parity with prior canvas-based composition path.
+  for (const patch of texture.patches) {
     const patchName = wad.pnames[patch.patchIndex];
-    const patchCanvas = patchName ? getOrBuildPatch(wad, patchesByName, patchName) : undefined;
-    if (!patchCanvas) continue;
-
-    textureContext.drawImage(patchCanvas.canvas, patch.originX, patch.originY);
+    if (patchName) getOrBuildPatch(wad, patchesByName, patchName);
   }
 
-  //determine if the texture is transparent or not
-  const pixData = textureContext.getImageData(0, 0, textureCanvas.width, textureCanvas.height).data;
+  const raster = coreRasterizeTexture(texture, wad, wad.playpal);
+  const textureContext = rasterImageToCanvas(raster);
+
   let transparentPixels = 0;
-
+  const pixData = textureContext.getImageData(0, 0, raster.width, raster.height).data;
   for (let i = 3; i < pixData.length; i += 4) {
-    if (pixData[i] === 0) {
-      transparentPixels++;
-    }
+    if (pixData[i] === 0) transparentPixels++;
   }
-
   const transparent = transparentPixels >= texturePixelsThreshold;
 
-  //to get around the noop webgl texture limit with repeat and mipmaps, scale the texture to match the width and height and store a scale
   const resizedCanvas = document.createElement('canvas');
   const resizedContext = resizedCanvas.getContext('2d')!;
-
   resizedCanvas.width = resizedCanvas.height = roundToPow2(
-    Math.max(textureCanvas.width, textureCanvas.height)
+    Math.max(raster.width, raster.height)
   );
 
-  //fill in a solid colour if there should be no transparency
   if (!transparent && transparentPixels) {
     resizedContext.fillStyle = 'black';
     resizedContext.fillRect(0, 0, resizedCanvas.width, resizedCanvas.height);
   }
 
   resizedContext.imageSmoothingEnabled = false;
-  resizedContext.drawImage(textureCanvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
+  resizedContext.drawImage(textureContext.canvas, 0, 0, resizedCanvas.width, resizedCanvas.height);
 
   return {
     name: '',
     graphics: resizedContext,
-    width: textureCanvas.width,
-    height: textureCanvas.height,
+    width: raster.width,
+    height: raster.height,
     transparent,
   };
 };

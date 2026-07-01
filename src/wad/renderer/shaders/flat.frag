@@ -41,11 +41,13 @@ uniform float uPointLightIntensity3;
 
 in vec3 vNormal;
 in vec2 vUv;
+in float vParitySpanT;
 in float vWorldY;
 in vec3 vWorldPos;
 
 out vec4 fragColor;
 
+#include "colormapParity.glsl"
 #include "voxelParallax.glsl"
 
 const float flatSize = 64.0;
@@ -59,11 +61,20 @@ vec3 radialLight(vec3 pos, vec3 color, float radius, float intensity, vec3 world
 }
 
 void main() {
-  vec3 N = normalize(vNormal);
   vec2 texCoord = vUv / flatSize;
+  vec2 sampleUv = fract(texCoord);
+
+  if (parityColormap != 0) {
+    vec4 texVal = texture(tex, sampleUv);
+    float visibility = flatPlaneVisibility(vWorldPos, uCameraPos, playfieldHeight);
+    fragColor = vec4(sampleColormapParity(texVal, sectorLightLevel, visibility), 1.0);
+    return;
+  }
+
+  vec3 N = normalize(vNormal);
   mat3 tbn = GetTBN(N, vWorldPos, texCoord);
   vec2 parallaxUv = ParallaxOcclusionMap(heightTex, tbn, texCoord, uCameraPos, vWorldPos, heightStrength);
-  vec2 sampleUv = fract(parallaxUv);
+  sampleUv = fract(parallaxUv);
 
   vec4 texVal = texture(tex, sampleUv);
 
@@ -112,9 +123,12 @@ void main() {
     }
 
     if (liquidEmissive > 0.01) {
-      float liquidMix = liquidStrength * (0.22 + ripple * 0.24);
+      // Classic renderer liquid surfaces should read as the liquid itself, not as a faint tint on
+      // top of whatever flat sample path happened to win. This also masks palette/channel mistakes
+      // in the sampled animated flat (the old E1M1 nukage showed as blue) while preserving ripple.
+      float liquidMix = clamp(liquidStrength * (0.74 + ripple * 0.18), 0.0, 0.95);
       litColor = mix(litColor, liquidColor, liquidMix);
-      litColor += liquidColor * ripple * liquidStrength * liquidEmissive * 0.28;
+      litColor += liquidColor * ripple * liquidStrength * liquidEmissive * 0.18;
     } else {
       vec3 waterNormal = normalize(vec3(
         sin(pixelUv.x * 0.42 + timeSeconds * 3.0) * 0.1,

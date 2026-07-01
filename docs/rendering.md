@@ -11,9 +11,9 @@ The level viewer is a **WebGL2 forward renderer**: triangulated sectors, extrude
 | Aspect | Original Doom (1993) | Doom WAD Lab |
 |--------|----------------------|--------------|
 | **Output** | 320×200 8-bit framebuffer | WebGL2 RGBA canvas (any resolution) |
-| **Visibility** | BSP traverse + angular clipper (`RenderBSP` / `AddLine` / `DoSubsector`) | Same BSP path via `buildGzdoomDrawState` — walls by visible linedef **and sidedef**, flats by visible **subsector** |
+| **Visibility** | BSP traverse + angular clipper (`RenderBSP` / `AddLine` / `DoSubsector`) | Same BSP port; **production flats** draw only BSP-visited subsectors (`subsector-bsp` mode). Legacy sector meshes use `BSP ∩ portal ∩ REJECT`. |
 | **Walls** | `HWWall::Process` per visible seg (upper/mid/lower bands) | Same band logic in `hwWallProcess.ts`; quads built at load via `mapToWalls`, drawn for the BSP-visible sidedef only |
-| **Floors/ceilings** | Flat **spans** per subsector (`HWFlat::ProcessSector`) | Triangulated **meshes** per sector (`mapToFlats.ts`), drawn for BSP-visible sectors |
+| **Floors/ceilings** | Flat **spans** per subsector (`HWFlat::ProcessSector` on `DoSubsector` visit) | Triangulated **subsector meshes** (`mapToSubsectorFlats.ts`), drawn only for BSP `flatSubsectorOrder` |
 | **Sky** | Floor/ceiling **F_SKY** holes + wall height | Full-screen **cylindrical skybox** + no F_SKY flats |
 | **Sprites** | Drawn in BSP order (approximate depth) | Back-to-front sorted billboards + depth override for centers |
 | **Lighting** | Sector light level → **colormap** bands | Per-sector uniforms: ambient, fog, dynamic lights |
@@ -27,7 +27,7 @@ The level viewer is a **WebGL2 forward renderer**: triangulated sectors, extrude
 
 Tradeoffs:
 
-- BSP clipper occlusion drives draw culling (`src/wad/renderer/bsp/`). Portal flood-fill is no longer used in `drawScene`.
+- BSP clipper drives wall draw lists (`buildGzdoomDrawState`). Production flats follow BSP `DoSubsector` visits only; portal/REJECT applies only to the legacy full-sector mesh fallback.
 - Sprite depth can differ slightly from vanilla (we use center-depth for billboards to fix door jamb leaks).
 - Sky is a **panorama** behind geometry, not per-sector sky planes (`mapToSkys.ts` exists but is not wired to the main pass).
 
@@ -74,11 +74,12 @@ Precomputed index:
 - `sectorAdjacency` — two-sided linedefs (excluding `blockAll`)
 - `sectorBounds` — AABB per sector (from lines + triangle enrichment)
 
-At draw time, **BFS** from camera sector:
+At draw time, **BFS** from camera sector builds a connectivity set, intersected with the map **REJECT** lump when present. `buildGzdoomDrawState` keeps a BSP-visible sector only if it is also in that set:
 
 - Radius limit (`PORTAL_VISIBILITY_RADIUS`)
 - Depth limit (`MAX_PORTAL_TRAVERSAL_DEPTH`)
 - **Indoor camera rule:** from a non-sky sector, only traverse into **F_SKY** outdoor sectors (and sky-to-sky), not distant **indoor** sectors — fixes E1M1 window leaks.
+- **Sky islands:** separate outdoor cells (courtyard vs hangar) never share portal visibility.
 
 ### 2. Distance culling
 
@@ -143,6 +144,21 @@ Separate 2D canvas overlay (Tab toggle, `iddt` cheat levels) — vector line dra
 ## Tests
 
 - `sectorVisibility.test.ts`, `frustumCull.test.ts`, `playerView.test.ts`
+- `courtyardVisibility.test.ts` — full DOOM/DOOM2 courtyard sweep (see below)
 - `selectSkyTexture.test.ts`, `mapToWalls.test.ts`, `hwWallProcess.test.ts`, `bspVisibility.test.ts`
+
+### Courtyard visibility suite
+
+**Files:** `src/wad/renderer/courtyard/`
+
+Automated sweep of all DOOM + DOOM2 maps with outdoor sky islands (148 courtyard cells). For each probe point (sky sector center + window rooms) at four yaws:
+
+| Layer | Source of truth | Invariant |
+|-------|-----------------|-----------|
+| **BSP** | GZDoom `RenderBSP` / `AddLine` (`bspVisibility.ts`) | Sectors marked visible by angular clipper |
+| **Connectivity** | Portal BFS + vanilla `REJECT` | Single sky island per outdoor cell; window pairs see each other |
+| **Draw** | `buildGzdoomDrawState` | `draw ⊆ BSP ∩ connectivity`; camera sector always drawn |
+
+Run manually: `npx tsx scripts/audit-courtyard-visibility.ts`
 
 See also: [Visual enhancements](./visual-enhancements.md), [Performance](./performance.md).

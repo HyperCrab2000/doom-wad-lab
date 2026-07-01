@@ -28,15 +28,22 @@ export interface CachedMapGeometry {
   wallTextureColors: Map<string, [number, number, number]>;
   triangleHash: SectorTriangleHash;
   sectorVisibility: SectorVisibilityIndex;
+  colormapLut?: WebGLTexture;
 }
 
 const mapLoadCache = new Map<string, Promise<CachedMapGeometry>>();
 
 /** Increment when baked geometry or GPU buffer layout changes. */
-const MAP_GEOMETRY_CACHE_VERSION = 11; // lower/upper wall joint overlap now unconditional
+const MAP_GEOMETRY_CACHE_VERSION = 13; // GZDoom GETPALOOKUP colormap shading
 
-export function mapLoadCacheKey(wadPath: string | null | undefined, mapName: string): string {
-  return `v${MAP_GEOMETRY_CACHE_VERSION}::${wadPath ?? 'memory'}::${mapName}`;
+export function mapLoadCacheKey(
+  wadPath: string | null | undefined,
+  mapName: string,
+  frameParity = false,
+  useIndexTextures = frameParity,
+): string {
+  const textureMode = useIndexTextures ? 'index' : 'color';
+  return `v${MAP_GEOMETRY_CACHE_VERSION}::${frameParity ? 'parity' : 'play'}::${textureMode}::${wadPath ?? 'memory'}::${mapName}`;
 }
 
 export function getCachedMapLoad(key: string): Promise<CachedMapGeometry> | undefined {
@@ -51,4 +58,8 @@ export function setCachedMapLoad(key: string, promise: Promise<CachedMapGeometry
 
 export function clearMapLoadCache(): void {
   mapLoadCache.clear();
+}
+
+export function deleteCachedMapLoad(key: string): void {
+  mapLoadCache.delete(key);
 }

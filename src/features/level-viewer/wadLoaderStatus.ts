@@ -149,6 +149,193 @@ export function createLaunchingStatus(
   };
 }
 
+/** GZDoom WASM gold path — skips classic WebGL geometry build. */
+export function createGzdoomLaunchingStatus(
+  previous: WadLoadStatus,
+  mapName: string,
+): WadLoadStatus {
+  const steps = createSteps({
+    Z_Init: { complete: true, progress: 1 },
+    W_Init: { complete: true, progress: 1 },
+    P_Init: { complete: true, progress: 1, message: `P_SetupLevel: ${mapName}` },
+    R_Init: { active: true, progress: 0.55, message: 'GZDoom GLES renderer (WASM).' },
+  });
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'ready',
+    title: `GZDoom WASM · ${mapName}`,
+    detail: 'Loading gzdoom.wasm and PK3 assets…',
+    steps,
+    statusLine: 'R_Init: GZDoom gold renderer…',
+  };
+}
+
+export function createGzdoomWasmIndexStatus(path: string, mapCount: number): WadLoadStatus {
+  const steps = createSteps({
+    Z_Init: { complete: true, progress: 1 },
+    W_Init: {
+      complete: true,
+      progress: 1,
+      message: `Raw IWAD indexed (${mapCount} maps) — lumps parsed by GZDoom.`,
+    },
+    P_Init: { complete: true, progress: 1, message: 'Playloop state ready.' },
+  });
+
+  const basename = path.split('/').pop() ?? path;
+  return {
+    state: 'ready',
+    title: 'IWAD ready (GZDoom parses lumps)',
+    detail: `${basename} · ${mapCount} maps · raw IWAD mount (no Node lump parse)`,
+    steps,
+    statusLine: `${basename} · ${mapCount} maps ready`,
+    fromCache: false,
+  };
+}
+
+/** GZDoom WASM Play — mount raw IWAD; GZDoom parses lumps internally (no Node re-encode). */
+export function createGzdoomPlayInjectStatus(
+  previous: WadLoadStatus,
+  mapName: string,
+): WadLoadStatus {
+  const steps = createSteps({
+    Z_Init: { complete: true, progress: 1 },
+    W_Init: {
+      complete: true,
+      progress: 1,
+      message: 'Mounting raw IWAD into GZDoom MEMFS.',
+    },
+    P_Init: { active: true, progress: 0.55, message: `Warping to ${mapName}…` },
+    R_Init: { active: true, progress: 0.35, message: `Loading GZDoom WASM · ${mapName}…` },
+  });
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'loading',
+    title: `GZDoom WASM Play · ${mapName}`,
+    detail: 'Raw IWAD → GZDoom MEMFS (GZDoom W_Init parses lumps)',
+    steps,
+    statusLine: statusFromSteps(steps, `W_Init: mounting raw IWAD`),
+  };
+}
+
+export function createGzdoomPlayReadyStatus(
+  previous: WadLoadStatus,
+  mapName: string,
+): WadLoadStatus {
+  const steps = createSteps(
+    Object.fromEntries(
+      STEP_DEFS.map((def) => [
+        def.label,
+        {
+          complete: true,
+          progress: 1,
+          message:
+            def.label === 'W_Init'
+              ? 'Raw IWAD mounted — GZDoom parsed lumps.'
+              : def.label === 'HU/ST_Init'
+                ? `${mapName} · GZDoom WASM play ready.`
+                : def.message,
+        },
+      ]),
+    ) as Partial<Record<(typeof STEP_DEFS)[number]['label'], Partial<WadLoadStep>>>,
+  );
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'ready',
+    title: `${mapName} ready`,
+    detail: `GZDoom WASM play · raw IWAD (GZDoom parses lumps)`,
+    steps,
+    statusLine: `D_DoomMain: ${mapName} ready (GZDoom WASM · raw IWAD).`,
+  };
+}
+
+/** GZDoom (s) WASM Play — Node NODE_LUMPS.WAD + GZSTATE (-loadgzstate; no MAP lump parse). */
+export function createGzdoomSPlayInjectStatus(
+  previous: WadLoadStatus,
+  mapName: string,
+  lumpCount: number,
+): WadLoadStatus {
+  const steps = createSteps({
+    Z_Init: { complete: true, progress: 1 },
+    W_Init: {
+      complete: true,
+      progress: 1,
+      message: `${lumpCount} lumps → NODE_LUMPS.WAD (doom-wad-core).`,
+    },
+    P_Init: { active: true, progress: 0.55, message: `Exporting GZSTATE for ${mapName}…` },
+    R_Init: { active: true, progress: 0.35, message: 'Loading GZDoom (s) WASM…' },
+  });
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'loading',
+    title: `GZDoom (s) · ${mapName}`,
+    detail: 'Node parses lumps → NODE_LUMPS.WAD + GZSTATE (-loadgzstate)',
+    steps,
+    statusLine: statusFromSteps(steps, `P_Init: exporting GZSTATE`),
+  };
+}
+
+export function createGzdoomSPlayReadyStatus(
+  previous: WadLoadStatus,
+  mapName: string,
+  lumpCount: number,
+  gzstateBytes: number,
+): WadLoadStatus {
+  const steps = createSteps(
+    Object.fromEntries(
+      STEP_DEFS.map((def) => [
+        def.label,
+        {
+          complete: true,
+          progress: 1,
+          message:
+            def.label === 'W_Init'
+              ? `${lumpCount} lumps · NODE_LUMPS.WAD · GZSTATE ${gzstateBytes} bytes.`
+              : def.label === 'HU/ST_Init'
+                ? `${mapName} · GZDoom (s) play ready.`
+                : def.message,
+        },
+      ]),
+    ) as Partial<Record<(typeof STEP_DEFS)[number]['label'], Partial<WadLoadStep>>>,
+  );
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'ready',
+    title: `${mapName} ready`,
+    detail: `GZDoom (s) · NODE_LUMPS.WAD + GZSTATE (${gzstateBytes} bytes, map via -loadgzstate)`,
+    steps,
+    statusLine: `D_DoomMain: ${mapName} ready (GZDoom (s) · Node GZSTATE).`,
+  };
+}
+
+export function createGzdoomMapReadyStatus(previous: WadLoadStatus, mapName: string): WadLoadStatus {
+  const steps = createSteps(
+    Object.fromEntries(
+      STEP_DEFS.map((def) => [
+        def.label,
+        {
+          complete: true,
+          progress: 1,
+          message: def.label === 'HU/ST_Init' ? `${mapName} · GZDoom WASM frame ready.` : def.message,
+        },
+      ]),
+    ) as Partial<Record<(typeof STEP_DEFS)[number]['label'], Partial<WadLoadStep>>>,
+  );
+
+  return {
+    ...previous,
+    state: previous.fromCache ? 'cache-hit' : 'ready',
+    title: `${mapName} ready`,
+    detail: 'GZDoom WASM gold renderer · spawn view captured',
+    steps,
+    statusLine: `D_DoomMain: ${mapName} ready (GZDoom WASM).`,
+  };
+}
+
 export function createMapReadyStatus(previous: WadLoadStatus, mapName: string): WadLoadStatus {
   const steps = createSteps(
     Object.fromEntries(

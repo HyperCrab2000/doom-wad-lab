@@ -10,8 +10,7 @@ import {
   type ClassicBspTrace,
   type SegVisibilityReason,
 } from '@/wad/renderer/bsp/classicBspTrace';
-import { angleToPseudoAngle } from '@/wad/renderer/bsp/bspClipper';
-import { bspDebugMapRotationRadians } from '@/wad/renderer/controls/playerView';
+import { automapFollowRotationRadians } from '@/wad/renderer/controls/playerView';
 
 export interface BspDebugPlayer {
   x: number;
@@ -86,7 +85,7 @@ export function drawBspDebugView(
 
   ctx.save();
   ctx.translate(centerX, centerY);
-  ctx.rotate(bspDebugMapRotationRadians(player.yaw));
+  ctx.rotate(automapFollowRotationRadians(options.traceYaw ?? player.yaw));
 
   const toScreen = (x: number, y: number) => ({
     x: (x - player.x) * scale,
@@ -130,8 +129,8 @@ export function drawBspDebugView(
 
   ctx.globalAlpha = 1;
 
-  // View frustum in player-local space (canvas already rotated: forward = screen up).
-  drawViewCone(ctx, scale, player.yaw);
+  // View frustum in follow mode (forward = screen up).
+  drawViewCone(ctx, scale, options.traceYaw ?? player.yaw);
 
   ctx.restore();
 
@@ -141,58 +140,28 @@ export function drawBspDebugView(
   return trace;
 }
 
-function drawViewCone(ctx: CanvasRenderingContext2D, scale: number, yaw: number): void {
+function drawViewCone(ctx: CanvasRenderingContext2D, scale: number, _yaw: number): void {
   const halfFov = Math.PI / 2 - 0.001;
   const len = 120 * (scale / 4);
-  const forward = Math.PI / 2;
-  const left = forward + halfFov;
-  const right = forward - halfFov;
 
+  ctx.save();
   ctx.strokeStyle = 'rgba(100, 180, 255, 0.45)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(Math.cos(left) * len, -Math.sin(left) * len);
+  ctx.lineTo(-Math.sin(halfFov) * len, -Math.cos(halfFov) * len);
   ctx.moveTo(0, 0);
-  ctx.lineTo(Math.cos(right) * len, -Math.sin(right) * len);
+  ctx.lineTo(Math.sin(halfFov) * len, -Math.cos(halfFov) * len);
   ctx.stroke();
 
-  // Forward hemisphere seed (matches BspClipper.seedFromViewYaw).
-  const forwardPseudo = angleToPseudoAngle(yaw);
-  const halfPseudo = 0.25;
-  const start = forwardPseudo - halfPseudo;
-  const end = forwardPseudo + halfPseudo;
   ctx.fillStyle = 'rgba(40, 80, 40, 0.2)';
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  if (start <= end) {
-    ctx.arc(0, 0, len * 0.85, pseudoToLocalCanvasAngle(start, forwardPseudo, halfPseudo * 2), pseudoToLocalCanvasAngle(end, forwardPseudo, halfPseudo * 2));
-  } else {
-    ctx.arc(0, 0, len * 0.85, pseudoToLocalCanvasAngle(start, forwardPseudo, halfPseudo * 2), pseudoToLocalCanvasAngle(1, forwardPseudo, halfPseudo * 2));
-    ctx.arc(0, 0, len * 0.85, pseudoToLocalCanvasAngle(0, forwardPseudo, halfPseudo * 2), pseudoToLocalCanvasAngle(end, forwardPseudo, halfPseudo * 2));
-  }
+  ctx.lineTo(-Math.sin(halfFov) * len * 0.85, -Math.cos(halfFov) * len * 0.85);
+  ctx.lineTo(Math.sin(halfFov) * len * 0.85, -Math.cos(halfFov) * len * 0.85);
   ctx.closePath();
   ctx.fill();
-}
-
-/** Map BSP pseudo-angle to canvas angle in the rotated (forward-up) view. */
-function pseudoToLocalCanvasAngle(pseudo: number, forwardPseudo: number, rearSpan: number): number {
-  const offset = normalizePseudoOffset(pseudo - forwardPseudo);
-  const t = rearSpan > 0 ? offset / rearSpan : 0;
-  const halfFov = Math.PI / 2 - 0.001;
-  return Math.PI / 2 + Math.PI + t * halfFov * 2;
-}
-
-function normalizePseudoOffset(delta: number): number {
-  let d = delta;
-  if (d > 0.5) d -= 1;
-  if (d < -0.5) d += 1;
-  return d;
-}
-
-function unsignedPseudoSpan(start: number, end: number): number {
-  const diff = start - end;
-  return diff >= 0 ? diff : diff + 1;
+  ctx.restore();
 }
 
 function drawPlayerMark(

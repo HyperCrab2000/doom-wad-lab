@@ -40,7 +40,9 @@ function sideIndexForSeg(map: WadMap, lineIndex: number, segIndex: number): numb
  * geometry supports when pseudo-angle BSP rejects nearby walls:
  *
  * - `clip` + visited subsector + one-sided → draw (E1M1 pillar windows)
- * - `backface` + one-sided + vanilla front face → draw (pseudo-angle false reject)
+ *
+ * Backface trace entries are intentionally not supplemented — the vanilla-angle
+ * override caused walls to pop in/out when the camera crossed sub-pixel edges.
  */
 export function supplementWallDrawFromTrace(
   map: WadMap,
@@ -83,19 +85,6 @@ export function supplementWallDrawFromTrace(
     if (sideIndex < 0) continue;
 
     if (entry.reason === 'clip') {
-      extra.push({
-        lineIndex: entry.lineIndex,
-        sideDefIndex: sideIndex,
-        segIndex: entry.segIndex,
-      });
-      drawn.add(entry.lineIndex);
-      continue;
-    }
-
-    if (
-      entry.reason === 'backface' &&
-      !isVanillaBackface(viewX, viewY, v1.x, v1.y, v2.x, v2.y)
-    ) {
       extra.push({
         lineIndex: entry.lineIndex,
         sideDefIndex: sideIndex,
@@ -200,6 +189,42 @@ export function supplementTwoSidedAsymmetricWalls(
 }
 
 /**
+ * Every linedef on a BSP-flat subsector should have wall geometry when that
+ * subsector is drawn — GZDoom runs AddLines inside DoSubsector, but our angular
+ * clipper often rejects all segs while still visiting the subsector for flats.
+ */
+export function supplementWallsFromFlatSubsectors(
+  map: WadMap,
+  index: BspRenderIndex,
+  wallDrawOrder: readonly WallDrawEntry[],
+  flatSubsectorOrder: readonly number[]
+): WallDrawEntry[] {
+  const drawn = new Set(wallDrawOrder.map((entry) => entry.lineIndex));
+  const extra: WallDrawEntry[] = [];
+
+  for (const subsectorIndex of flatSubsectorOrder) {
+    const segIndices = index.subsectorSegs[subsectorIndex] ?? [];
+    for (const segIndex of segIndices) {
+      const lineIndex = index.segLineIndex[segIndex] ?? -1;
+      if (lineIndex < 0 || drawn.has(lineIndex)) continue;
+
+      const line = map.LINEDEFS[lineIndex];
+      const seg = map.SEGS[segIndex];
+      if (!line || !seg) continue;
+
+      const sideIndex = line.sidenum[seg.side & 1];
+      if (sideIndex < 0) continue;
+
+      extra.push({ lineIndex, sideDefIndex: sideIndex, segIndex });
+      drawn.add(lineIndex);
+    }
+  }
+
+  if (extra.length === 0) return [...wallDrawOrder];
+  return [...wallDrawOrder, ...extra];
+}
+
+/**
  * GZDoom draws walls from BSP `AddLine` only. The trace supplement adds one-sided
  * walls the pseudo-angle clipper rejected (E1M1 pillar windows) — not every linedef
  * in visited subsectors, which over-draws wrong textures.
@@ -215,6 +240,7 @@ export function buildSupplementedWallDrawOrder(
   viewYaw: number,
   wallDrawOrder: readonly WallDrawEntry[],
   visibleSubsectors: ReadonlySet<number>,
+  flatSubsectorOrder: readonly number[],
   trace?: ClassicBspTrace
 ): WallDrawEntry[] {
   const afterTrace = supplementWallDrawFromTrace(
@@ -227,5 +253,11 @@ export function buildSupplementedWallDrawOrder(
     visibleSubsectors,
     trace
   );
-  return supplementTwoSidedAsymmetricWalls(map, afterTrace, visibleSubsectors, index);
+  const afterAsymmetric = supplementTwoSidedAsymmetricWalls(
+    map,
+    afterTrace,
+    visibleSubsectors,
+    index
+  );
+  return supplementWallsFromFlatSubsectors(map, index, afterAsymmetric, flatSubsectorOrder);
 }

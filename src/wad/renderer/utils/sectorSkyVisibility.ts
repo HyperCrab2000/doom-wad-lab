@@ -17,7 +17,7 @@ export function shouldRenderFullscreenSkybox(
   cameraSectorIndex: number,
   visibleSectors: Set<number> | null
 ): boolean {
-  if (cameraSectorIndex < 0) return true;
+  if (cameraSectorIndex < 0) return false;
   if (isSkySector(map, cameraSectorIndex)) return true;
   if (!visibleSectors) return false;
   for (const index of visibleSectors) {

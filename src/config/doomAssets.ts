@@ -10,6 +10,9 @@ export const WAD_OPTIONS: WadOption[] = [
   { id: 'test', label: 'Bundled test WAD', path: '/wads/test.wad' },
 ];
 
+/** IWADs exposed in Level Viewer — excludes the 4-byte test.wad placeholder (shows "WAD load failed"). */
+export const PLAYABLE_WAD_OPTIONS: WadOption[] = WAD_OPTIONS.filter((o) => o.id !== 'test');
+
 export const VOXEL_ASSET_ROOT = '/voxels';
 export const VOXEL_HEIGHT_ROOT = '/materials/heightTex';
 

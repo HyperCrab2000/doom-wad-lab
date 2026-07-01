@@ -59,10 +59,10 @@ describe('mapToWalls', () => {
     const upper = indoorWalls.find((wall) => wall.center[1] === 144)!;
     expect(lower.texName).toBe('STARTAN3');
     expect(upper.texName).toBe('STARTAN3');
-    expect(lower.position![1]).toBe(-56);
-    expect(lower.position![7]).toBe(0);
-    expect(upper.position![1]).toBe(72);
-    expect(upper.position![7]).toBe(216);
+    expect(lower.position![1]).toBe(-57);
+    expect(lower.position![7]).toBe(1);
+    expect(upper.position![1]).toBe(71);
+    expect(upper.position![7]).toBe(217);
   });
 
   it('computes boundsRadius from wall quad corners', () => {

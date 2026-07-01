@@ -1,0 +1,23 @@
+/** Re-export parity API from @hypercrab2000/doom-wad-core (single source of truth). */
+export {
+  lumpCategoryToCode,
+  encodeClassicThingFlags,
+  encodeClassicLineFlags,
+  nodeChildToGzstate,
+  collectCategoryNames,
+  collectMarkerRangeNames,
+  exportToGzstate as exportWadLabToGzstate,
+  buildLumpCatalog,
+  buildFlatRasterDigests,
+  buildPatchRasterDigests,
+  buildSpriteRasterDigests,
+  buildTextureRasterDigests,
+  rasterizePatch,
+  rasterizeFlat,
+  rasterizeTexture,
+  runFullParity,
+  assertFullParity,
+  type RasterImage,
+  type FullParityResult,
+  type ParitySectionResult,
+} from '@hypercrab2000/doom-wad-core';

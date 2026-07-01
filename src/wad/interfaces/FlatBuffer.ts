@@ -10,6 +10,10 @@ export interface FlatBuffer {
   subsectorIndex?: number;
   normal: Buffer;
   uv: Buffer;
+  /** CPU copies for path trace (must match GPU uploads). */
+  cpuPosition: Float32Array;
+  cpuUv: Float32Array;
+  cpuIndices: Uint16Array;
   center: [number, number, number];
   boundsRadius: number;
 }

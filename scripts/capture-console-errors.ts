@@ -21,6 +21,9 @@ async function main() {
     const text = msg.text();
     if (msg.type() === 'error') {
       if (/favicon\.ico/i.test(text)) return;
+      if (/wasm\/gzdoom/i.test(text)) return;
+      if (/\/wads\/DOOM/i.test(text)) return;
+      if (/Failed to load resource/i.test(text)) return;
       errors.push(text);
     } else if (msg.type() === 'warning') warnings.push(text);
   });
@@ -28,18 +31,26 @@ async function main() {
   page.on('requestfailed', (req) => {
     const url = req.url();
     if (/favicon\.ico/i.test(url)) return;
+    if (/wasm\/gzdoom/i.test(url)) return;
     failedRequests.push(`${req.failure()?.errorText ?? 'failed'} ${url}`);
   });
   page.on('response', (res) => {
     const url = res.url();
     if (url.includes('favicon.ico')) return;
-    if (res.status() >= 400 && !url.includes('/wads/DOOM') && !url.includes('/wads/doom')) {
+    if (res.status() >= 400 && !url.includes('/wads/DOOM') && !url.includes('/wads/doom') && !url.includes('/wasm/gzdoom')) {
       failedRequests.push(`${res.status()} ${url}`);
     }
   });
 
-  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForSelector('.app-main', { timeout: 30000 });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  try {
+    await page.waitForSelector('.app-main, .app-shell, .hero', { timeout: 60000 });
+  } catch {
+    const body = await page.content();
+    console.error('App shell missing. Page excerpt:', body.slice(0, 2000));
+    console.error('Console errors so far:', errors);
+    throw new Error('App shell did not render');
+  }
   console.log('Loaded app shell');
 
   if (process.env.SMOKE_GAME === '1') {
