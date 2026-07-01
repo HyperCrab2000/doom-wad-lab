@@ -108,6 +108,7 @@ describe('pathTraceCpu', () => {
 
     expect(triangles.length).toBeGreaterThan(0);
     expect(nonSky).toBeGreaterThan(width * height * 0.2);
-    expect(elapsed).toBeLessThan(12000);
+    const maxMs = process.env.VITEST_COVERAGE === '1' ? 20_000 : 12_000;
+    expect(elapsed).toBeLessThan(maxMs);
   });
 });
