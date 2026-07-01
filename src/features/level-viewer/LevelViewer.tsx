@@ -32,12 +32,17 @@ import {
   readStoredRenderLayerToggles,
   type RenderLayerToggles,
 } from '@/wad/renderer/modular/renderLayerToggles';
-import { gzdoomLayerSessionKey } from '@/wad/renderer/gzrender-v2/gzdoom/applyGzdoomRenderLayers';
+import { applyGzdoomLayerTogglesLive } from '@/wad/renderer/gzrender-v2/gzdoom/applyGzdoomLayerTogglesLive';
+import { applyClassicLayerTogglesLive } from '@/wad/renderer/modular/applyClassicRenderLayers';
+import { classicLayerTestPreset } from '@/wad/renderer/modular/classicLayerMapping';
+import { persistRenderLayerToggles } from '@/wad/renderer/modular/renderLayerToggles';
 import {
   parseModularRenderStage,
   type ModularRenderStage,
 } from '@/wad/renderer/modular/modularRenderStage';
 import { RenderLayerPanel, summarizeLayerToggles } from './RenderLayerPanel';
+import { GzdoomPlayLoadingOverlay } from './GzdoomPlayLoadingOverlay';
+import type { GzdoomWasmModule } from '@/gzdoom-oracle/gzdoomWasmHost';
 
 interface GameRenderer {
   load: ReturnType<typeof renderGame>['load'];
@@ -57,8 +62,14 @@ type TransitionPhase = 'loading' | 'wiping' | 'playing';
 
 const MIN_LOADING_SCREEN_MS = 450;
 
-function activeGzdoomWasmModule() {
+function activeGzdoomWasmModule(backend: RenderBackend): GzdoomWasmModule | null {
+  if (backend === 'gzdoom-s-wasm') return getGzdoomSModule();
+  if (backend === 'gzdoom-wasm') return getHostedGzdoomModule();
   return getHostedGzdoomModule() ?? getGzdoomSModule();
+}
+
+function notifyGzdoomPointerLock(backend: RenderBackend, locked: boolean): void {
+  activeGzdoomWasmModule(backend)?._gzr_on_pointer_lock?.(locked ? 1 : 0);
 }
 
 function isGzdoomPlayMode(backend: RenderBackend, subView: 'gold' | 'play'): boolean {
@@ -85,10 +96,6 @@ export const LevelViewer: React.FC<{
   const [renderLayerToggles, setRenderLayerTogglesState] = useState<RenderLayerToggles>(
     readStoredRenderLayerToggles
   );
-  const gzdoomLayerKey = useMemo(
-    () => gzdoomLayerSessionKey(renderLayerToggles),
-    [renderLayerToggles],
-  );
   const gzdoomHadReadyRef = useRef(false);
   const [layersDrawerOpen, setLayersDrawerOpen] = useState(false);
   const layerSummary = useMemo(
@@ -103,6 +110,11 @@ export const LevelViewer: React.FC<{
   const [gzdoomWasmHud, setGzdoomWasmHud] = useState('');
   const [gzdoomGoldDiffHud, setGzdoomGoldDiffHud] = useState('');
   const gzdoomCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [gzdoomPlayCanvasLive, setGzdoomPlayCanvasLive] = useState(false);
+  const bindGzdoomCanvas = useCallback((node: HTMLCanvasElement | null) => {
+    gzdoomCanvasRef.current = node;
+    setGzdoomPlayCanvasLive(node != null);
+  }, []);
   /** Gold = WASM spawn frame (Phase 2c). Play = GZDoom WASM hosted renderer. */
   const [gzdoomSubView, setGzdoomSubView] = useState<'gold' | 'play'>('play');
   const [visibilityHud, setVisibilityHud] = useState('');
@@ -139,6 +151,9 @@ export const LevelViewer: React.FC<{
     mapLoadState,
     classicPlayState,
     classicLoadStartedAt,
+    goldCaptureStartedAt,
+    gzdoomLoadProgress,
+    gzdoomGoldLoadProgress,
     gzdoomFrameUrl,
     gzdoomWasmError,
     setWadPath,
@@ -150,6 +165,7 @@ export const LevelViewer: React.FC<{
     modPaths,
     renderBackend,
     gzdoomCanvasRef,
+    gzdoomPlayCanvasLive,
     loadGzdoomPlay: isGzdoomPlayMode(renderBackend, gzdoomSubView),
     captureGzdoomGold: renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold',
     renderLayerToggles,
@@ -207,10 +223,12 @@ export const LevelViewer: React.FC<{
   }, [renderBackend, gzdoomFrameUrl, wadPath, selectedMap]);
 
   useEffect(() => {
-    if (classicPlayState !== 'loading' || classicLoadStartedAt == null) return;
+    const loadingPlay = classicPlayState === 'loading' && classicLoadStartedAt != null;
+    const loadingGold = mapLoadState === 'loading' && goldCaptureStartedAt != null;
+    if (!loadingPlay && !loadingGold) return;
     const id = window.setInterval(() => setLoadTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
-  }, [classicPlayState, classicLoadStartedAt]);
+  }, [classicPlayState, classicLoadStartedAt, mapLoadState, goldCaptureStartedAt]);
 
   const music = useLevelMusic(wad, selectedMap, wadPath);
 
@@ -242,7 +260,7 @@ export const LevelViewer: React.FC<{
       if (classicPlayState === 'loading') {
         setGzdoomWasmHud(
           gzdoomHadReadyRef.current
-            ? `GZDoom (s) · ${selectedMap} · applying layer toggles…`
+            ? `GZDoom (s) · ${selectedMap} · loading…`
             : `GZDoom (s) · ${selectedMap} · Node GZSTATE → WASM…`,
         );
       } else if (classicPlayState === 'ready') {
@@ -255,11 +273,7 @@ export const LevelViewer: React.FC<{
     if (renderBackend !== 'gzdoom-wasm') return;
     if (gzdoomSubView === 'play') {
       if (classicPlayState === 'loading') {
-        setGzdoomWasmHud(
-          game
-            ? `Play · ${selectedMap} · loading Classic WebGL…`
-            : `Play · ${selectedMap} · starting WebGL…`,
-        );
+        setGzdoomWasmHud(`Play · ${selectedMap} · loading GZDoom WASM…`);
       } else if (classicPlayState === 'ready') {
         setGzdoomWasmHud(`Play · ${selectedMap} · GZDoom in WASM · click to play · WASD + mouse · Space=use`);
       } else if (classicPlayState === 'error') {
@@ -289,8 +303,28 @@ export const LevelViewer: React.FC<{
   useEffect(() => {
     if (!game) return;
     if (isGzdoomWasmFamily(renderBackend)) return;
-    game.setRenderLayerToggles(renderLayerToggles);
+    applyClassicLayerTogglesLive(game, renderLayerToggles);
   }, [game, renderLayerToggles, renderBackend]);
+
+  /** Puppeteer / screenshot tools — apply preset without DOM clicks (avoids tsx __name in evaluate). */
+  useEffect(() => {
+    if (!game || isGzdoomWasmFamily(renderBackend)) {
+      delete (window as unknown as { __applyClassicLayerPreset?: unknown }).__applyClassicLayerPreset;
+      return;
+    }
+    (window as unknown as {
+      __applyClassicLayerPreset?: (layerId: string) => ReturnType<typeof applyClassicLayerTogglesLive>;
+    }).__applyClassicLayerPreset = (layerId: string) => {
+      const toggles = classicLayerTestPreset(layerId);
+      if (!toggles) return null;
+      setRenderLayerTogglesState(toggles);
+      persistRenderLayerToggles(toggles);
+      return applyClassicLayerTogglesLive(game, toggles);
+    };
+    return () => {
+      delete (window as unknown as { __applyClassicLayerPreset?: unknown }).__applyClassicLayerPreset;
+    };
+  }, [game, renderBackend]);
 
   useEffect(() => {
     if (renderBackend !== 'pathtrace' || !game) return;
@@ -319,24 +353,22 @@ export const LevelViewer: React.FC<{
     setRenderBackendState(backend);
   }, []);
 
-  // The global #voxel-counter / #fps-counter overlays are written only by the Classic/federated
-  // TS renderer (drawScene.ts). GZDoom WASM never updates them, so hide the stale placeholders
-  // instead of showing a misleading "VOXELS: ..." over GZDoom's own pixels.
-  useEffect(() => {
-    const tsRenderer = renderBackend === 'classic' || renderBackend === 'wasm-federated';
-    const voxel = document.getElementById('voxel-counter');
-    const fps = document.getElementById('fps-counter');
-    if (voxel) voxel.style.display = tsRenderer ? '' : 'none';
-    if (fps) fps.style.display = tsRenderer ? '' : 'none';
-    return () => {
-      if (voxel) voxel.style.display = '';
-      if (fps) fps.style.display = '';
-    };
-  }, [renderBackend]);
-
   const handleRenderLayerChange = useCallback((next: RenderLayerToggles) => {
     setRenderLayerTogglesState(next);
+    persistRenderLayerToggles(next);
   }, []);
+
+  useEffect(() => {
+    if (!isGzdoomWasmFamily(renderBackend) || classicPlayState !== 'ready') return;
+    try {
+      const mod =
+        renderBackend === 'gzdoom-s-wasm' ? getGzdoomSModule() : getHostedGzdoomModule();
+      if (mod?._gzr_is_ready?.() !== 1) return;
+      applyGzdoomLayerTogglesLive(mod, renderLayerToggles);
+    } catch (err) {
+      console.warn('[LevelViewer] live layer toggle failed:', err);
+    }
+  }, [renderBackend, classicPlayState, renderLayerToggles]);
 
   const handleModularStageCapChange = useCallback((stage: ModularRenderStage | null) => {
     setModularStageCapState(stage);
@@ -364,27 +396,48 @@ export const LevelViewer: React.FC<{
     classicPlayState === 'loading' && classicLoadStartedAt != null
       ? Math.floor((Date.now() - classicLoadStartedAt) / 1000)
       : 0;
+  const goldCaptureElapsedSec =
+    mapLoadState === 'loading' && goldCaptureStartedAt != null
+      ? Math.floor((Date.now() - goldCaptureStartedAt) / 1000)
+      : 0;
   void loadTick;
   const gzdoomPlaySubview = isGzdoomPlayMode(renderBackend, gzdoomSubView);
-  const gzdoomPlayCanvasMounted =
-    gzdoomPlaySubview && (classicPlayState === 'ready' || classicPlayState === 'loading');
   const showGzdoomPlayCanvas = gzdoomPlaySubview && classicPlayState === 'ready';
+  const showPerfMeterOverlay =
+    !showGoldFrame &&
+    !automapActive &&
+    (showGzdoomPlayCanvas || (renderBackend === 'classic' && isPlaying));
   const sfx = useLevelSfx(showGzdoomPlayCanvas, wad, wadPath);
-  const showClassicPlayLoading = gzdoomPlaySubview && classicPlayState === 'loading';
+  const showClassicPlayLoading =
+    gzdoomPlaySubview &&
+    classicPlayState !== 'ready' &&
+    classicPlayState !== 'error' &&
+    Boolean(wadPath);
+  const showGoldCaptureLoading =
+    renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && mapLoadState === 'loading';
+  const showGoldCaptureError =
+    renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && mapLoadState === 'error';
+  const gzdoomLoadOverlayVariant =
+    renderBackend === 'gzdoom-s-wasm'
+      ? 'modular-s'
+      : gzdoomSubView === 'gold'
+        ? 'wasm-gold'
+        : 'wasm-play';
   const showGzdoomPlayError =
     gzdoomPlaySubview && classicPlayState === 'error' && Boolean(gzdoomWasmError);
-  const classicPlayOverlayMessage =
-    renderBackend === 'gzdoom-s-wasm'
-      ? classicLoadElapsedSec >= 30
-        ? `Loading GZDoom (s) WASM… (${classicLoadElapsedSec}s)`
-        : classicLoadElapsedSec > 0
-          ? `Loading GZDoom (s) · Node GZSTATE… (${classicLoadElapsedSec}s)`
-          : 'Loading GZDoom (s) · Node GZSTATE…'
-      : classicLoadElapsedSec >= 30
-        ? `Loading GZDoom WASM renderer… (${classicLoadElapsedSec}s)`
-        : classicLoadElapsedSec > 0
-          ? `Loading GZDoom WASM renderer… (${classicLoadElapsedSec}s)`
-          : 'Loading GZDoom WASM renderer…';
+
+  // Hide legacy #fps-counter when PerfMeter overlay is active (unified fps/ms + sparkline chart).
+  useEffect(() => {
+    const tsRenderer = renderBackend === 'classic' || renderBackend === 'wasm-federated';
+    const voxel = document.getElementById('voxel-counter');
+    const fps = document.getElementById('fps-counter');
+    if (voxel) voxel.style.display = tsRenderer && !showPerfMeterOverlay ? '' : 'none';
+    if (fps) fps.style.display = tsRenderer && !showPerfMeterOverlay ? '' : 'none';
+    return () => {
+      if (voxel) voxel.style.display = '';
+      if (fps) fps.style.display = '';
+    };
+  }, [renderBackend, showPerfMeterOverlay]);
 
   // Mouse-look for GZDoom WASM play: SDL's Emscripten relative-mouse path delivers no deltas, so we
   // own pointer lock here and forward the browser's reliable movementX/Y straight into GZDoom via
@@ -394,19 +447,24 @@ export const LevelViewer: React.FC<{
     const canvas = gzdoomCanvasRef.current;
     if (!canvas) return;
 
-    let locked = false;
+    const syncLockState = () => {
+      const locked = document.pointerLockElement === canvas;
+      notifyGzdoomPointerLock(renderBackend, locked);
+      return locked;
+    };
+
     const onPointerLockChange = () => {
-      locked = document.pointerLockElement === canvas;
-      getHostedGzdoomModule()?._gzr_on_pointer_lock?.(locked ? 1 : 0);
-      getGzdoomSModule()?._gzr_on_pointer_lock?.(locked ? 1 : 0);
+      syncLockState();
     };
     const onMouseMove = (e: MouseEvent) => {
-      if (!locked) return;
-      const mod = activeGzdoomWasmModule();
+      // Do not rely on a cached flag — pointerlockchange can race mousedown / effect mount.
+      if (document.pointerLockElement !== canvas) return;
+      const mod = activeGzdoomWasmModule(renderBackend);
       if (mod?._gzr_mouse_move && (e.movementX || e.movementY)) {
         mod._gzr_mouse_move(e.movementX, e.movementY);
       }
     };
+    syncLockState();
     document.addEventListener('pointerlockchange', onPointerLockChange);
     document.addEventListener('mousemove', onMouseMove);
     return () => {
@@ -418,8 +476,9 @@ export const LevelViewer: React.FC<{
       if (document.pointerLockElement === canvas) {
         document.exitPointerLock();
       }
+      notifyGzdoomPointerLock(renderBackend, false);
     };
-  }, [showGzdoomPlayCanvas, gzdoomCanvasRef]);
+  }, [showGzdoomPlayCanvas, gzdoomCanvasRef, renderBackend]);
 
   useEffect(() => {
     if (renderBackend !== 'wasm-federated' || !game) return;
@@ -458,7 +517,7 @@ export const LevelViewer: React.FC<{
       const flat42 = stats.courtyardFlat42 ? 'yes' : 'no';
       const mode = stats.flatDrawMode ?? '?';
       setVisibilityHud(
-        `BSP · sector ${cam} · flat42 ${flat42} · ${mode} · walls ${stats.wallEntries ?? 0} flats ${stats.flatSubsectors ?? 0}${stats.wireframeMode && stats.wireframeMode !== 'off' ? ` · wire ${stats.wireframeMode}` : ''}`
+        `BSP · sector ${cam} · flat42 ${flat42} · ${mode} · walls ${stats.wallEntries ?? 0} flats ${stats.flatSubsectors ?? 0} · drawn w${stats.walls ?? 0} f${stats.flats ?? 0}${Array.isArray(stats.inactiveLayers) && stats.inactiveLayers.length ? ` · off: ${(stats.inactiveLayers as string[]).slice(0, 3).join(',')}` : ''}${stats.wireframeMode && stats.wireframeMode !== 'off' ? ` · wire ${stats.wireframeMode}` : ''}`
       );
     }, 400);
     return () => window.clearInterval(id);
@@ -675,44 +734,75 @@ export const LevelViewer: React.FC<{
     ? true
     : renderBackend !== 'pathtrace' && transitionPhase !== 'playing';
 
+  const isGzdoomWasmLoading =
+    isGzdoomWasmFamily(renderBackend) &&
+    ((gzdoomPlaySubview && classicPlayState !== 'ready' && classicPlayState !== 'error') ||
+      (renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && mapLoadState === 'loading'));
+
+  const isImmersivePlay =
+    isPlaying || (isGzdoomWasmFamily(renderBackend) && mapLoadState === 'ready');
+
   const viewerClassName = [
     'doom-panel',
     'level-viewer',
-    layersDrawerOpen ? 'level-viewer--layers-open' : '',
-    isPlaying || (isGzdoomWasmFamily(renderBackend) && mapLoadState === 'ready')
-      ? 'level-viewer--playing'
-      : '',
+    isImmersivePlay ? 'level-viewer--playing' : '',
+    isGzdoomWasmLoading ? 'level-viewer--gzdoom-loading' : '',
     showGoldFrame ? 'level-viewer--gzdoom-gold' : '',
   ]
     .filter(Boolean)
     .join(' ');
 
+  const shellClassName = [
+    'level-viewer-shell',
+    layersDrawerOpen ? 'level-viewer-shell--layers-open' : '',
+    isImmersivePlay ? 'level-viewer-shell--playing' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <section
-      className={viewerClassName}
-      data-map-load-state={mapLoadState}
-      data-classic-play-state={classicPlayState}
-      data-is-playing={isPlaying ? 'true' : 'false'}
-    >
+    <div className={shellClassName}>
+      <section
+        className={viewerClassName}
+        data-map-load-state={mapLoadState}
+        data-classic-play-state={classicPlayState}
+        data-is-playing={isPlaying ? 'true' : 'false'}
+      >
+      <nav className="layer-rail" aria-label="Render layers">
+        <button
+          type="button"
+          className={`layer-rail__toggle${layersDrawerOpen ? ' layer-rail__toggle--open' : ''}`}
+          aria-expanded={layersDrawerOpen}
+          aria-controls="layer-drawer"
+          title={layersDrawerOpen ? 'Hide render layers' : 'Show render layers'}
+          onClick={() => setLayersDrawerOpen((open) => !open)}
+        >
+          <span className="layer-rail__toggle-bars" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="layer-rail__toggle-label">Layers</span>
+          <span className="layer-rail__toggle-hint">{layerSummary}</span>
+        </button>
+        <aside
+          id="layer-drawer"
+          className={`layer-rail__drawer${layersDrawerOpen ? ' layer-rail__drawer--open' : ''}`}
+          aria-hidden={!layersDrawerOpen}
+        >
+          <RenderLayerPanel
+            toggles={renderLayerToggles}
+            onChange={handleRenderLayerChange}
+            disabled={gzdoomPlaySubview && classicPlayState === 'loading'}
+            renderBackend={renderBackend}
+            modularStageCap={modularStageCap}
+            onModularStageCapChange={handleModularStageCapChange}
+          />
+        </aside>
+      </nav>
+
       <header className="level-chrome">
         <div className="level-chrome__row">
-          <button
-            type="button"
-            className={`layer-drawer-toggle${layersDrawerOpen ? ' layer-drawer-toggle--open' : ''}`}
-            aria-expanded={layersDrawerOpen}
-            aria-controls="layer-drawer"
-            title={layersDrawerOpen ? 'Hide render layers' : 'Show render layers'}
-            onClick={() => setLayersDrawerOpen((open) => !open)}
-          >
-            <span className="layer-drawer-toggle__bars" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-            <span className="layer-drawer-toggle__label">Layers</span>
-            <span className="layer-drawer-toggle__hint">{layerSummary}</span>
-          </button>
-
           <div className="level-chrome__selects">
             <label className="control-field">
               <span className="control-field__label">IWAD</span>
@@ -782,7 +872,7 @@ export const LevelViewer: React.FC<{
                   type="button"
                   className={gzdoomSubView === 'gold' ? 'active' : ''}
                   onClick={() => setGzdoomSubView('gold')}
-                  disabled={!gzdoomFrameUrl}
+                  disabled={gzdoomSubView === 'gold'}
                 >
                   Gold
                 </button>
@@ -836,21 +926,6 @@ export const LevelViewer: React.FC<{
       </header>
 
       <div className="level-viewer__body">
-        <aside
-          id="layer-drawer"
-          className={`layer-drawer${layersDrawerOpen ? ' layer-drawer--open' : ''}`}
-          aria-hidden={!layersDrawerOpen}
-        >
-          <RenderLayerPanel
-            toggles={renderLayerToggles}
-            onChange={handleRenderLayerChange}
-            disabled={gzdoomPlaySubview && classicPlayState === 'loading'}
-            renderBackend={renderBackend}
-            modularStageCap={modularStageCap}
-            onModularStageCapChange={handleModularStageCapChange}
-          />
-        </aside>
-
         <div className="level-viewer__main">
       <DoomLoader
         status={status}
@@ -894,43 +969,50 @@ export const LevelViewer: React.FC<{
               className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''} ${bspDebugActive ? 'game-canvas--bsp-debug' : ''} ${hideGameCanvas ? 'game-canvas--hidden' : ''}`}
               tabIndex={0}
             />
+            {selectedMap && gzdoomPlaySubview ? (
             <canvas
-              ref={gzdoomCanvasRef}
-              /* Fresh canvas per GZDoom backend. GZDoom WASM cannot cleanly exit, so its module
-                 keeps owning this canvas's WebGL2 context after teardown. Switching gzdoom-wasm ↔
-                 gzdoom-s-wasm must NOT reuse that canvas — the new module would inherit the dead
-                 module's context and render into a tiny corner. Re-keying remounts a pristine
-                 canvas so each module gets its own context. */
-              /* Layer toggles restart GZDoom with new +cvar argv — remount canvas so the new WASM
-                 module gets a fresh WebGL2 context (same rule as backend switches). */
-              key={gzdoomPlaySubview ? `gz-${renderBackend}-${gzdoomLayerKey}` : `gz-${renderBackend}-cap`}
-              /* Play tab renders GZDoom at 1280x960 (its GL viewport); the WebGL drawing buffer
-                 must match or the frame is clipped. Size it before the GL context is created
-                 (whole play subview, not just when ready). Capture/gold path stays 640x480. */
-              width={gzdoomPlaySubview ? 1280 : 640}
-              height={gzdoomPlaySubview ? 960 : 480}
-              className={gzdoomPlayCanvasMounted ? 'gzdoom-wasm-play-canvas' : 'gzdoom-wasm-capture-canvas'}
+              ref={bindGzdoomCanvas}
+              /* Stable key per backend — map switches restart WASM via effect deps, not canvas remount.
+                 Remounting mid-init destroys the canvas Emscripten bound to (black screen / no handlers). */
+              key={`gz-${renderBackend}-play`}
+              width={1280}
+              height={960}
+              className={`gzdoom-wasm-play-canvas${showClassicPlayLoading ? ' gzdoom-wasm-play-canvas--loading' : ''}`}
               tabIndex={showGzdoomPlayCanvas ? 0 : -1}
-              aria-hidden={!showGzdoomPlayCanvas && !showGoldFrame}
+              aria-hidden={!showGzdoomPlayCanvas}
               onMouseDown={
                 showGzdoomPlayCanvas
                   ? (e) => {
                       const c = e.currentTarget;
                       c.focus();
-                      // Pointer lock enables GZDoom mouse-look/turn; needs a user gesture.
-                      c.requestPointerLock?.();
+                      const lockPromise = c.requestPointerLock?.();
+                      if (lockPromise && typeof lockPromise.then === 'function') {
+                        void lockPromise.then(() => notifyGzdoomPointerLock(renderBackend, true));
+                      }
                     }
                   : undefined
               }
             />
+            ) : null}
             {showGoldFrame ? (
               <img src={gzdoomFrameUrl!} alt={`GZDoom WASM ${selectedMap}`} className="gzdoom-wasm-frame" />
             ) : null}
-            <PerfMeter active={showGzdoomPlayCanvas} />
+            <PerfMeter active={showPerfMeterOverlay} />
             {showClassicPlayLoading ? (
-              <div className="gzdoom-play-loading" aria-live="polite">
-                {classicPlayOverlayMessage}
-              </div>
+              <GzdoomPlayLoadingOverlay
+                title={renderBackend === 'gzdoom-s-wasm' ? 'GZDoom (s) WASM' : 'GZDoom WASM'}
+                progress={gzdoomLoadProgress}
+                elapsedSec={classicLoadElapsedSec}
+                variant={gzdoomLoadOverlayVariant}
+              />
+            ) : null}
+            {showGoldCaptureLoading ? (
+              <GzdoomPlayLoadingOverlay
+                title="GZDoom WASM · Gold"
+                progress={gzdoomGoldLoadProgress}
+                elapsedSec={goldCaptureElapsedSec}
+                variant="wasm-gold"
+              />
             ) : null}
             {showGzdoomPlayError ? (
               <div className="gzdoom-play-loading gzdoom-play-error" aria-live="assertive" role="alert">
@@ -946,6 +1028,13 @@ export const LevelViewer: React.FC<{
                     </span>
                   </>
                 ) : null}
+              </div>
+            ) : null}
+            {showGoldCaptureError ? (
+              <div className="gzdoom-play-loading gzdoom-play-error" aria-live="assertive" role="alert">
+                GZDoom gold capture failed
+                <br />
+                <span className="gzdoom-play-error__detail">{gzdoomWasmError}</span>
               </div>
             ) : null}
             <canvas
@@ -1009,6 +1098,7 @@ export const LevelViewer: React.FC<{
         </div>
       </div>
     </section>
+    </div>
   );
 };
 
@@ -1038,9 +1128,10 @@ const DoomLoader: React.FC<{
   const loadedAt = status.loadedAt ? new Date(status.loadedAt).toLocaleTimeString() : null;
   const isReady = status.state === 'ready' || status.state === 'cache-hit';
   const showProgress = !isReady || mapLoading || status.state === 'loading' || status.state === 'error';
-  // GZDoom WASM (play) never parses WAD lumps in Node — the Z_Init/W_Init segmented bar is only for
-  // Classic / (s) / federated Node parse. Play startup uses the gzdoom-play-loading overlay only.
-  const showWadSegmentedBar = renderBackend !== 'gzdoom-wasm' && showProgress;
+  // GZDoom WASM never parses lumps in Node — no Z_Init/W_Init bar. GZDoom (s) uses the overlay
+  // for lump parse + WASM; hide duplicate segmented bar while play is loading.
+  const showWadSegmentedBar =
+    !isGzdoomWasmFamily(renderBackend) && showProgress;
   const showDetail = showProgress && status.detail;
 
   return (
@@ -1106,9 +1197,9 @@ const DoomLoader: React.FC<{
       >
         {mapLoading
           ? mapLoadMode === 'gzdoom-s-wasm'
-            ? `R_Init: GZDoom (s) · Node GZSTATE… (${loadElapsedSec}s)`
-          : mapLoadMode === 'gzdoom-wasm'
-            ? `R_Init: GZDoom gold renderer… (${loadElapsedSec}s)`
+            ? `Node lump parse + GZDoom (s) WASM… (${loadElapsedSec}s)`
+            : mapLoadMode === 'gzdoom-wasm'
+              ? `GZDoom WASM renderer… (${loadElapsedSec}s)`
             : mapLoadMode === 'federated'
               ? `R_Init: federated GZSTATE + WASM… (${loadElapsedSec}s)`
               : `R_Init: building map geometry… (${loadElapsedSec}s)`

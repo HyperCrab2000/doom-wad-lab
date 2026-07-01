@@ -2,7 +2,7 @@ import type { RenderLayerToggles } from '@/wad/renderer/modular/renderLayerToggl
 
 /**
  * Map doom-wad-lab Layers panel toggles → GZDoom `+cvar value` argv pairs (same CVARs as parity
- * display modes). Applied at WASM startup via callMain argv — no Emscripten exports, no JS rendering.
+ * display modes). Applied at WASM startup via callMain argv; live toggles use gzr_exec_cmd.
  */
 export function buildGzdoomLayerArgv(toggles: RenderLayerToggles): string[] {
   const args: string[] = [];
@@ -57,9 +57,11 @@ export function buildGzdoomLayerArgv(toggles: RenderLayerToggles): string[] {
   pushBool('gl_portals', toggles.sky);
   pushBool('gl_noskyboxes', !toggles.sky);
 
+  // gl_fogmode / gl_bandedswlight are registered in hw_cvars / hw_drawinfo (GZRender WASM).
+  // gl_lightmode and gl_light_sprites live in g_level / dynlight paths stripped from browser
+  // builds — sending them prints "Unknown command" and breaks live layer toggles.
   pushInt('gl_fogmode', toggles.dynamicLighting ? 2 : 0);
-  pushInt('gl_lightmode', toggles.coloredLighting ? 1 : 0);
-  pushBool('gl_light_sprites', toggles.dynamicLighting);
+  pushBool('gl_bandedswlight', !toggles.coloredLighting);
 
   if (toggles.meshTriangles) {
     pushBool('gl_texture', false);
@@ -68,7 +70,21 @@ export function buildGzdoomLayerArgv(toggles: RenderLayerToggles): string[] {
   return args;
 }
 
-/** Stable session key fragment when layer toggles change (forces GZDoom WASM restart with new argv). */
+/** Console commands for live CVAR updates (no WASM restart). */
+export function buildGzdoomLayerConsoleCmds(toggles: RenderLayerToggles): string[] {
+  const argv = buildGzdoomLayerArgv(toggles);
+  const cmds: string[] = [];
+  for (let i = 0; i + 1 < argv.length; i += 2) {
+    const name = argv[i]!;
+    const value = argv[i + 1]!;
+    if (!name.startsWith('+')) continue;
+    // AddCommandString expects console syntax (no leading +); + is argv-only startup syntax.
+    cmds.push(`${name.slice(1)} ${value}`);
+  }
+  return cmds;
+}
+
+/** @deprecated Session key no longer triggers restart; kept for tests/diagnostics. */
 export function gzdoomLayerSessionKey(toggles: RenderLayerToggles): string {
   return buildGzdoomLayerArgv(toggles).join('|');
 }

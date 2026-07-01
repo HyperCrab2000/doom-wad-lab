@@ -34,6 +34,15 @@ Open the dev server URL. Two modes:
 
 **Full technical docs:** [**docs/README.md**](./docs/README.md)
 
+### Complete technical bibles (gold standard)
+
+| Bible | What it covers |
+|-------|----------------|
+| [**📖 Master index — docs/bible/**](./docs/bible/README.md) | Hub linking both bibles, end-to-end data flow |
+| [**WAD Bible**](./docs/bible/wad/README.md) | Every lump: container format, map records, palettes, sprites, switches, line specials, **all 68 stock maps by episode** |
+| [**Classic Layer Bible**](./docs/bible/classic-layers/README.md) | Layers panel → Node WebGL2 pipeline, live toggles, per-layer tests |
+| [**GZDoom Renderer Bible**](./docs/bible/gzdoom/README.md) | Vertices → BSP → walls → flats → sky → lights → sprites → GLES/WASM gold corpus |
+
 | Guide | Topic |
 |-------|--------|
 | [**Testing**](./docs/TESTING.md) | Vitest, parity suites, parallelization, CI checklist |

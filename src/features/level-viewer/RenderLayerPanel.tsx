@@ -171,7 +171,7 @@ export const RenderLayerPanel: React.FC<{
 
       <div className="render-layer-panel__body">
         {gzdoom ? (
-          <p className="render-layer-panel__note">Each change reloads the view (~2 sec).</p>
+          <p className="render-layer-panel__note">Changes apply instantly — no reload.</p>
         ) : null}
 
         {groups.map((group) => (

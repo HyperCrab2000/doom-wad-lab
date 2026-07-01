@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RENDER_LAYER_TOGGLES } from '@/wad/renderer/modular/renderLayerToggles';
-import { buildGzdoomLayerArgv } from './applyGzdoomRenderLayers';
+import { buildGzdoomLayerArgv, buildGzdoomLayerConsoleCmds } from './applyGzdoomRenderLayers';
 
 describe('buildGzdoomLayerArgv', () => {
   it('maps walls-only toggles to GZDoom CVAR argv pairs', () => {
@@ -35,5 +35,15 @@ describe('buildGzdoomLayerArgv', () => {
         '0',
       ]),
     );
+  });
+
+  it('builds console commands for live exec', () => {
+    const cmds = buildGzdoomLayerConsoleCmds({
+      ...DEFAULT_RENDER_LAYER_TOGGLES,
+      solidFloors: false,
+      solidCeilings: false,
+    });
+    expect(cmds).toContain('gl_render_flats 0');
+    expect(cmds).toContain('gl_render_walls 1');
   });
 });
