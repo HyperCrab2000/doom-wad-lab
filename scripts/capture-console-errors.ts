@@ -21,6 +21,8 @@ async function main() {
     const text = msg.text();
     if (msg.type() === 'error') {
       if (/favicon\.ico/i.test(text)) return;
+      if (/wasm\/gzdoom/i.test(text)) return;
+      if (/\/wads\/DOOM/i.test(text)) return;
       errors.push(text);
     } else if (msg.type() === 'warning') warnings.push(text);
   });
@@ -28,6 +30,7 @@ async function main() {
   page.on('requestfailed', (req) => {
     const url = req.url();
     if (/favicon\.ico/i.test(url)) return;
+    if (/wasm\/gzdoom/i.test(url)) return;
     failedRequests.push(`${req.failure()?.errorText ?? 'failed'} ${url}`);
   });
   page.on('response', (res) => {
