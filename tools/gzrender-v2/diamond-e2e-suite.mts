@@ -19,6 +19,21 @@ import {
 const BASE = process.env.TEST_URL ?? 'http://127.0.0.1:4173';
 const results: Array<{ name: string; ok: boolean; detail?: string }> = [];
 
+async function iwadAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/wads/DOOM.WAD`, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    const len = Number(res.headers.get('content-length') ?? 0);
+    return res.ok && len > 100_000;
+  } catch {
+    return false;
+  }
+}
+
+function skip(name: string, reason: string) {
+  results.push({ name, ok: true, detail: `SKIP: ${reason}` });
+  console.log(`SKIP ${name} — ${reason}`);
+}
+
 function pass(name: string, detail?: string) {
   results.push({ name, ok: true, detail });
   console.log(`PASS ${name}${detail ? ` — ${detail}` : ''}`);
@@ -245,15 +260,19 @@ async function scenarioPlayability(page: Page) {
 
 async function main() {
   let browser: Browser | null = null;
+  const hasIwad = await iwadAvailable();
+  if (!hasIwad) {
+    console.log('No DOOM.WAD on server — GZDoom E2E scenarios will skip (CI/preview without IWAD).');
+  }
   try {
     browser = await launchBrowser();
-    const scenarios: Array<{ name: string; run: (p: Page) => Promise<void> }> = [
+    const scenarios: Array<{ name: string; run: (p: Page) => Promise<void>; needsIwad?: boolean }> = [
       { name: 'wad-map-engine-selects', run: (p) => scenarioWadMapEngine(p) },
-      { name: 'gzdoom-gold-load', run: (p) => scenarioGzdoomGold(p) },
+      { name: 'gzdoom-gold-load', run: (p) => scenarioGzdoomGold(p), needsIwad: true },
       { name: 'classic-play-layers', run: (p) => scenarioClassicPlay(p) },
-      { name: 'gzdoom-modular-play-layers', run: (p) => scenarioGzdoomModularPlay(p) },
-      { name: 'audio-sfx-music-toggle', run: (p) => scenarioAudioControls(p) },
-      { name: 'playability-input', run: (p) => scenarioPlayability(p) },
+      { name: 'gzdoom-modular-play-layers', run: (p) => scenarioGzdoomModularPlay(p), needsIwad: true },
+      { name: 'audio-sfx-music-toggle', run: (p) => scenarioAudioControls(p), needsIwad: true },
+      { name: 'playability-input', run: (p) => scenarioPlayability(p), needsIwad: true },
     ];
 
     {
@@ -270,7 +289,11 @@ async function main() {
       }
     }
 
-    for (const { name, run } of scenarios) {
+    for (const { name, run, needsIwad } of scenarios) {
+      if (needsIwad && !hasIwad) {
+        skip(name, 'no IWAD at /wads/DOOM.WAD');
+        continue;
+      }
       const scenarioPage = await browser.newPage();
       await forcePreserveDrawingBuffer(scenarioPage);
       await scenarioPage.setViewport({ width: 1280, height: 900 });
@@ -287,7 +310,10 @@ async function main() {
   }
 
   const failed = results.filter((r) => !r.ok);
-  console.log(`\n=== DIAMOND E2E: ${results.length - failed.length}/${results.length} passed ===`);
+  const skipped = results.filter((r) => r.detail?.startsWith('SKIP:')).length;
+  console.log(
+    `\n=== DIAMOND E2E: ${results.length - failed.length}/${results.length} passed (${skipped} skipped) ===`,
+  );
   if (failed.length) {
     failed.forEach((f) => console.error(`  ✗ ${f.name}: ${f.detail}`));
     process.exit(1);
