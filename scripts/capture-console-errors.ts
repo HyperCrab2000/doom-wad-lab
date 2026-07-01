@@ -10,7 +10,6 @@ async function main() {
 
   const browser = await puppeteer.launch({
     headless: true,
-    channel: process.env.PUPPETEER_CHANNEL ?? (process.env.CI === 'true' ? 'chrome' : undefined),
     args:
       process.env.CI === 'true'
         ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -39,8 +38,15 @@ async function main() {
     }
   });
 
-  await page.goto(BASE_URL, { waitUntil: 'networkidle0', timeout: 120000 });
-  await page.waitForSelector('.app-main, .app-shell, .hero', { timeout: 60000 });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  try {
+    await page.waitForSelector('.app-main, .app-shell, .hero', { timeout: 60000 });
+  } catch {
+    const body = await page.content();
+    console.error('App shell missing. Page excerpt:', body.slice(0, 2000));
+    console.error('Console errors so far:', errors);
+    throw new Error('App shell did not render');
+  }
   console.log('Loaded app shell');
 
   if (process.env.SMOKE_GAME === '1') {
