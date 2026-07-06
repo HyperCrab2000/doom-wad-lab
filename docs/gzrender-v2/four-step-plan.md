@@ -35,7 +35,7 @@ Classic WebGL, Path Trace, and WASM Federated (TS draw) are **debug/legacy only*
 |-----|-------------|------|--------|
 | **2a** | Gold tree + native import oracle | `import-oracle:corpus:all`, `test:corpus` | **Closed** (68/68) |
 | **2b** | Build + headless WASM capture | `build:gzdoom-wasm`, `test:gzdoom-wasm-prereqs` | **Closed** |
-| **2c** | Headless frame corpus vs gold | [phase-2c-breakdown.md](./phase-2c-breakdown.md) | **Open — 32/68 strict** |
+| **2c** | Headless frame corpus vs gold | [phase-2c-breakdown.md](./phase-2c-breakdown.md) | **Open — 21/68 strict** |
 | **2c-0** | Capture + eval infra | `build:gzdoom-wasm`, `gzdoom-wasm:corpus:eval:all` | **Closed** |
 | **2c-a** | Micro colormap (8 maps, 1–2 px) | `fix:2c:a` | **Open** → target 40/68 |
 | **2c-b** | Edge pixels (14 maps, ≤32 px) | `fix:2c:b` | **Open** → target 54/68 |

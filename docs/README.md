@@ -37,6 +37,7 @@ This project is **Doom only**. Yserbius / Twinion work lives in `yserbius_twinio
 | [**Rendering**](./rendering.md) | WebGL2 pipeline vs original Doom software renderer, culling, sky, draw order |
 | [**Visual enhancements**](./visual-enhancements.md) | Sector lighting, slime glow, POM relief, voxels, point lights, transitions |
 | [**Performance**](./performance.md) | Workers, React patterns, map/WAD caches, preload, level transitions |
+| [**Release log**](./RELEASES.md) | Dated shipped work, agent sessions, parity scoreboard (update every session) |
 | [**Project history**](./project-history.md) | Fork lineage, `.idea` local history, phased evolution Mar 2025 → present |
 | [**Line specials**](./line-specials.md) | Doors, switches, lifts, crushers, teleports, exits — activation and tests |
 | [**Game content**](./game-content.md) | Sounds, music, sprites, story text, thing catalog, WAD audit script |
