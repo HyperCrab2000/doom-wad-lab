@@ -46,6 +46,7 @@ Step 2 gate = **browser GZDoom WASM frame ≡ native gold `ref.png`** (`npm run 
 
 | Date | Agent | Shipped | Parity Δ | Refs |
 |------|-------|---------|----------|------|
+| **2026-07-06** | cloud | Fixed diamond E2E CI: skip GZDoom scenarios when WASM artifacts missing (IWAD alone is insufficient); updated `docs/ci.md` | — (CI/docs) | PR #3 |
 | **2026-07-06** | cloud | Added this release log; backfilled entries through Jul 1; linked from docs hub | — (docs only) | `docs/RELEASES.md` |
 | **2026-07-04 – 07-06** | — | **No commits pushed.** Desktop agent sessions (if any) did not land on `origin/main`. | **No change** — still **21/68 strict** | — |
 | **2026-07-01** | desktop | **PR #2 merged:** Diamond test pyramid (unit + integration + E2E gold/modular/classic/audio/playability); PerfMeter DOM overlay (fps/ms sparkline); 214-file bible expansion (WAD, Classic Layers, GZDoom, Chronicle, per-map deep dives); CI hardening (doom-wad-core clone, coverage gates, Puppeteer/Chrome fixes, optional diamond E2E without commercial IWAD) | Infra/docs/tests only — **2c unchanged** | PR #2, `8599873`…`8c11bdb` |

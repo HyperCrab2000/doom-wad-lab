@@ -33,7 +33,7 @@ flowchart LR
 4. **`npm run test:coverage`** — same tests with **≥90%** line/statement coverage on scoped engine code ([`vitest.config.ts`](../vitest.config.ts)).
 5. **`npm run test:integration`** — integration project; IWAD tests **skip** when no valid `DOOM.WAD` / `DOOM2.WAD` is present; synthetic line-special tests **always** run.
 6. **`npm run build`** — Vite production bundle (workers + lazy voxel chunk).
-7. **Smoke test** — `vite preview` on port 4173, console smoke + **diamond E2E** (GZDoom scenarios skip when no IWAD on runner).
+7. **Smoke test** — `vite preview` on port 4173, console smoke + **diamond E2E** (GZDoom scenarios skip when IWAD or GZDoom WASM artifacts are absent on the runner).
 
 ## Common failures (and fixes)
 
@@ -43,6 +43,7 @@ flowchart LR
 | Coverage below 90% | New files under `coverageInclude` without tests | Add unit tests or exclude audit-only glue in `vitest.config.ts` |
 | Integration “No valid WAD fixture” | No IWAD on runner | Expected locally without WADs; CI uses `describe.skipIf(!hasIntegrationIwad())` for stock maps |
 | Smoke: console errors | WebGL/shader/runtime throw on load | Fix runtime errors; smoke ignores 404 on `/wads/DOOM*.WAD` |
+| Diamond E2E: `viewer entered error state` | IWAD present but `/wasm/gzdoom/` or `/wasm/gzdoom-s/` not built | Expected on CI without `build:gzdoom-wasm`; diamond suite skips GZDoom scenarios when WASM artifacts missing |
 | Deploy: missing AWS vars | `AWS_DEPLOY_ROLE_ARN`, etc. | Set GitHub **repository variables** per `scripts/bootstrap-aws.sh` |
 
 ## Local commands

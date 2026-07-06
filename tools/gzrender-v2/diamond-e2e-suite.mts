@@ -29,6 +29,34 @@ async function iwadAvailable(): Promise<boolean> {
   }
 }
 
+/** True when the preview server serves a real artifact (not Vite HTML fallback). */
+async function wasmAssetAvailable(urlPath: string, minBytes = 10_000): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}${urlPath}`, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return false;
+    const ct = res.headers.get('content-type') ?? '';
+    if (ct.includes('text/html')) return false;
+    const len = Number(res.headers.get('content-length') ?? 0);
+    return len >= minBytes;
+  } catch {
+    return false;
+  }
+}
+
+async function gzdoomGoldWasmAvailable(): Promise<boolean> {
+  return (
+    (await wasmAssetAvailable('/wasm/gzdoom/gzdoom.wasm')) ||
+    (await wasmAssetAvailable('/wasm/gzdoom/gzdoom.js'))
+  );
+}
+
+async function gzdoomModularWasmAvailable(): Promise<boolean> {
+  return (
+    (await wasmAssetAvailable('/wasm/gzdoom-s/gzdoom.wasm')) ||
+    (await wasmAssetAvailable('/wasm/gzdoom-s/gzdoom.js'))
+  );
+}
+
 function skip(name: string, reason: string) {
   results.push({ name, ok: true, detail: `SKIP: ${reason}` });
   console.log(`SKIP ${name} — ${reason}`);
@@ -261,18 +289,48 @@ async function scenarioPlayability(page: Page) {
 async function main() {
   let browser: Browser | null = null;
   const hasIwad = await iwadAvailable();
+  const hasGoldWasm = await gzdoomGoldWasmAvailable();
+  const hasModularWasm = await gzdoomModularWasmAvailable();
   if (!hasIwad) {
     console.log('No DOOM.WAD on server — GZDoom E2E scenarios will skip (CI/preview without IWAD).');
   }
+  if (!hasGoldWasm) {
+    console.log('No /wasm/gzdoom/ artifact — gzdoom-gold-load will skip (run npm run build:gzdoom-wasm).');
+  }
+  if (!hasModularWasm) {
+    console.log(
+      'No /wasm/gzdoom-s/ artifact — modular GZDoom E2E will skip (run npm run bootstrap:gzdoom-s).',
+    );
+  }
   try {
     browser = await launchBrowser();
-    const scenarios: Array<{ name: string; run: (p: Page) => Promise<void>; needsIwad?: boolean }> = [
+    const scenarios: Array<{
+      name: string;
+      run: (p: Page) => Promise<void>;
+      needsIwad?: boolean;
+      needsWasm?: 'gold' | 'modular';
+    }> = [
       { name: 'wad-map-engine-selects', run: (p) => scenarioWadMapEngine(p) },
-      { name: 'gzdoom-gold-load', run: (p) => scenarioGzdoomGold(p), needsIwad: true },
+      { name: 'gzdoom-gold-load', run: (p) => scenarioGzdoomGold(p), needsIwad: true, needsWasm: 'gold' },
       { name: 'classic-play-layers', run: (p) => scenarioClassicPlay(p) },
-      { name: 'gzdoom-modular-play-layers', run: (p) => scenarioGzdoomModularPlay(p), needsIwad: true },
-      { name: 'audio-sfx-music-toggle', run: (p) => scenarioAudioControls(p), needsIwad: true },
-      { name: 'playability-input', run: (p) => scenarioPlayability(p), needsIwad: true },
+      {
+        name: 'gzdoom-modular-play-layers',
+        run: (p) => scenarioGzdoomModularPlay(p),
+        needsIwad: true,
+        needsWasm: 'modular',
+      },
+      {
+        name: 'audio-sfx-music-toggle',
+        run: (p) => scenarioAudioControls(p),
+        needsIwad: true,
+        needsWasm: 'modular',
+      },
+      {
+        name: 'playability-input',
+        run: (p) => scenarioPlayability(p),
+        needsIwad: true,
+        needsWasm: 'modular',
+      },
     ];
 
     {
@@ -289,9 +347,17 @@ async function main() {
       }
     }
 
-    for (const { name, run, needsIwad } of scenarios) {
+    for (const { name, run, needsIwad, needsWasm } of scenarios) {
       if (needsIwad && !hasIwad) {
         skip(name, 'no IWAD at /wads/DOOM.WAD');
+        continue;
+      }
+      if (needsWasm === 'gold' && !hasGoldWasm) {
+        skip(name, 'no GZDoom gold WASM at /wasm/gzdoom/');
+        continue;
+      }
+      if (needsWasm === 'modular' && !hasModularWasm) {
+        skip(name, 'no GZDoom (s) WASM at /wasm/gzdoom-s/');
         continue;
       }
       const scenarioPage = await browser.newPage();
