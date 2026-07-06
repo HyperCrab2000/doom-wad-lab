@@ -1,6 +1,6 @@
 # GZRender-V2 Status
 
-**Last updated:** 2026-06-17 (retrace session)
+**Last updated:** 2026-07-06 (release log added — see [RELEASES.md](../RELEASES.md))
 
 ## Current Phase
 

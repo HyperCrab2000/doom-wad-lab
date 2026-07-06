@@ -192,6 +192,7 @@ These sibling folders help explain experiments that fed into gl-doom-redo:
 
 ## See also
 
+- [Release log](./RELEASES.md) — dated shipped work and parity scoreboard (Jun–Jul 2026 gzrender-v2 onward)
 - [WAD processing](./wad-processing.md) — technical detail on the parser pipeline started in Phase 2  
 - [Voxels](./voxels.md) — KVX work begun in Phase 4  
 - [Performance](./performance.md) — caching and preload added in Phase 5  

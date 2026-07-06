@@ -30,6 +30,7 @@ Whenever any of the following are discovered, write them down:
 Before ending any session, update:
 
 ```txt
+docs/RELEASES.md
 docs/gzrender-v2/status.md
 docs/gzrender-v2/task-board.md
 docs/gzrender-v2/HANDOFF.md

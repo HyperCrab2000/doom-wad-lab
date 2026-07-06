@@ -1,10 +1,10 @@
 # GZRender-V2 Task Board
 
-**Last updated:** 2026-06-22
+**Last updated:** 2026-07-06 — scoreboard canonical in [RELEASES.md](../RELEASES.md)
 
 ## Active gate — Step 2 (GZDoom WASM ≡ gold)
 
-**2c frame corpus:** **32/68 strict** — see [phase-2c-breakdown.md](./phase-2c-breakdown.md)
+**2c frame corpus:** **21/68 strict** (2026-06-24 recapture; see [phase-2c-breakdown.md](./phase-2c-breakdown.md))
 
 | Sub | Maps | Target strict | Status |
 |-----|------|---------------|--------|

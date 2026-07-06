@@ -13,6 +13,7 @@ This is the narrative companion to the technical WAD, GZDoom, and Classic Layer 
 | [Decision log](#decision-log) | Dated architectural choices |
 | [Per-map deep dives](../wad/maps/) | All 68 corpus maps |
 | [Source deep dives](../appendix/sources/) | Key module index pages |
+| [Release log](../../RELEASES.md) | Dated shipped work + parity scoreboard (every agent session) |
 | [Project history](../../project-history.md) | Phase timeline Mar 2025 → present |
 
 ---
