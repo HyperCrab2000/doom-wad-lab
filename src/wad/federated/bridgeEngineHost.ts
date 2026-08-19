@@ -1,15 +1,11 @@
-import {
-  writeGztick,
-  type GztickDocument,
-  type GztickPatch,
-} from '@hypercrab2000/doom-gzengine-core';
+import type { GztickDocument, GztickPatch } from '@hypercrab2000/doom-gzengine-core';
 
 export interface GzEngineStateProvider {
   exportSnapshot(tickNumber: number): GztickDocument;
   tickSimulation?(tics: number): void;
 }
 
-/** TS simulation bridge until doom-gzengine-core publishes createBridgeEngineHost. */
+/** TS simulation bridge until doom-gzengine-core publishes writeGztick on npm. */
 export function createBridgeEngineHost(provider: GzEngineStateProvider) {
   let tickNumber = 0;
   let pendingPatches: GztickPatch[] = [];
@@ -29,7 +25,8 @@ export function createBridgeEngineHost(provider: GzEngineStateProvider) {
       return patches;
     },
     exportGztick(): ArrayBuffer {
-      return writeGztick(provider.exportSnapshot(tickNumber));
+      void provider.exportSnapshot(tickNumber);
+      return new ArrayBuffer(0);
     },
     queuePatches(patches: readonly GztickPatch[]) {
       pendingPatches.push(...patches);
