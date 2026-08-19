@@ -27,11 +27,11 @@ export function handlePlayerFire({
   y: number;
   yaw: number;
   onLineAction?: (result: MapActionResult) => void;
-}): { sound: string | null; triggeredLine: boolean } {
+}): { sound: string | null; triggeredLine: boolean; fired: boolean } {
   const now = performance.now();
   const result = tryFireWeapon(inventory, now, fireState.lastFireAt);
   if (!result.sound) {
-    return { sound: null, triggeredLine: false };
+    return { sound: null, triggeredLine: false, fired: false };
   }
 
   if (result.fired) {
@@ -41,10 +41,10 @@ export function handlePlayerFire({
       const lineResult = mapActions.tryUseLine(gunLine.lineIndex, gunLine.line);
       if (lineResult.triggered) {
         onLineAction?.(lineResult);
-        return { sound: result.sound, triggeredLine: true };
+        return { sound: result.sound, triggeredLine: true, fired: true };
       }
     }
   }
 
-  return { sound: result.sound, triggeredLine: false };
+  return { sound: result.sound, triggeredLine: false, fired: result.fired };
 }

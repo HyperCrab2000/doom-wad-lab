@@ -26,9 +26,8 @@ pub fn clear_state() {
 #[wasm_bindgen]
 pub fn validate_gzstate(ptr: u32, len: u32) -> u32 {
     let memory = wasm_bindgen::memory();
-    let view = unsafe {
-        js_sys::Uint8Array::view(&memory).subarray(ptr, ptr + len)
-    };
+    let memory_view = js_sys::Uint8Array::new(&memory);
+    let view = memory_view.subarray(ptr, ptr + len);
     let mut bytes = vec![0u8; len as usize];
     view.copy_to(&mut bytes);
     match read_gzstate(&bytes) {

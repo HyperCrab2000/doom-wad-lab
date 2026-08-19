@@ -5,6 +5,15 @@ const SAMPLE_CENTER = 128;
 export class DoomSfxPlayer {
   private context: AudioContext | null = null;
   private cache = new Map<string, AudioBuffer>();
+  private muted = false;
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
 
   async resume(): Promise<void> {
     if (!this.context) {
@@ -16,7 +25,7 @@ export class DoomSfxPlayer {
   }
 
   play(wad: Wad, lumpName: string, volume = 0.85): void {
-    if (!this.context) return;
+    if (this.muted || !this.context) return;
     const buffer = this.getBuffer(wad, lumpName);
     if (!buffer) return;
 

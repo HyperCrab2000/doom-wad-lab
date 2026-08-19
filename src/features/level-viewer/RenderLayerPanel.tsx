@@ -171,8 +171,16 @@ export const RenderLayerPanel: React.FC<{
 
       <div className="render-layer-panel__body">
         {gzdoom ? (
-          <p className="render-layer-panel__note">Changes apply instantly — no reload.</p>
-        ) : null}
+          <p className="render-layer-panel__note">
+            Changes apply instantly — no reload. Textures share one GZDoom CVAR (`gl_texture`) — wall
+            and floor texture toggles are not fully independent on modular.
+          </p>
+        ) : (
+          <p className="render-layer-panel__note">
+            Classic WebGL — floor, ceiling, and wall layers are independent. Match modular GZDoom with
+            the same Geometry / Textures / Lighting toggles.
+          </p>
+        )}
 
         {groups.map((group) => (
           <section key={group.title} className="render-layer-panel__group">
@@ -195,6 +203,10 @@ export const RenderLayerPanel: React.FC<{
 
         <section className="render-layer-panel__group render-layer-panel__group--debug">
           <h4 className="render-layer-panel__group-title">Debug view</h4>
+          <p className="render-layer-panel__note">
+            Wireframe = BSP edges, mesh triangles, ray sight. Map lumps (linedefs, sectors, vertexes)
+            are not separate toggles — use automap (Tab), BSP debug (V), or Classic pipeline cap.
+          </p>
           <label className="render-layer-panel__field">
             <span>Mode</span>
             <select

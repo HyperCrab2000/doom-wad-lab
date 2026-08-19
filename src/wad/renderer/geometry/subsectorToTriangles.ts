@@ -11,7 +11,7 @@ export function subsectorPolygonVertices(
   map: WadMap,
   segIndices: readonly number[]
 ): Vertex[] {
-  if (segIndices.length < 3) return [];
+  if (segIndices.length < 2) return [];
 
   const byIndex = new Map<number, Vertex>();
   for (const segIndex of segIndices) {

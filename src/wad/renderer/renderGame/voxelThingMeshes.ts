@@ -120,7 +120,7 @@ export function shouldPreferVoxelSprite(
   catalog?: VoxelCatalogView | null,
 ): boolean {
   if (!sprite) return false;
-  if (catalog?.hasDefinitionForSprite(sprite)) return true;
+  if (catalog) return catalog.hasDefinitionForSprite(sprite);
   return hasVoxelDefinitionForSprite(sprite);
 }
 

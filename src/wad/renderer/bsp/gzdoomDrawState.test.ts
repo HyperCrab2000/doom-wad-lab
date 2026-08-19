@@ -89,11 +89,30 @@ describe('buildGzdoomDrawState', () => {
     });
 
     expect(state!.cameraSectorIndex).toBe(29);
-    expect(state!.visibleSectors.has(42)).toBe(true);
+    // Portal graph sees courtyard sky 42, but spawn flat/wall filters suppress drawing it.
+    expect(state!.flatSupplementSectorOrder).toContain(42);
+    expect(state!.visibleSectors.has(42)).toBe(false);
+    // Liquid outdoor sector 0: flats and pass-wall mesh walls suppressed at spawn yaw.
     expect(state!.visibleSectors.has(0)).toBe(false);
+    expect(
+      state!.wallDrawOrder.some(
+        (entry) => map.SIDEDEFS[entry.sideDefIndex]?.sector === 0,
+      ),
+    ).toBe(false);
     expect(state!.visibleSectors.has(41)).toBe(false);
     expect(state!.visibleSectors.has(43)).toBe(false);
     expect(state!.visibleSectors.has(70)).toBe(false);
+    // Lip-sector walls (27/28) must not cover courtyard sky through the hangar opening.
+    expect(
+      state!.wallDrawOrder.some(
+        (entry) => map.SIDEDEFS[entry.sideDefIndex]?.sector === 27,
+      ),
+    ).toBe(false);
+    expect(
+      state!.wallDrawOrder.some(
+        (entry) => map.SIDEDEFS[entry.sideDefIndex]?.sector === 28,
+      ),
+    ).toBe(false);
 
     const passWall = buildGzdoomDrawState({
       map,
@@ -112,6 +131,46 @@ describe('buildGzdoomDrawState', () => {
       cameraPos: [playerStart.x, 41, -playerStart.y],
     })!;
     expect(passWall!.visibleSectors.has(3)).toBe(false);
+  });
+
+  it('spawn yaw east: line 33 DOORSTOP trace vs draw order (right probe parity)', () => {
+    const map = loadE1M1();
+    const index = buildBspRenderIndex(map)!;
+    const sectorVisibility = buildSectorVisibilityIndex(map)!;
+    const playerStart = map.THINGS.find((thing) => thing.type === 1)!;
+    const yaw = (playerStart.angle * Math.PI) / 180;
+
+    const state = buildGzdoomDrawState({
+      map,
+      buffers: {
+        bspRenderIndex: index,
+        sectorTriangles: {},
+        triangleHash: null,
+        sectorVisibility,
+        wallRangesByLine: [],
+        flats: [],
+        subsectorFlats: mapToSubsectorFlats(map, index),
+      } as never,
+      viewX: playerStart.x,
+      viewY: playerStart.y,
+      viewYaw: yaw,
+      cameraPos: [playerStart.x, 41, -playerStart.y],
+    })!;
+
+    const line33 = state.wallDrawOrder.find((e) => e.lineIndex === 33);
+    const s5 = map.SECTORS[5]!;
+    const s29 = map.SECTORS[29]!;
+    console.log('line33 drawn?', !!line33, line33);
+    console.log('sector5 floor delta', s5.floorheight - s29.floorheight);
+    console.log('visibleSectors has 5?', state.visibleSectors.has(5));
+    console.log('wallDrawOrder.length', state.wallDrawOrder.length);
+    // Gold right probe x=272 is outdoor void (~27) — DOORSTOP must not paint that column.
+    expect(line33).toBeUndefined();
+    for (const lineIndex of [146, 147]) {
+      expect(state.wallDrawOrder.some((e) => e.lineIndex === lineIndex)).toBe(false);
+    }
+    expect(state.wallDrawOrder.some((e) => e.lineIndex === 409)).toBe(true);
+    expect(state.wallDrawOrder.length).toBeGreaterThanOrEqual(65);
   });
 
   it('production subsector flats follow BSP DoSubsector visits at E1M1 window room', () => {

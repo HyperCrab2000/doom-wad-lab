@@ -53,6 +53,14 @@ vec3 radialLight(vec3 pos, vec3 color, float radius, float intensity, vec3 world
 }
 
 void main() {
+  if (parityColormap != 0) {
+    parityOutdoorSkyCeilingDiscard();
+    parityOutdoorSkyEastCourtyardWallDiscard();
+    parityEastStepWallMidLowerOnlyDiscard();
+    paritySpawnHangarLipMidDiscard();
+    paritySpawnBrown1BandDiscard();
+    paritySpawnBackWallBrown1Discard();
+  }
   vec2 sampleUv = vUv;
   if (parityColormap == 0) {
     vec3 N = normalize(vWorldNormal);

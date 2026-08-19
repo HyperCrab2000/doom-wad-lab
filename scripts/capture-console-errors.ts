@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer';
 
-const BASE_URL = process.env.TEST_URL ?? 'http://127.0.0.1:5173';
+const BASE_URL = process.env.TEST_URL ?? 'http://127.0.0.1:5150';
 const SMOKE_WAIT_MS = Number(process.env.SMOKE_WAIT_MS ?? 5000);
 
 async function main() {
@@ -10,10 +10,8 @@ async function main() {
 
   const browser = await puppeteer.launch({
     headless: true,
-    args:
-      process.env.CI === 'true'
-        ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        : [],
+    args: ['--no-sandbox', '--disable-setuid-sandbox', ...(process.env.CI === 'true' ? ['--disable-dev-shm-usage'] : [])],
+    channel: process.env.PUPPETEER_CHANNEL ?? 'chrome',
   });
   const page = await browser.newPage();
 

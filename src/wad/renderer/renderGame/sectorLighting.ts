@@ -156,6 +156,22 @@ export function getFloorLiquidDrawUniforms(floorFlatName: string): {
   };
 }
 
+export function getSectorLiquidDrawUniforms(sector: Sector): {
+  liquidColor: [number, number, number];
+  liquidStrength: number;
+  liquidEmissive: number;
+  glowColor: [number, number, number];
+} {
+  if (!sector.liquidKind) return getFloorLiquidDrawUniforms(sector.floorpic);
+  const entry = LIQUID_BY_KIND[sector.liquidKind];
+  return {
+    liquidColor: sector.liquidColor ?? entry.color,
+    liquidStrength: sector.liquidStrength ?? entry.strength,
+    liquidEmissive: entry.emissive,
+    glowColor: sector.glowColor ?? entry.color,
+  };
+}
+
 export function getThingLight(thing: Thing): ThingLight | null {
   const thingType = DOOM_THING_MAP_BY_ID[thing.type];
   if (!thingType?.sprite) return null;

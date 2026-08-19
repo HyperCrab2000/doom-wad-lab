@@ -1295,6 +1295,11 @@ input {
   display: none;
 }
 
+/* Keep WAD lump parse + R_Init bars visible while Classic/(s) is still loading. */
+.level-viewer--playing.level-viewer--loading .doom-loader {
+  display: block;
+}
+
 .game-stage {
   flex: 1;
   min-height: 0;
@@ -1783,6 +1788,96 @@ input {
   min-height: 0;
   width: 100%;
   height: 100%;
+}
+
+.doom-hud-layer {
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 22;
+}
+
+.doom-hud-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 56px;
+  overflow: visible;
+}
+
+.doom-hud {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.doom-hud-message {
+  position: absolute;
+  left: 50%;
+  bottom: 102px;
+  transform: translateX(-50%);
+  max-width: min(90%, 44rem);
+  padding: 0.35rem 0.65rem;
+  color: #f7e65a;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(247, 230, 90, 0.45);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.doom-hud-message[hidden] {
+  display: none;
+}
+
+.doom-patch-menu {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  pointer-events: auto;
+}
+
+.doom-patch-menu--active {
+  display: block;
+}
+
+.doom-patch-menu__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.doom-intermission {
+  position: absolute;
+  inset: 0;
+  z-index: 180;
+  display: none;
+  background: #000;
+  pointer-events: auto;
+}
+
+.doom-intermission--active {
+  display: block;
+}
+
+.doom-intermission__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .viewport-label-grid {

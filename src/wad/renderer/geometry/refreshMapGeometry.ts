@@ -12,10 +12,41 @@ import {
   rebuildWallDrawLists,
 } from '@/wad/renderer/geometry/geometryCache';
 import { mapToFlats } from '@/wad/renderer/geometry/mapToFlats';
+import { mapToSubsectorFlats } from '@/wad/renderer/geometry/mapToSubsectorFlats';
 import { mapToWalls, mapToWallsForLine } from '@/wad/renderer/geometry/mapToWalls';
 import { getLineIndicesForSectors } from '@/wad/renderer/geometry/sectorLineIndex';
 import { readWallFacingNormal } from '@/wad/renderer/geometry/wallFacingNormal';
 import { getLineSectorIndices } from '@/wad/renderer/utils/sectorVisibility';
+import { invalidateGzdoomRendererCaches } from '@/wad/renderer/gzdoom/gzdoomRenderer';
+import {
+  ensureRuntimeWallTextures,
+  wallTextureNamesFromBuffers,
+} from '@/wad/renderer/drawAssets/ensureRuntimeWallTextures';
+import type { Wad } from '@/wad/interfaces/Wad';
+import type { WadAssets } from '@/wad/renderer/drawAssets/drawWadAssets';
+
+export interface GeometryTextureContext {
+  wad: Wad;
+  wadAssets: WadAssets;
+  wallGlTextures: Record<string, WebGLTexture>;
+  useIndexTextures: boolean;
+}
+
+function syncWallGpuTextures(
+  gl: WebGL2RenderingContext,
+  buffers: MapBuffers,
+  textureContext?: GeometryTextureContext
+): void {
+  if (!textureContext) return;
+  ensureRuntimeWallTextures(
+    gl,
+    textureContext.wad,
+    textureContext.wadAssets,
+    textureContext.wallGlTextures,
+    wallTextureNamesFromBuffers(buffers.walls),
+    textureContext.useIndexTextures
+  );
+}
 
 function uploadBuffer(
   gl: WebGL2RenderingContext,
@@ -267,6 +298,26 @@ function syncFlatsForDirtySectors(
   buffers.sortedFlats = buildSortedFlats(buffers.flats);
 }
 
+/** BSP subsector flats are the Classic draw path — must move with door/lift sector heights. */
+function syncSubsectorFlatsForDirtySectors(
+  gl: WebGL2RenderingContext,
+  map: WadMap,
+  buffers: MapBuffers,
+  dirtySectors: ReadonlySet<number>
+): void {
+  const index = buffers.bspRenderIndex;
+  if (!index || buffers.subsectorFlats.length === 0) return;
+
+  const dirty = new Set(dirtySectors);
+  buffers.subsectorFlats = buffers.subsectorFlats.filter((flat) => !dirty.has(flat.sectorIndex));
+
+  for (const flat of mapToSubsectorFlats(map, index)) {
+    if (dirty.has(flat.sectorIndex)) {
+      buffers.subsectorFlats.push(createFlatBufferFromObject(gl, flat, map));
+    }
+  }
+}
+
 function refreshFull(
   gl: WebGL2RenderingContext,
   map: WadMap,
@@ -288,6 +339,7 @@ function refreshFull(
   const lists = rebuildWallDrawLists(buffers.walls);
   buffers.opaqueWalls = lists.opaqueWalls;
   buffers.transparentWalls = lists.transparentWalls;
+  buffers.geometryRevision = (buffers.geometryRevision ?? 0) + 1;
 }
 
 function refreshPartial(
@@ -296,7 +348,11 @@ function refreshPartial(
   texturesByName: Record<string, WallTexture>,
   buffers: MapBuffers,
   dirtySectors: ReadonlySet<number>,
-  options: { includeFlats?: boolean; extraLineIndices?: ReadonlySet<number> } = {}
+  options: {
+    includeFlats?: boolean;
+    extraLineIndices?: ReadonlySet<number>;
+    textureContext?: GeometryTextureContext;
+  } = {}
 ): boolean {
   const lineIndices = getLineIndicesForSectors(map, dirtySectors);
   if (options.extraLineIndices) {
@@ -318,11 +374,15 @@ function refreshPartial(
 
   if (options.includeFlats !== false) {
     syncFlatsForDirtySectors(gl, map, buffers, dirtySectors);
+    syncSubsectorFlatsForDirtySectors(gl, map, buffers, dirtySectors);
   }
 
   const lists = rebuildWallDrawLists(buffers.walls);
   buffers.opaqueWalls = lists.opaqueWalls;
   buffers.transparentWalls = lists.transparentWalls;
+  syncWallGpuTextures(gl, buffers, options.textureContext);
+  buffers.geometryRevision = (buffers.geometryRevision ?? 0) + 1;
+  invalidateGzdoomRendererCaches();
   return !missingRange;
 }
 
@@ -333,11 +393,13 @@ export function refreshDoorWallGeometry(
   texturesByName: Record<string, WallTexture>,
   buffers: MapBuffers,
   dirtySectors: ReadonlySet<number>,
-  extraLineIndices?: ReadonlySet<number>
+  extraLineIndices?: ReadonlySet<number>,
+  textureContext?: GeometryTextureContext
 ): GeometryRefreshResult {
   const partialOk = refreshPartial(gl, map, texturesByName, buffers, dirtySectors, {
     includeFlats: true,
     extraLineIndices,
+    textureContext,
   });
   if (partialOk) {
     return 'partial';

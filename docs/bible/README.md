@@ -45,7 +45,7 @@ How every lump in an IWAD/PWAD is discovered, decoded, and turned into in-memory
 
 **[→ Open the Chronicle](./chronicle/README.md)**
 
-Dated decision log, per-map deep dives (68 maps), and source module index — the *why* behind WAD parse, GZDoom gold, and Classic layer choices.
+Dated decision log, per-map deep dives (68 maps), source module index, and the [Classic Node/WebGL renderer conversion chronicle](./chronicle/classic-node-webgl-renderer-chronicle.md) — the *why* behind WAD parse, GZDoom gold, and Classic layer choices.
 
 ---
 

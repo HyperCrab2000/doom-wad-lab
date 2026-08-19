@@ -43,6 +43,8 @@ export interface MapBuffers {
     side0: { start: number; count: number };
     side1: { start: number; count: number };
   }>;
+  /** Bumped on every partial/full geometry upload so draw caches stay in sync. */
+  geometryRevision: number;
   thing: ThingBuffer;
 }
 
@@ -145,6 +147,7 @@ function uploadCpuGeometry(
     sortedFlats: buildSortedFlats(flatBuffers),
     wallRangesByLine,
     wallRangesByLineAndSide,
+    geometryRevision: 0,
     thing: createThing(gl),
   };
 }

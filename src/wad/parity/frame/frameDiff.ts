@@ -65,11 +65,9 @@ export function fullFrameRegion(imageWidth: number, imageHeight: number): FrameD
 
 /** GZDoom screenblocks 10: 3D view occupies top 168/200 of framebuffer. */
 export function gzdoomViewRegion(imageWidth: number, imageHeight: number): FrameDiffRegion {
-  const scale = Math.max(1, Math.floor(imageWidth / VANILLA_SCREEN_WIDTH));
-  const width = VANILLA_SCREEN_WIDTH * scale;
+  const width = imageWidth;
   const height = Math.round((imageHeight * VANILLA_3D_HEIGHT) / VANILLA_SCREEN_HEIGHT);
-  const offsetX = Math.round((imageWidth - width) / 2);
-  return { x: offsetX, y: 0, width, height };
+  return { x: 0, y: 0, width, height };
 }
 
 /** Vanilla playfield crop: 320×168 3D view, centered in a 320×200 frame (matches gameViewLayout). */
@@ -219,6 +217,33 @@ export function resizePlayfieldToVanilla(
   return { width: outW, height: outH, data: out };
 }
 
+/** Upscale vanilla 320×168 software playfield into GZDoom view pixels (inverse of resizePlayfieldToVanilla). */
+export function upscaleVanillaToGzdoomView(
+  data: Uint8ClampedArray,
+  viewWidth: number,
+  viewHeight: number,
+): Uint8ClampedArray {
+  const srcW = VANILLA_PLAYFIELD_WIDTH;
+  const srcH = VANILLA_PLAYFIELD_HEIGHT;
+  const out = new Uint8ClampedArray(viewWidth * viewHeight * 4);
+  for (let y = 0; y < viewHeight; y++) {
+    const sy = Math.min(srcH - 1, Math.floor((y * srcH + srcH / 2) / viewHeight));
+    for (let x = 0; x < viewWidth; x++) {
+      const sx = Math.min(
+        srcW - 1,
+        Math.floor((x * srcW + srcW / 2) / viewWidth),
+      );
+      const si = (sy * srcW + sx) * 4;
+      const di = (y * viewWidth + x) * 4;
+      out[di] = data[si]!;
+      out[di + 1] = data[si + 1]!;
+      out[di + 2] = data[si + 2]!;
+      out[di + 3] = data[si + 3]!;
+    }
+  }
+  return out;
+}
+
 function resolveFrameDiffLayout(
   leftW: number,
   leftH: number,
@@ -263,7 +288,7 @@ export async function diffPlayfieldPngFiles(
   const layout = resolveFrameDiffLayout(left.width, left.height, right.width, right.height, options.layout);
 
   if (layout === 'full-frame' || layout === 'gzdoom-view') {
-    if (left.width !== right.width || left.height !== right.height) {
+    if (layout === 'full-frame' && (left.width !== right.width || left.height !== right.height)) {
       throw new Error(`frame diff requires matching dimensions (${left.width}x${left.height} vs ${right.width}x${right.height})`);
     }
     const leftView = layout === 'gzdoom-view'

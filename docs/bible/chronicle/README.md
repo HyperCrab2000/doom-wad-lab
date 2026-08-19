@@ -21,6 +21,8 @@ This is the narrative companion to the technical WAD, GZDoom, and Classic Layer 
 
 | Entry | Summary |
 |-------|---------|
+| [2026-07 — Pure WebGL play; pure WASM engine (no Emscripten play)](./decisions/2026-07-pure-webgl-renderer-pure-wasm-engine.md) | Play pixels from TS/WebGL2; engine/menu/BSP in clang wasm32; Emscripten gold oracle only. |
+| [2026-07 — Classic Node/WebGL renderer conversion chronicle](./classic-node-webgl-renderer-chronicle.md) | Timeline of the difficult pure TypeScript/Node-parsed WebGL renderer effort: tested progress, failed assumptions, gameplay wiring, courtyard fixes, and remaining gaps. |
 | [2025-03-16 — Fork Andrew Lowndes doom WebGL](./decisions/2025-03-16-fork-andrew-lowndes-doom-webgl.md) | Chose Vite + React 19 + TypeScript over webpack alpha. Reason: HMR, modern tooli… |
 | [2025-03-17 — useDoomLoader hook extraction](./decisions/2025-03-17-usedoomloader-hook-extraction.md) | Monolithic loader was unmaintainable. Hook pattern enables LevelViewer + tests t… |
 | [2025-06 — doom-wad-core as canonical parser](./decisions/2025-06-doom-wad-core-as-canonical-parser.md) | Split WAD truth into separate package so GZSTATE export and lab renderer share o… |

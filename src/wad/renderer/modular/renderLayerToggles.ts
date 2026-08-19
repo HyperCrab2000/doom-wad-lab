@@ -1,6 +1,11 @@
 /** Wireframe overlay mode (mutually exclusive). */
 export type WireframeMode = 'off' | 'bsp' | 'mesh' | 'sight';
 
+import {
+  mergeClassicParityLayerToggles,
+  readClassicGzdoomParityMode,
+} from '@/wad/parity/classicGzdoomParity';
+
 /** Independent render layers for Classic + Path Trace. */
 export interface RenderLayerToggles {
   /** Mutually exclusive wireframe visibility (radio in UI). */
@@ -90,14 +95,19 @@ function migrateStoredToggles(parsed: Partial<RenderLayerToggles> & LegacyRender
   };
 }
 
-export function readStoredRenderLayerToggles(): RenderLayerToggles {
+export function readStoredRenderLayerToggles(backend?: 'classic' | 'gzdoom-s-wasm'): RenderLayerToggles {
   if (typeof window === 'undefined') return { ...DEFAULT_RENDER_LAYER_TOGGLES };
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem('doom-render-layers-v4');
-    if (!raw) return { ...DEFAULT_RENDER_LAYER_TOGGLES };
-    return sanitizeRenderLayerToggles(
-      migrateStoredToggles(JSON.parse(raw) as Partial<RenderLayerToggles> & LegacyRenderLayerToggles),
-    );
+    const stored = raw
+      ? sanitizeRenderLayerToggles(
+          migrateStoredToggles(JSON.parse(raw) as Partial<RenderLayerToggles> & LegacyRenderLayerToggles),
+        )
+      : { ...DEFAULT_RENDER_LAYER_TOGGLES };
+    if (backend === 'classic' && readClassicGzdoomParityMode()) {
+      return mergeClassicParityLayerToggles(stored, true);
+    }
+    return stored;
   } catch {
     return { ...DEFAULT_RENDER_LAYER_TOGGLES };
   }
@@ -114,13 +124,49 @@ export function sanitizeRenderLayerToggles(toggles: RenderLayerToggles): RenderL
   // Floors/ceilings without walls reads as floating shards in a black void — common accidental toggle.
   const missingWallsWithSolids =
     !toggles.solidWalls && (toggles.solidFloors || toggles.solidCeilings);
-  if (!missingWallsWithSolids) return toggles;
+  if (missingWallsWithSolids) {
+    return {
+      ...toggles,
+      solidWalls: true,
+      wallTextures: toggles.wallTextures || true,
+    };
+  }
 
-  return {
-    ...toggles,
-    solidWalls: true,
-    wallTextures: toggles.wallTextures || true,
-  };
+  // Floors without sky or ceilings reads as E1M1 spawn void (black upper half, flat floor).
+  const missingSkyShellWithFloors =
+    toggles.solidFloors && !toggles.sky && !toggles.solidCeilings;
+  if (missingSkyShellWithFloors) {
+    return {
+      ...toggles,
+      sky: true,
+      solidCeilings: true,
+      ceilingTextures: toggles.ceilingTextures || true,
+    };
+  }
+
+  // Walls without sky/ceilings reads as sparse pillars in a black void (common layer-panel mistake).
+  const missingSkyShellWithWalls =
+    toggles.solidWalls && !toggles.sky && !toggles.solidCeilings;
+  if (missingSkyShellWithWalls) {
+    return {
+      ...toggles,
+      sky: true,
+      solidCeilings: true,
+      ceilingTextures: toggles.ceilingTextures || true,
+    };
+  }
+
+  // Any play view with walls/floors but sky off reads as black void at E1M1 spawn.
+  if (toggles.wireframeMode === 'off' && !toggles.sky && (toggles.solidWalls || toggles.solidFloors)) {
+    return {
+      ...toggles,
+      sky: true,
+      solidCeilings: toggles.solidCeilings || true,
+      ceilingTextures: toggles.ceilingTextures || true,
+    };
+  }
+
+  return toggles;
 }
 
 export function persistRenderLayerToggles(toggles: RenderLayerToggles): void {

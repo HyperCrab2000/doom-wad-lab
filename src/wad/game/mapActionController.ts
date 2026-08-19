@@ -9,6 +9,7 @@ import { FloorMoverSystem } from './floorMoverSystem';
 import { LightSystem } from './lightSystem';
 import { MovingFloorSystem } from './movingFloorSystem';
 import { ScrollSystem } from './scrollSystem';
+import { SectorLightingThinkerSystem } from './sectorLightingThinkers';
 import { SectorSpecialSystem } from './sectorSpecialSystem';
 import { flipSwitchLineTextures, lineHasSwitchTexture } from './switchTextures';
 import { isUseKeyWalkSpecial } from './lineSpecialActivation';
@@ -43,6 +44,7 @@ export class MapActionController {
   readonly movingFloors: MovingFloorSystem;
   readonly scrolls: ScrollSystem;
   readonly sectorSpecials: SectorSpecialSystem;
+  readonly sectorLightingThinkers: SectorLightingThinkerSystem;
   private readonly switchedLines = new Set<number>();
 
   constructor(
@@ -60,6 +62,7 @@ export class MapActionController {
     this.movingFloors = new MovingFloorSystem(map);
     this.scrolls = new ScrollSystem(map);
     this.sectorSpecials = new SectorSpecialSystem(map);
+    this.sectorLightingThinkers = new SectorLightingThinkerSystem(map);
   }
 
   isDirty(): boolean {
@@ -70,7 +73,8 @@ export class MapActionController {
       this.lights.isDirty() ||
       this.movingFloors.isDirty() ||
       this.scrolls.isDirty() ||
-      this.sectorSpecials.isDirty()
+      this.sectorSpecials.isDirty() ||
+      this.sectorLightingThinkers.isDirty()
     );
   }
 
@@ -82,6 +86,7 @@ export class MapActionController {
     this.movingFloors.clearDirty();
     this.scrolls.clearDirty();
     this.sectorSpecials.clearDirty();
+    this.sectorLightingThinkers.clearDirty();
   }
 
   getDirtySectors(): ReadonlySet<number> {
@@ -92,6 +97,7 @@ export class MapActionController {
     for (const i of this.lights.getDirtySectors()) merged.add(i);
     for (const i of this.movingFloors.getDirtySectors()) merged.add(i);
     for (const i of this.sectorSpecials.getDirtySectors()) merged.add(i);
+    for (const i of this.sectorLightingThinkers.getDirtySectors()) merged.add(i);
     return merged;
   }
 
@@ -102,6 +108,16 @@ export class MapActionController {
       this.crushers.getActiveCrusherCount() +
       this.movingFloors.getActiveCount()
     );
+  }
+
+  /** Sectors with in-flight door/lift/crusher motion — geometry must refresh even if dirty was cleared. */
+  getActiveMoverSectors(): ReadonlySet<number> {
+    const merged = new Set<number>();
+    for (const i of this.doors.getActiveSectorIndices()) merged.add(i);
+    for (const i of this.floors.getActiveSectorIndices()) merged.add(i);
+    for (const i of this.crushers.getActiveSectorIndices()) merged.add(i);
+    for (const i of this.movingFloors.getActiveSectorIndices()) merged.add(i);
+    return merged;
   }
 
   isExitRequested(): boolean {
@@ -239,6 +255,7 @@ export class MapActionController {
     sound: 'door' | 'blaze' | 'lift' | 'mover';
   } {
     this.scrolls.tick(dt);
+    this.sectorLightingThinkers.tick(dt);
     this.sectorSpecials.tick(dt);
     const movingFloorMotion = this.movingFloors.tick(dt);
     const doorMotion = this.doors.tick(dt);

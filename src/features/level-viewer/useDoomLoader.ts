@@ -35,7 +35,6 @@ import {
   startGzdoomSPlay,
   stopGzdoomSPlay,
 } from '@/wad/renderer/gzrender-v2/gzdoom/gzdoomSViewerRuntime';
-import { resetGzdoomSHostCaches } from '@/gzdoom-oracle/gzdoomSWasmHost';
 import {
   CLASSIC_MAP_LOAD_TIMEOUT_MS,
   GZDOOM_WASM_MAP_LOAD_TIMEOUT_MS,
@@ -46,6 +45,15 @@ import {
   type GzdoomLoadProgress,
 } from '@/features/level-viewer/gzdoomPlayLoadProgress';
 import type { RenderLayerToggles } from '@/wad/renderer/modular/renderLayerToggles';
+
+function resolveSelectedMapFromWad(wadMaps: Wad['maps']): string {
+  const names = Object.keys(wadMaps);
+  if (typeof window !== 'undefined') {
+    const fromUrl = new URLSearchParams(window.location.search).get('map');
+    if (fromUrl && wadMaps[fromUrl]) return fromUrl;
+  }
+  return names[0] ?? '';
+}
 import {
   createErrorStatus,
   createGzdoomLaunchingStatus,
@@ -61,6 +69,7 @@ import {
   createReadingStatus,
   createReadyStatus,
   initialWadLoadStatus,
+  tickLumpParseProgress,
 } from './wadLoaderStatus';
 
 interface GameRenderer {
@@ -150,14 +159,19 @@ export const useDoomLoader = ({
   useEffect(() => {
     if (prevRenderBackendRef.current === renderBackend) return;
     prevRenderBackendRef.current = renderBackend;
-    stopGzdoomHostedPlay();
-    stopGzdoomSPlay();
-    resetGzdoomSHostCaches();
+    classicLoadGenRef.current += 1;
+    mapLoadGenRef.current += 1;
+    disposeGzdoomViewerRuntime();
+    disposeGzdoomSRuntime();
     classicReadyKeyRef.current = '';
     setClassicPlayState('idle');
     setMapLoadState('idle');
     setGzdoomLoadProgress(INITIAL_GZDOOM_LOAD_PROGRESS);
-  }, [renderBackend]);
+    // Classic / GZDoom (s) parse lumps in Node — surface progress immediately on engine select.
+    if (needsNodeWadLumpParse(renderBackend) && wadPath) {
+      setStatus(createOpeningStatus(wadPath));
+    }
+  }, [renderBackend, wadPath]);
 
   const mapNames = useMemo(() => {
     if (renderBackend === 'gzdoom-wasm') return gzdoomMapNames;
@@ -208,9 +222,18 @@ export const useDoomLoader = ({
         const backendChanged = lastWadParseBackendRef.current !== renderBackend;
         const cached = backendChanged ? null : getCachedWad(cacheKey);
         if (cached) {
+          // Same-backend reload: still animate lump parse so Classic visibly runs doom-wad-core.
+          setStatus(createOpeningStatus(wadPath));
+          await new Promise((r) => setTimeout(r, 120));
+          if (cancelled) return;
+          setStatus((prev) => createReadingStatus(prev));
+          await new Promise((r) => setTimeout(r, 280));
+          if (cancelled) return;
+          setStatus((prev) => tickLumpParseProgress(prev, 0.62));
+          await new Promise((r) => setTimeout(r, 220));
           if (cancelled) return;
           setWad(cached.wad);
-          setSelectedMap(Object.keys(cached.wad.maps)[0] ?? '');
+          setSelectedMap(resolveSelectedMapFromWad(cached.wad.maps));
           setStatus(createReadyStatus(cached.wad, true, cached.loadedAt));
           lastWadParseBackendRef.current = renderBackend;
           return;
@@ -223,15 +246,26 @@ export const useDoomLoader = ({
         }
         setStatus((prev) => createReadingStatus(prev));
 
-        const wadData =
-          modPaths.length > 0
-            ? await fetchWadStack(wadPath, [...modPaths])
-            : await fetchWad(wadPath);
+        let parseProgress = 0.2;
+        const parseTimer = window.setInterval(() => {
+          parseProgress = Math.min(0.92, parseProgress + 0.08);
+          setStatus((prev) => tickLumpParseProgress(prev, parseProgress));
+        }, 140);
+
+        let wadData: Awaited<ReturnType<typeof fetchWad>>;
+        try {
+          wadData =
+            modPaths.length > 0
+              ? await fetchWadStack(wadPath, [...modPaths])
+              : await fetchWad(wadPath);
+        } finally {
+          window.clearInterval(parseTimer);
+        }
         const cachedWad = setCachedWad(cacheKey, wadData);
         if (cancelled) return;
 
         setWad(wadData);
-        setSelectedMap(Object.keys(wadData.maps)[0] ?? '');
+        setSelectedMap(resolveSelectedMapFromWad(wadData.maps));
         setStatus(createReadyStatus(wadData, false, cachedWad.loadedAt));
         lastWadParseBackendRef.current = renderBackend;
       } catch (error) {

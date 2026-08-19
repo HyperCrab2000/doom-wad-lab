@@ -30,6 +30,33 @@ Open the dev server URL. Two modes:
 | **Level Viewer** | Load a WAD, pick a map, walk around in WebGL2 |
 | **Voxel Viewer** | Preview Voxel Doom `.kvx` models (Three.js) |
 
+## Release packages
+
+Versioned release archives are built from `package.json`:
+
+```sh
+npm run package:release
+```
+
+The command runs the production build, writes `dist/release.json`, and creates
+`releases/doom-wad-lab-v<version>+<sha>.tgz` with a matching `.sha256` file.
+GitHub Actions publishes a real GitHub Release with generated notes and those
+assets on `v*` tags. GitLab CI publishes a GitLab Release for tags and attaches
+the same archive/checksum plus deployment notes.
+
+### Release documentation
+
+Detailed per-version notes live in [**docs/releases/**](./docs/releases/README.md).
+Regenerate them any time with:
+
+```sh
+npm run release:backfill
+```
+
+Before tagging a new version, append an entry to
+`tools/release/version-manifest.json`, regenerate docs, then push `vX.Y.Z`.
+See `.cursor/rules/release-documentation.mdc` for the full checklist.
+
 ## Documentation
 
 **Full technical docs:** [**docs/README.md**](./docs/README.md)
@@ -42,6 +69,7 @@ Open the dev server URL. Two modes:
 | [**WAD Bible**](./docs/bible/wad/README.md) | Every lump: container format, map records, palettes, sprites, switches, line specials, **all 68 stock maps by episode** |
 | [**Classic Layer Bible**](./docs/bible/classic-layers/README.md) | Layers panel → Node WebGL2 pipeline, live toggles, per-layer tests |
 | [**GZDoom Renderer Bible**](./docs/bible/gzdoom/README.md) | Vertices → BSP → walls → flats → sky → lights → sprites → GLES/WASM gold corpus |
+| [**Classic Node/WebGL Renderer Chronicle**](./docs/bible/chronicle/classic-node-webgl-renderer-chronicle.md) | Dated progress log for the difficult pure Classic renderer conversion: verified wins, failed attempts, and remaining gaps |
 
 | Guide | Topic |
 |-------|--------|

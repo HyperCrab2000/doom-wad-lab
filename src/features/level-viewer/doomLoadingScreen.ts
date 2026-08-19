@@ -88,6 +88,32 @@ function drawStcfnGlyphs(
   }
 }
 
+/** STCFN menu row (supports multi-word labels; STCFN has no space glyph). Returns row height. */
+export function drawMenuStcfnLabel(
+  ctx: CanvasRenderingContext2D,
+  wad: Wad,
+  text: string,
+  leftX: number,
+  topY: number,
+  scale: number
+): number {
+  const spacing = 1 * scale;
+  const wordGap = 3 * scale;
+  const words = splitStcfnWords(text.toUpperCase());
+  let x = leftX;
+  let rowHeight = 0;
+
+  for (const word of words) {
+    const { glyphs, totalWidth, maxHeight } = collectStcfnGlyphs(wad, word, scale);
+    if (glyphs.length === 0) continue;
+    rowHeight = Math.max(rowHeight, maxHeight);
+    drawStcfnGlyphs(ctx, glyphs, x, topY + maxHeight, spacing);
+    x += totalWidth + wordGap;
+  }
+
+  return rowHeight || scale * 8;
+}
+
 function drawStcfnText(
   ctx: CanvasRenderingContext2D,
   wad: Wad,

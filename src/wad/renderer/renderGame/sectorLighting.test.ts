@@ -10,6 +10,7 @@ import {
   getFlatFogAndGlow,
   getFloorLiquidDrawUniforms,
   getLiquidSurface,
+  getSectorLiquidDrawUniforms,
   getSectorVisibilityDistance,
   getTextureSurfaceGlow,
   getThingEmissiveUniforms,
@@ -93,6 +94,20 @@ describe('sector lighting heuristics', () => {
     expect(water.liquidColor[2]).toBeLessThan(0.5);
     expect(slime.liquidEmissive).toBeGreaterThan(0);
     expect(lava.liquidEmissive).toBeGreaterThan(0);
+  });
+
+  it('uses sector liquid metadata for ambiguous floor textures', () => {
+    const sector = makeSector();
+    sector.floorpic = 'FLOOR7_1';
+    sector.liquidKind = 'slime';
+    sector.liquidColor = [0.35, 0.55, 0.2];
+    sector.liquidStrength = 0.7;
+
+    const uniforms = getSectorLiquidDrawUniforms(sector);
+
+    expect(uniforms.liquidStrength).toBe(0.7);
+    expect(uniforms.liquidColor).toEqual([0.35, 0.55, 0.2]);
+    expect(uniforms.liquidEmissive).toBeGreaterThan(0);
   });
 
   it('creates radial point lights from lamp things', () => {

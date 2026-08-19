@@ -74,6 +74,20 @@ function propagateAnimatedHeightRelief(
   }
 }
 
+/** No POM / voxel height maps — GZDoom parity Classic path. */
+export function createEmptyHeightTextureSet(gl: WebGL2RenderingContext): HeightTextureSet {
+  const fallback = createSolidHeightTexture(gl, 128);
+  return {
+    walls: Object.create(null),
+    flats: Object.create(null),
+    fallback,
+    loadedWalls: new Set<string>(),
+    loadedFlats: new Set<string>(),
+    reliefWalls: new Set<string>(),
+    reliefFlats: new Set<string>(),
+  };
+}
+
 export async function createHeightTextureSet(
   gl: WebGL2RenderingContext,
   wallNames: string[],

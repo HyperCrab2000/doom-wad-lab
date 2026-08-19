@@ -6,6 +6,10 @@ import {
 /** URL flag for Stage 2 capture: GZDoom view layout + colormap + 90° HFOV. */
 export const FRAME_PARITY_QUERY = 'frameParity';
 export const SOFTWARE_PARITY_QUERY = 'softwareParity';
+export const SPAWN_LOCK_QUERY = 'spawnLock';
+
+/** GZDoom gold spawn pitch (radians) — E1M1 ref.png camera tilt. */
+export const FROZEN_GOLD_PARITY_PITCH = -0.16;
 
 export function readSoftwareParityModeFromSearch(search: string): boolean {
   return new URLSearchParams(search).get(SOFTWARE_PARITY_QUERY) === '1';
@@ -33,6 +37,15 @@ export function readFrameParityModeFromLocation(loc?: Pick<Location, 'search'>):
   if (readFrameParityInjectedFlag()) return true;
   const search = loc?.search ?? (typeof globalThis.location !== 'undefined' ? globalThis.location.search : '');
   return readFrameParityModeFromSearch(search);
+}
+
+export function readSpawnLockFromSearch(search: string): boolean {
+  return new URLSearchParams(search).get(SPAWN_LOCK_QUERY) === '1';
+}
+
+export function readSpawnLockFromLocation(loc?: Pick<Location, 'search'>): boolean {
+  const search = loc?.search ?? (typeof globalThis.location !== 'undefined' ? globalThis.location.search : '');
+  return readSpawnLockFromSearch(search) || readFrameParityModeFromSearch(search);
 }
 
 /** GZDoom `fov` CVAR: horizontal degrees across view width (default 90). */

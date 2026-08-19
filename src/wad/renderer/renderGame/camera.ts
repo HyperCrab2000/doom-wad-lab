@@ -57,11 +57,11 @@ export function setupCamera(gl: WebGL2RenderingContext, canvas: HTMLCanvasElemen
   };
 
   const resizeScene = () => {
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    // Playfield viewport is bound per frame in drawScene; do not clobber glY here.
     mat4.perspective(
       projectionMatrix,
       (camera.fov / 180) * Math.PI,
-      gl.canvas.width / gl.canvas.height,
+      gl.canvas.width / Math.max(1, gl.canvas.height),
       camera.near,
       camera.far
     );

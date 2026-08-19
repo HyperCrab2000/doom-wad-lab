@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { LevelStatsSnapshot } from '@/wad/game/levelStats';
 import { percent } from '@/wad/game/levelStats';
-import { drawDoomTransitionScreen, drawStcfnTextCentered } from './doomLoadingScreen';
+import { drawDoomLoadingScreen, drawStcfnTextCentered } from './doomLoadingScreen';
 
 const COUNT_UP_MS = 1400;
 const AUTO_ADVANCE_MS = 6500;
@@ -51,7 +51,7 @@ export const DoomIntermission: React.FC<{
         canvas.height = h;
       }
 
-      drawDoomTransitionScreen(canvas, wad, { segments: ['FINISHED'], dots: 0 });
+      drawDoomLoadingScreen(canvas, wad, 'FINISHED');
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 

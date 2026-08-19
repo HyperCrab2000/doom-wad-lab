@@ -2,12 +2,15 @@ import { mat4 } from 'gl-matrix';
 import type { ShaderProgram } from 'apl-easy-gl';
 
 import { PSPRITE_SHADE_OFFSET } from '@/wad/parity/frame/gzdoomColormap';
-import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
+import { colormapSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import type { Sector } from '@/wad/interfaces/Sector';
 import type { GameViewLayout } from '@/wad/renderer/renderGame/gameViewLayout';
 
 /** Idle pistol frame for parity spawn (`PISG` frame `A`, index 0). */
 const PSPRITE_TEXTURE = 'PISGA0';
+const PSPRITE_WIDTH = 57;
+const PSPRITE_HEIGHT = 62;
+const DOOM_SCREEN_WIDTH = 320;
 
 let pspriteBuffers: {
   position: WebGLBuffer;
@@ -19,12 +22,7 @@ let pspriteBuffers: {
 function ensurePspriteBuffers(gl: WebGL2RenderingContext) {
   if (pspriteBuffers) return pspriteBuffers;
 
-  const positions = new Float32Array([
-    -0.55, -1, 0,
-    0.55, -1, 0,
-    -0.55, -0.35, 0,
-    0.55, -0.35, 0,
-  ]);
+  const positions = new Float32Array(12);
   const uvs = new Float32Array([
     0, 1,
     1, 1,
@@ -54,6 +52,26 @@ function ensurePspriteBuffers(gl: WebGL2RenderingContext) {
   return pspriteBuffers;
 }
 
+function updatePspritePositionBuffer(
+  gl: WebGL2RenderingContext,
+  buffers: NonNullable<typeof pspriteBuffers>,
+  layout: GameViewLayout
+): void {
+  const pixelScale = layout.width / DOOM_SCREEN_WIDTH;
+  const halfWidthNdc = (PSPRITE_WIDTH * pixelScale) / layout.width;
+  const heightNdc = (PSPRITE_HEIGHT * pixelScale * 2) / layout.height;
+  const bottom = -1;
+  const top = Math.min(1, bottom + heightNdc);
+  const positions = new Float32Array([
+    -halfWidthNdc, bottom, 0,
+    halfWidthNdc, bottom, 0,
+    -halfWidthNdc, top, 0,
+    halfWidthNdc, top, 0,
+  ]);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+  gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+}
+
 export function drawParityPsprite(params: {
   gl: WebGL2RenderingContext;
   thingShader: ShaderProgram;
@@ -63,7 +81,7 @@ export function drawParityPsprite(params: {
   timeSeconds: number;
   colormapLut: WebGLTexture;
 }): boolean {
-  const { gl, thingShader, textures, sector, timeSeconds, colormapLut } = params;
+  const { gl, thingShader, textures, sector, timeSeconds, colormapLut, layout } = params;
   const tex =
     textures[PSPRITE_TEXTURE] ??
     textures[PSPRITE_TEXTURE.toUpperCase()] ??
@@ -71,6 +89,7 @@ export function drawParityPsprite(params: {
   if (!tex || !sector) return false;
 
   const buffers = ensurePspriteBuffers(gl);
+  updatePspritePositionBuffer(gl, buffers, layout);
   const mvp = mat4.create();
   mat4.ortho(mvp, -1, 1, -1, 1, -1, 1);
 
@@ -105,7 +124,7 @@ export function drawParityPsprite(params: {
     emissiveTopExtent: 0,
     emissiveFullColumn: 0,
     emissiveStrength: 0,
-    sectorLightLevel: getEffectiveSectorLightLevel(sector, timeSeconds),
+    sectorLightLevel: colormapSectorLightLevel(sector),
   });
 
   const posLoc = gl.getAttribLocation(thingShader.program, 'aPosition');

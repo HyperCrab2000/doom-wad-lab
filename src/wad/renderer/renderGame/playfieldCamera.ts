@@ -70,3 +70,22 @@ export function clearPathTraceLetterbox(gl: WebGL2RenderingContext): void {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 }
+
+/** GZDoom screenblocks-10 band below the 3D view (640×480 → bottom 77px). */
+export function clearGzdoomStatusBarBand(
+  gl: WebGL2RenderingContext,
+  layout: GameViewLayout,
+): void {
+  // layout.glY is the playfield viewport origin; pixels [0, glY) are the status band.
+  const bandHeight = layout.glY;
+  if (bandHeight <= 0) return;
+  gl.disable(gl.DEPTH_TEST);
+  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(0, 0, gl.canvas.width, bandHeight);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.disable(gl.SCISSOR_TEST);
+  gl.enable(gl.DEPTH_TEST);
+  bindPlayfieldViewport(gl, layout);
+}

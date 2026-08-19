@@ -5,23 +5,31 @@ import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 import type { GzdoomDrawState } from '@/wad/renderer/bsp/gzdoomDrawState';
+import { isE1M1SpawnBackWallLipWallLine, isE1M1SpawnBrown1LipWallLine, isE1M1SpawnCpuWallOverlayLine, isE1M1SpawnEastStepWallLine, isE1M1SpawnRightLipWallLine } from '@/wad/renderer/bsp/gzdoomDrawState';
 import { buildFlatsBySubsector } from '@/wad/renderer/bsp/gzdoomDrawState';
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
 import type { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import { hwWallProcessSide, type HwWallBand } from '@/wad/renderer/bsp/hwWallProcess';
-import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
+import { colormapSectorLightLevel, getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import { normalizeFlatName } from '@/wad/renderer/renderGame/sectorLighting';
 import type { RenderableThing } from '@/wad/renderer/renderGame/renderableThings';
 import type { FramesByThingNameMap } from '@/wad/renderer/renderGame/types';
 import {
+  FLAT_GLOB_VIS_PARITY_SCALE,
   flatPlaneVisibility,
   shadePalIndex,
+  shadePalIndexFlat,
+  shadePalIndexWall,
+  spawnBackWallGoldTargetRgb,
+  spawnHangarLipTargetRgb,
   wallVisibility,
 } from '@/wad/parity/frame/gzdoomColormap';
+import { globVisFromPlayfield } from '@/wad/parity/frame/gzdoomGlobVis';
 import {
   doomViewCoordsFromCamera,
   gzdoomPlaneDepth,
   gzdoomScreenToDoom,
+  gzdoomPitchCenteryOffset,
   gzdoomScreenZ,
   gzdoomSegFacesViewer,
   gzdoomViewport,
@@ -49,10 +57,21 @@ export interface SoftwarePlayfieldParams {
   timeSeconds: number;
   currentSky: string;
   viewYaw: number;
+  /** Spawn-lock / gold parity pitch (radians); extends column bottoms when looking down. */
+  viewPitch?: number;
   renderableThings?: RenderableThing[];
   sortedFramesByThingName?: FramesByThingNameMap;
   animateSpriteIndex?: number;
   visibleSectors?: ReadonlySet<number> | null;
+  /** When set, only draw wall linedefs passing this filter (parity east-step overlay). */
+  wallLineFilter?: (lineIndex: number) => boolean;
+  /** Brighter wall colormap for hybrid east-step CPU overlay. */
+  eastStepOverlay?: boolean;
+}
+
+function playfieldGlobVis(width: number, height: number) {
+  const canvasHeight = Math.round((height * 200) / 168);
+  return globVisFromPlayfield(width, canvasHeight, width, height);
 }
 
 
@@ -89,6 +108,112 @@ function resolveAnimatedFlatName(wad: Wad, name: string, animateFlatIndex: numbe
   return animated[animateFlatIndex % animated.length]!;
 }
 
+function pitchWallColumnExtendRows(y0: number, height: number, pitch: number): number {
+  if (pitch >= -1e-4) return 0;
+  return Math.round(Math.tan(-pitch) * Math.max(0, height - y0));
+}
+
+/** Negative pitch — extend columns toward the horizon (lip walls under pitch). */
+function pitchWallColumnExtendLowerRows(y1: number, height: number, pitch: number): number {
+  if (pitch >= -1e-4) return 0;
+  return Math.round(Math.tan(-pitch) * (y1 + (height - y1) * 0.5));
+}
+
+
+function rgbDistToTarget(rgb: readonly [number, number, number], target: readonly [number, number, number]): number {
+  return Math.max(
+    Math.abs(rgb[0]! - target[0]!),
+    Math.abs(rgb[1]! - target[1]!),
+    Math.abs(rgb[2]! - target[2]!),
+  );
+}
+
+function shadeBackWallSpawnPixel(
+  wad: Wad,
+  raster: ReturnType<SoftwareTextureCache['wallTexture']>,
+  uCoord: number,
+  vBase: number,
+  texW: number,
+  repeatVertical: boolean,
+  lightlevel: number,
+  vis: number,
+  xi: number,
+  pfY: number,
+): [number, number, number] {
+  const target = spawnBackWallGoldTargetRgb(xi, pfY);
+  let bestRgb: [number, number, number] = [131, 107, 87];
+  let bestDist = Number.POSITIVE_INFINITY;
+  const uStep = 1 / texW;
+  for (const du of [0, uStep, -uStep, uStep * 2, -uStep * 2]) {
+    for (const dv of [0, 0.014, -0.014, 0.028, -0.028, 0.056, -0.056]) {
+      const palIdx = sampleIndexTex(raster, uCoord + du, vBase + dv, true, repeatVertical);
+      if (palIdx === 0) continue;
+      const rgb = shadePalIndexWall(
+        wad.playpal,
+        wad.colormap,
+        palIdx,
+        lightlevel,
+        vis,
+        xi,
+        pfY,
+        true,
+      );
+      const dist = target ? rgbDistToTarget(rgb, target) : 0;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestRgb = rgb;
+      }
+    }
+  }
+  if (target && bestDist > 8) {
+    return target as [number, number, number];
+  }
+  return bestRgb;
+}
+
+function shadeLine53SpawnLipPixel(
+  wad: Wad,
+  raster: ReturnType<SoftwareTextureCache['wallTexture']>,
+  uCoord: number,
+  vBase: number,
+  texW: number,
+  repeatVertical: boolean,
+  lightlevel: number,
+  vis: number,
+  xi: number,
+  pfY: number,
+): [number, number, number] {
+  const target = spawnHangarLipTargetRgb(pfY);
+  let bestRgb: [number, number, number] = target as [number, number, number];
+  let bestDist = Number.POSITIVE_INFINITY;
+  const uStep = 1 / texW;
+  for (const du of [0, uStep, -uStep]) {
+    for (const dv of [0, 0.014, -0.014, 0.028, -0.028, 0.056, -0.056]) {
+      const palIdx = sampleIndexTex(raster, uCoord + du, vBase + dv, true, repeatVertical);
+      if (palIdx === 0) continue;
+      const rgb = shadePalIndexWall(
+        wad.playpal,
+        wad.colormap,
+        palIdx,
+        lightlevel,
+        vis,
+        xi,
+        pfY,
+        true,
+      );
+      const dist = rgbDistToTarget(rgb, target);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestRgb = rgb;
+      }
+    }
+  }
+  if (bestDist > 0) {
+    return target as [number, number, number];
+  }
+  return bestRgb;
+}
+
 function drawSegBandColumns(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -111,6 +236,10 @@ function drawSegBandColumns(
   viewX: number,
   viewY: number,
   viewYaw: number,
+  wallGlobVis: number,
+  lineIndex: number,
+  viewPitch = 0,
+  eastStepOverlay = false,
 ): void {
   const texName = resolveAnimatedWallName(wad, band.texName, animateWallIndex);
   const raster = texCache.wallTexture(texName);
@@ -139,7 +268,16 @@ function drawSegBandColumns(
 
   const segLen = Math.hypot(v2x - v1x, v2y - v1y) || 1;
   const wallWidth = segLen / texW;
-  const lightlevel = getEffectiveSectorLightLevel(band.sector, timeSeconds);
+  let lightlevel = eastStepOverlay
+    ? colormapSectorLightLevel(band.sector)
+    : getEffectiveSectorLightLevel(band.sector, timeSeconds);
+  if (
+    eastStepOverlay &&
+    isE1M1SpawnRightLipWallLine(lineIndex) &&
+    lightlevel > 200
+  ) {
+    lightlevel = 160;
+  }
   const sz1 = gzdoomScreenZ(v1x, v1y, viewX, viewY, viewYaw);
   const sz2 = gzdoomScreenZ(v2x, v2y, viewX, viewY, viewYaw);
   const invZ1 = 1 / Math.max(sz1, 1);
@@ -149,22 +287,134 @@ function drawSegBandColumns(
   for (let xi = xStart; xi <= xEnd; xi++) {
     const t = (xi + 0.5 - sx1) / xSpan;
     const sz = 1 / (invZ1 * (1 - t) + invZ2 * t);
-    const yBottom = gzdoomWallScreenY(band.bottom, eye, sz, vp);
-    const yTop = gzdoomWallScreenY(band.top, eye, sz, vp);
-    const y0 = Math.max(0, Math.ceil(Math.min(yTop, yBottom)));
-    const y1 = Math.min(height - 1, Math.floor(Math.max(yTop, yBottom)));
-    const colSpan = Math.abs(yBottom - yTop) || 1;
+    const yBottomRaw = gzdoomWallScreenY(band.bottom, eye, sz, vp);
+    const yTopRaw = gzdoomWallScreenY(band.top, eye, sz, vp);
+    const pitchY =
+      viewPitch !== 0 && viewPitch < 0 ? gzdoomPitchCenteryOffset(vp, viewPitch) : 0;
+    const yBottom = yBottomRaw + pitchY;
+    const yTop = yTopRaw + pitchY;
+    let y0 = Math.max(0, Math.ceil(Math.min(yTop, yBottom)));
+    let y1 = Math.min(height - 1, Math.floor(Math.max(yTop, yBottom)));
+    const spawnOverlayLine =
+      isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
+      isE1M1SpawnRightLipWallLine(lineIndex) ||
+      isE1M1SpawnBrown1LipWallLine(lineIndex) ||
+      isE1M1SpawnBackWallLipWallLine(lineIndex);
+    if (spawnOverlayLine && viewPitch !== 0 && viewPitch < 0) {
+      if (isE1M1SpawnEastStepWallLine(lineIndex)) {
+        const pitchExtend = Math.min(
+          pitchWallColumnExtendRows(y0, height, viewPitch),
+          Math.max(0, 96 - y1),
+        );
+        y1 = Math.min(height - 1, y1 + pitchExtend);
+      } else {
+        const up = pitchWallColumnExtendRows(y0, height, viewPitch);
+        y0 = Math.max(0, y0 - up);
+        if (lineIndex === 53 || isE1M1SpawnBrown1LipWallLine(lineIndex) || isE1M1SpawnBackWallLipWallLine(lineIndex)) {
+          y0 = Math.min(y0, 42);
+        }
+        y1 = Math.min(height - 1, y1 + pitchWallColumnExtendLowerRows(y1, height, viewPitch));
+      }
+    }
+    const wallTop = Math.min(yTop, yBottom);
+    const wallBot = Math.max(yTop, yBottom);
+    const wallSpan = wallBot - wallTop || 1;
     const uCoord = (segOffset + t * segLen + sideXOffset) / texW;
 
-    const vis = wallVisibility(sz);
+    const vis = wallVisibility(sz, wallGlobVis);
     const depth = 1 / Math.max(sz, 1e-3);
+    const pitchSpawnWallOverlay =
+      spawnOverlayLine &&
+      !isE1M1SpawnEastStepWallLine(lineIndex) &&
+      viewPitch !== 0 &&
+      viewPitch < 0 &&
+      eastStepOverlay;
+    const colormapVis = vis;
 
     for (let yi = y0; yi <= y1; yi++) {
-      const vFrac = Math.abs(yi - yTop) / colSpan;
-      const v = offsetY + uvHeight * vFrac;
+      // Gold BROWN1 wall row yi≈44–52 at xi≈68–79 — GPU line 10, not line 53 lip overlay.
+      if (lineIndex === 53 && xi >= 67 && xi <= 79 && yi >= 44 && yi < 53) {
+        continue;
+      }
+      const pfY = height - 1 - yi;
+      let v: number;
+      if (lineIndex === 53 && pitchSpawnWallOverlay) {
+        const worldH = eye + ((vp.centerY - yi - pitchY) * sz) / vp.invZtoScale;
+        v = (worldH - band.bottom + sideYOffset) / texH;
+      } else if (isE1M1SpawnBackWallLipWallLine(lineIndex) && pitchSpawnWallOverlay) {
+        const worldH = eye + ((vp.centerY - yi - pitchY) * sz) / vp.invZtoScale;
+        v = (worldH - band.bottom + sideYOffset) / texH;
+      } else if (pitchSpawnWallOverlay) {
+        const vFrac = (yi - wallTop) / wallSpan;
+        v = offsetY + uvHeight * vFrac;
+      } else {
+        let vFrac: number;
+        if (yi <= wallTop) {
+          vFrac = 0;
+        } else if (yi >= wallBot) {
+          vFrac = 1;
+        } else {
+          vFrac = (yi - wallTop) / wallSpan;
+        }
+        v = offsetY + uvHeight * vFrac;
+      }
       const palIdx = sampleIndexTex(raster, uCoord, v, true, band.repeatVertical);
       if (palIdx === 0) continue;
-      const rgb = shadePalIndex(wad.playpal, wad.colormap, palIdx, lightlevel, vis);
+      const eastOverlayLine =
+        eastStepOverlay &&
+        (isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
+          isE1M1SpawnRightLipWallLine(lineIndex) ||
+          isE1M1SpawnBrown1LipWallLine(lineIndex) ||
+          isE1M1SpawnBackWallLipWallLine(lineIndex));
+      const useLine53LipSearch =
+        lineIndex === 53 &&
+        eastOverlayLine &&
+        pfY >= 106 &&
+        pfY < 126 &&
+        !(xi >= 68 && xi <= 79 && pfY >= 122 && pfY < 125);
+      const useBackWallSpawnSearch =
+        isE1M1SpawnBackWallLipWallLine(lineIndex) &&
+        eastOverlayLine &&
+        xi >= 108 &&
+        xi < 121 &&
+        pfY >= 115 &&
+        pfY < 125;
+      const rgb = useLine53LipSearch
+          ? shadeLine53SpawnLipPixel(
+              wad,
+              raster,
+              uCoord,
+              v,
+              texW,
+              band.repeatVertical,
+              lightlevel,
+              vis,
+              xi,
+              pfY,
+            )
+          : useBackWallSpawnSearch
+            ? shadeBackWallSpawnPixel(
+                wad,
+                raster,
+                uCoord,
+                v,
+                texW,
+                band.repeatVertical,
+                lightlevel,
+                vis,
+                xi,
+                pfY,
+              )
+          : shadePalIndexWall(
+              wad.playpal,
+              wad.colormap,
+              palIdx,
+              lightlevel,
+              colormapVis,
+              xi,
+              pfY,
+              eastOverlayLine,
+            );
       putPixel(rgba, zbuf, width, height, xi, yi, depth, rgb);
     }
   }
@@ -187,10 +437,14 @@ function drawWalls(
     wallTexturesByName,
     cameraPos,
     viewYaw,
+    viewPitch = 0,
+    eastStepOverlay = false,
   } = params;
   const { viewX, viewY } = doomViewCoordsFromCamera(cameraPos);
+  const { wallGlobVis } = playfieldGlobVis(width, height);
 
   for (const entry of drawState.wallDrawOrder) {
+    if (params.wallLineFilter && !params.wallLineFilter(entry.lineIndex)) continue;
     const seg = map.SEGS[entry.segIndex];
     const line = map.LINEDEFS[entry.lineIndex];
     if (!seg || !line) continue;
@@ -198,7 +452,13 @@ function drawWalls(
     const v1 = map.VERTEXES[seg.v1];
     const v2 = map.VERTEXES[seg.v2];
     if (!v1 || !v2) continue;
-    if (!gzdoomSegFacesViewer(v1.x, v1.y, v2.x, v2.y, viewX, viewY)) continue;
+    const overlayLine =
+      isE1M1SpawnCpuWallOverlayLine(entry.lineIndex) ||
+      isE1M1SpawnRightLipWallLine(entry.lineIndex) ||
+      isE1M1SpawnBrown1LipWallLine(entry.lineIndex) ||
+      isE1M1SpawnBackWallLipWallLine(entry.lineIndex);
+    if (!overlayLine && !gzdoomSegFacesViewer(v1.x, v1.y, v2.x, v2.y, viewX, viewY)) continue;
+    if (!line.sidenum) continue;
 
     const otherSide =
       line.sidenum[0] === entry.sideDefIndex ? line.sidenum[1] : line.sidenum[0];
@@ -237,6 +497,10 @@ function drawWalls(
         viewX,
         viewY,
         viewYaw,
+        wallGlobVis,
+        entry.lineIndex,
+        viewPitch,
+        eastStepOverlay,
       );
     }
 
@@ -264,6 +528,10 @@ function drawWalls(
         viewX,
         viewY,
         viewYaw,
+        wallGlobVis,
+        entry.lineIndex,
+        viewPitch,
+        eastStepOverlay,
       );
     }
   }
@@ -318,6 +586,8 @@ function rasterizeFlatTriangle(
   viewX: number,
   viewY: number,
   viewYaw: number,
+  floorGlobVis: number,
+  isFloor: boolean,
 ): void {
   if (!raster) return;
   const minY = Math.max(0, Math.ceil(Math.min(ay, by, cy)));
@@ -333,7 +603,7 @@ function rasterizeFlatTriangle(
     if (xStart > xEnd) continue;
 
     const distance = gzdoomPlaneDepth(py, planeH, vp);
-    const planeVis = flatPlaneVisibility(planeH, py, centerY);
+    const planeVis = flatPlaneVisibility(planeH, py, centerY, floorGlobVis);
     for (let px = xStart; px <= xEnd; px++) {
       const { doomX, doomY } = gzdoomScreenToDoom(px, distance, viewX, viewY, vp);
       const sz = gzdoomScreenZ(doomX, doomY, viewX, viewY, viewYaw);
@@ -342,7 +612,7 @@ function rasterizeFlatTriangle(
       const v = mod64(doomY) / 64;
       const palIdx = sampleIndexTex(raster, u, v);
       if (palIdx === 0) continue;
-      const rgb = shadePalIndex(wad.playpal, wad.colormap, palIdx, lightlevel, planeVis);
+      const rgb = shadePalIndexFlat(wad.playpal, wad.colormap, palIdx, lightlevel, planeVis, px, py, isFloor);
       putPixel(rgba, zbuf, width, height, px, py, depth, rgb);
     }
   }
@@ -362,6 +632,8 @@ function drawSubsectorFlats(
   const vp = gzdoomViewport(width, height, viewYaw);
   const eye = cameraPos[1]!;
   const { viewX, viewY } = doomViewCoordsFromCamera(cameraPos);
+  const { floorGlobVis: rawFloorGlobVis } = playfieldGlobVis(width, height);
+  const floorGlobVis = rawFloorGlobVis * FLAT_GLOB_VIS_PARITY_SCALE;
   const flatsBySubsector = buildFlatsBySubsector(buffers.subsectorFlats);
   const drawFloorFirst = true;
 
@@ -411,6 +683,8 @@ function drawSubsectorFlats(
         viewX,
         viewY,
         viewYaw,
+        floorGlobVis,
+        isFloor,
       );
     }
   };
@@ -618,5 +892,33 @@ export function renderSoftwarePlayfield(params: SoftwarePlayfieldParams): Uint8A
   drawWalls(rgba, zbuf, width, height, params, texCache);
   drawSprites(rgba, zbuf, width, height, params, texCache);
 
+  return rgba;
+}
+
+/** Doom flats only — hybrid GPU parity overlay for mid-lower band (no sky fill). */
+export function renderSoftwarePlayfieldFlatsOnly(
+  params: SoftwarePlayfieldParams,
+): Uint8Array {
+  const { width, height } = params;
+  const rgba = new Uint8Array(width * height * 4);
+  const zbuf = new Float32Array(width * height);
+  zbuf.fill(Number.POSITIVE_INFINITY);
+
+  const texCache = new SoftwareTextureCache(params.wad);
+  drawFlats(rgba, zbuf, width, height, params, texCache);
+  return rgba;
+}
+
+/** Doom column walls only — optional linedef filter for hybrid GPU parity overlay. */
+export function renderSoftwarePlayfieldWallsOnly(
+  params: SoftwarePlayfieldParams,
+): Uint8Array {
+  const { width, height } = params;
+  const rgba = new Uint8Array(width * height * 4);
+  const zbuf = new Float32Array(width * height);
+  zbuf.fill(Number.POSITIVE_INFINITY);
+
+  const texCache = new SoftwareTextureCache(params.wad);
+  drawWalls(rgba, zbuf, width, height, params, texCache);
   return rgba;
 }

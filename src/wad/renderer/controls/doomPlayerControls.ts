@@ -34,6 +34,7 @@ interface DoomPlayerControlsOptions {
   buffers: MapBuffers;
   start: { x: number; y: number; angle: number };
   isAutomapActive?: () => boolean;
+  isPauseMenuOpen?: () => boolean;
   onLiquidTransition?: (event: {
     kind: 'enter' | 'exit';
     liquidKind: NonNullable<Sector['liquidKind']>;
@@ -43,6 +44,9 @@ interface DoomPlayerControlsOptions {
   }) => void;
   mapActions?: MapActionController;
   onLineAction?: (result: MapActionResult) => void;
+  onFire?: (player: PlayerSnapshot) => void;
+  onWeaponSlot?: (slotIndex: number) => void;
+  isPlayerAlive?: () => boolean;
 }
 
 interface PlayerState {
@@ -63,6 +67,7 @@ export interface PlayerSnapshot {
   y: number;
   yaw: number;
   pitch: number;
+  lastWalkLineAction?: { lineIndex: number; special: number; triggered: boolean; teleport: boolean } | null;
 }
 
 export interface DoomPlayerControlsHandle {
@@ -87,7 +92,11 @@ export function doomPlayerControls({
   onLiquidTransition,
   mapActions,
   onLineAction,
+  onFire,
+  onWeaponSlot,
+  isPlayerAlive,
   isAutomapActive,
+  isPauseMenuOpen,
 }: DoomPlayerControlsOptions): DoomPlayerControlsHandle {
   const startSector = findSectorAtPosition(map, buffers.sectorTriangles, buffers.triangleHash, start);
   const state: PlayerState = {
@@ -103,19 +112,38 @@ export function doomPlayerControls({
     sector: startSector,
   };
   let currentLiquidKind = state.sector?.liquidKind ?? null;
+  let lastWalkLineAction: { lineIndex: number; special: number; triggered: boolean; teleport: boolean } | null = null;
 
   const keys = new Set<string>();
   let lastTime = performance.now();
   let animationFrame = 0;
 
   const keyDown = (event: KeyboardEvent) => {
+    if (isPauseMenuOpen?.()) {
+      return;
+    }
     if (isAutomapActive?.()) {
+      return;
+    }
+    if (isPlayerAlive && !isPlayerAlive()) {
+      return;
+    }
+    if (/^Digit[1-8]$/.test(event.code)) {
+      if (event.repeat) return;
+      event.preventDefault();
+      onWeaponSlot?.(Number(event.code.slice(-1)) - 1);
       return;
     }
     if (event.code === 'KeyE') {
       if (event.repeat) return;
       event.preventDefault();
       tryUseSwitch();
+      return;
+    }
+    if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
+      if (event.repeat) return;
+      event.preventDefault();
+      onFire?.(snapshotPlayer(state, lastWalkLineAction));
       return;
     }
     if (isMovementKey(event.code)) {
@@ -134,22 +162,26 @@ export function doomPlayerControls({
 
 
   const mouseDown = (event: MouseEvent) => {
+    if (isPauseMenuOpen?.()) return;
     if (isAutomapActive?.()) return;
     if (event.button !== 0) return;
     event.preventDefault();
     canvas.focus();
 
-    // Always attempt use on click — do not wait for pointer lock.
-    tryUseSwitch();
-
     if (document.pointerLockElement === canvas) {
+      if (!isPlayerAlive || isPlayerAlive()) {
+        onFire?.(snapshotPlayer(state, lastWalkLineAction));
+      }
       return;
     }
+
+    tryUseSwitch();
 
     void canvas.requestPointerLock().catch(() => {});
   };
 
   const mouseMove = (event: MouseEvent) => {
+    if (isPauseMenuOpen?.()) return;
     if (isAutomapActive?.()) return;
     if (document.pointerLockElement !== canvas) return;
     state.yaw -= event.movementX * MOUSE_SENSITIVITY;
@@ -179,7 +211,21 @@ export function doomPlayerControls({
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
 
+    if (isPauseMenuOpen?.()) {
+      updateViewMatrix(viewMatrix, state);
+      animationFrame = requestAnimationFrame(tick);
+      return;
+    }
+
     if (isAutomapActive?.()) {
+      updateViewMatrix(viewMatrix, state);
+      animationFrame = requestAnimationFrame(tick);
+      return;
+    }
+
+    if (isPlayerAlive && !isPlayerAlive()) {
+      state.vx = 0;
+      state.vy = 0;
       updateViewMatrix(viewMatrix, state);
       animationFrame = requestAnimationFrame(tick);
       return;
@@ -266,9 +312,19 @@ export function doomPlayerControls({
     }
 
     if (mapActions && (previousPosition.x !== state.x || previousPosition.y !== state.y)) {
-      for (const crossed of findCrossedWalkLines(map, previousPosition, { x: state.x, y: state.y })) {
+      for (const crossed of findCrossedWalkLines(map, previousPosition, { x: state.x, y: state.y }, playerRadius)) {
         const result = mapActions.tryWalkLine(crossed.lineIndex, crossed.line);
+        lastWalkLineAction = {
+          lineIndex: crossed.lineIndex,
+          special: crossed.line.special,
+          triggered: result.triggered,
+          teleport: Boolean(result.teleport),
+        };
         if (result.triggered) {
+          if (result.teleport) {
+            applyTeleport(state, result.teleport, map);
+            currentLiquidKind = state.sector?.liquidKind ?? null;
+          }
           onLineAction?.(result);
         }
       }
@@ -299,12 +355,20 @@ export function doomPlayerControls({
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
     },
-    getPlayerState: (): PlayerSnapshot => ({
-      x: state.x,
-      y: state.y,
-      yaw: state.yaw,
-      pitch: state.pitch,
-    }),
+    getPlayerState: (): PlayerSnapshot => snapshotPlayer(state, lastWalkLineAction),
+  };
+}
+
+function snapshotPlayer(
+  state: PlayerState,
+  lastWalkLineAction: PlayerSnapshot['lastWalkLineAction']
+): PlayerSnapshot {
+  return {
+    x: state.x,
+    y: state.y,
+    yaw: state.yaw,
+    pitch: state.pitch,
+    lastWalkLineAction,
   };
 }
 
@@ -338,6 +402,22 @@ function applySectorTransition(
   } else if (drop > 0) {
     state.worldFeetZ = nextSector.floorheight;
   }
+}
+
+function applyTeleport(
+  state: PlayerState,
+  destination: NonNullable<MapActionResult['teleport']>,
+  map: WadMap
+): void {
+  state.x = destination.x;
+  state.y = destination.y;
+  state.yaw = destination.yaw;
+  state.vx = 0;
+  state.vy = 0;
+  state.verticalVelocity = 0;
+  state.grounded = true;
+  state.sector = map.SECTORS[destination.sectorIndex] ?? null;
+  state.worldFeetZ = state.sector?.floorheight ?? state.worldFeetZ;
 }
 
 function updateHorizontalVelocity(state: PlayerState, keys: Set<string>, dt: number) {

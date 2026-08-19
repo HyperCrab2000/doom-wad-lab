@@ -8,11 +8,13 @@ uniform mat4 modelViewProj;
 uniform bool shouldMirror;
 
 out vec3 vPos;
+out vec3 vWorldPos;
 out vec2 vUv;
 out float vParitySpanT;
 
 void main(void) {
   vPos = aPosition;
+  vWorldPos = aPosition;
 
   vec2 outUv = aUv;
   if (shouldMirror) {

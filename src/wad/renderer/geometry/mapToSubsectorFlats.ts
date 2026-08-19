@@ -17,7 +17,7 @@ export function mapToSubsectorFlats(
 
   for (let subsectorIndex = 0; subsectorIndex < index.subsectorSegs.length; subsectorIndex++) {
     const segIndices = index.subsectorSegs[subsectorIndex];
-    if (!segIndices || segIndices.length < 3) continue;
+    if (!segIndices || segIndices.length < 2) continue;
 
     const sectorIndex = index.subsectorToSector[subsectorIndex];
     if (sectorIndex < 0) continue;

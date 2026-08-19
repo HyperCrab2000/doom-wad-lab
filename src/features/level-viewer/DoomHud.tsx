@@ -1,27 +1,24 @@
 import React, { useEffect, useRef } from 'react';
 import type { Wad } from '@/wad/interfaces/Wad';
-import { drawPatch } from '@/wad/renderer/drawAssets/drawPatch';
+import { drawPatchImage, type PatchImage } from '@/wad/renderer/drawAssets/drawPatch';
 import { drawStcfnTextAt } from '@/features/level-viewer/doomLoadingScreen';
 import { findWadLump } from '@/features/level-viewer/doomWadGraphics';
 import type { PlayerHudSnapshot } from '@/wad/game/playerInventory';
 import type { StatusFaceLump } from '@/wad/game/statusFace';
-
-const BAR_HEIGHT = 32;
-const HUD_SCALE = 2;
-/** Bottom band only — never cover the full viewport with a 2D canvas (breaks WebGL compositing). */
-const HUD_BAND_HEIGHT = 96;
-
-const WEAPON_LABELS: Record<string, string> = {
-  fist: 'FIST',
-  pistol: 'PIST',
-  chainsaw: 'SAW',
-  shotgun: 'SGN',
-  chaingun: 'MGUN',
-  rocket: 'LNCH',
-  plasma: 'PLAS',
-  bfg: 'BFG',
-  superShotgun: 'SGN2',
-};
+import {
+  resolveStatusFaceLumpName,
+  STATUS_FACE_LUMPS,
+} from '@/wad/game/statusFaceLumps';
+import { computeHudLayout } from '@/features/level-viewer/doomHudLayout';
+import {
+  VANILLA_HUD,
+  drawFaceBack,
+  drawKeyCard,
+  drawPatchAtAnchor,
+  drawStPercentValue,
+  drawStShortNumber,
+  hudScreenToCanvas,
+} from '@/features/level-viewer/doomStatusBarFonts';
 
 export type HudState = PlayerHudSnapshot & {
   message: string | null;
@@ -45,33 +42,26 @@ export interface DoomHudProps {
 
 export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getHudState }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const deathRef = useRef<HTMLDivElement>(null);
-  const stbarRef = useRef<ReturnType<typeof drawPatch> | null>(null);
-  const facePatchesRef = useRef<Map<string, ReturnType<typeof drawPatch>>>(new Map());
+  const stbarRef = useRef<PatchImage | null>(null);
+  const facePatchesRef = useRef<Map<StatusFaceLump, PatchImage>>(new Map());
 
   useEffect(() => {
     stbarRef.current = null;
     facePatchesRef.current.clear();
     if (!wad) return;
-    const data = findWadLump(wad, 'STBAR');
-    if (data) {
-      stbarRef.current = drawPatch(data, wad.playpal);
+    const stbarData = findWadLump(wad, 'STBAR');
+    if (stbarData) {
+      stbarRef.current = drawPatchImage(stbarData, wad.playpal);
     }
-    const faceLumps: StatusFaceLump[] = [
-      'STFGOD0',
-      'STFSTF0',
-      'STFSTF1',
-      'STFSTF2',
-      'STFSTF3',
-      'STFSTF4',
-      'STFDEAD0',
-      'STFKILL0',
-    ];
-    for (const lump of faceLumps) {
-      const lumpData = findWadLump(wad, lump);
+    for (const logical of STATUS_FACE_LUMPS) {
+      const lumpName = resolveStatusFaceLumpName(wad, logical);
+      if (!lumpName) continue;
+      const lumpData = findWadLump(wad, lumpName);
       if (lumpData) {
-        facePatchesRef.current.set(lump, drawPatch(lumpData, wad.playpal));
+        facePatchesRef.current.set(logical, drawPatchImage(lumpData, wad.playpal));
       }
     }
   }, [wad]);
@@ -82,6 +72,7 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
     let frame = 0;
     const draw = () => {
       const canvas = canvasRef.current;
+      const wrap = wrapRef.current;
       const viewport = viewportRef.current;
       if (!canvas || !viewport) {
         frame = requestAnimationFrame(draw);
@@ -89,11 +80,16 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
       }
 
       const width = Math.max(1, viewport.clientWidth);
-      const bandHeight = HUD_BAND_HEIGHT;
-      if (canvas.width !== width || canvas.height !== bandHeight) {
-        canvas.width = width;
-        canvas.height = bandHeight;
+      const height = Math.max(1, viewport.clientHeight);
+      const layout = computeHudLayout(width, height);
+      if (wrap) {
+        wrap.style.height = `${layout.bandHeight}px`;
       }
+      if (canvas.width !== width || canvas.height !== layout.canvasHeight) {
+        canvas.width = width;
+        canvas.height = layout.canvasHeight;
+      }
+      canvas.style.height = `${layout.canvasHeight}px`;
 
       const ctx = canvas.getContext('2d', { alpha: true });
       if (!ctx) {
@@ -101,42 +97,53 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
         return;
       }
 
-      ctx.clearRect(0, 0, width, bandHeight);
+      ctx.clearRect(0, 0, width, layout.canvasHeight);
       const hud = getHudState();
-      const barY = bandHeight - BAR_HEIGHT;
+      const { scale, barLeft, barY, barH } = layout;
 
       const stbar = stbarRef.current;
       if (stbar) {
-        const barW = stbar.canvas.width;
-        const barH = stbar.canvas.height;
-        const scaleX = width / barW;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(stbar.canvas, 0, barY, width, barH * scaleX);
+        const barAnchor = hudScreenToCanvas(0, VANILLA_HUD.face.y, barLeft, barY, scale);
+        drawPatchAtAnchor(ctx, stbar, barAnchor.x, barAnchor.y, scale);
       } else {
         ctx.fillStyle = 'rgba(72, 48, 40, 0.92)';
-        ctx.fillRect(0, barY, width, BAR_HEIGHT);
-        ctx.strokeStyle = '#2a1810';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0.5, barY + 0.5, width - 1, BAR_HEIGHT - 1);
+        ctx.fillRect(barLeft, barY, layout.barWidth, barH);
       }
 
-      const healthText = `${Math.max(0, hud.health)}%`;
-      const armorText = `${Math.max(0, hud.armor)}%`;
-      const weaponLabel = WEAPON_LABELS[hud.weapon] ?? hud.weapon.toUpperCase();
-      const activeAmmo = getActiveAmmoDisplay(hud);
-
+      drawFaceBack(ctx, wad, VANILLA_HUD.face.x, VANILLA_HUD.face.y, barLeft, barY, scale);
       const facePatch = facePatchesRef.current.get(hud.faceLump);
       if (facePatch) {
-        const faceScale = Math.max(2, Math.floor((width / 320) * 2));
-        const faceW = facePatch.canvas.width * faceScale;
-        const faceH = facePatch.canvas.height * faceScale;
-        const faceX = width * (143 / 320) - faceW * 0.5;
-        const faceY = barY - faceH + 4;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(facePatch.canvas, faceX, faceY, faceW, faceH);
+        const faceAnchor = hudScreenToCanvas(VANILLA_HUD.face.x, VANILLA_HUD.face.y, barLeft, barY, scale);
+        drawPatchAtAnchor(ctx, facePatch, faceAnchor.x, faceAnchor.y, scale);
       }
 
-      const powerupY = barY - 28;
+      drawStPercentValue(ctx, wad, hud.health, VANILLA_HUD.health.x, VANILLA_HUD.health.y, barLeft, barY, scale);
+      drawStPercentValue(ctx, wad, hud.armor, VANILLA_HUD.armor.x, VANILLA_HUD.armor.y, barLeft, barY, scale);
+
+      const ammoSlot = weaponAmmoSlot(hud.weapon);
+      const ammoValue = getAmmoValue(hud, ammoSlot);
+      drawStShortNumber(
+        ctx,
+        wad,
+        ammoValue,
+        VANILLA_HUD.ammo[ammoSlot].x,
+        VANILLA_HUD.ammo[ammoSlot].y,
+        barLeft,
+        barY,
+        scale
+      );
+
+      if (hud.keys.blue) {
+        drawKeyCard(ctx, wad, 0, VANILLA_HUD.keys[0].x, VANILLA_HUD.keys[0].y, barLeft, barY, scale);
+      }
+      if (hud.keys.yellow) {
+        drawKeyCard(ctx, wad, 1, VANILLA_HUD.keys[1].x, VANILLA_HUD.keys[1].y, barLeft, barY, scale);
+      }
+      if (hud.keys.red) {
+        drawKeyCard(ctx, wad, 2, VANILLA_HUD.keys[2].x, VANILLA_HUD.keys[2].y, barLeft, barY, scale);
+      }
+
+      const powerupY = barY - 8 * scale;
       const powerupLabels: string[] = [];
       if (hud.powerups.invuln) powerupLabels.push('INV');
       if (hud.powerups.berserk) powerupLabels.push('BZK');
@@ -145,22 +152,14 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
       if (hud.powerups.lightAmp) powerupLabels.push('LITE');
       if (hud.powerups.computerMap) powerupLabels.push('MAP');
       if (powerupLabels.length > 0) {
-        drawStcfnTextAt(ctx, wad, powerupLabels.join(' '), width * 0.5, powerupY, HUD_SCALE - 1);
-      }
-
-      const baseline = bandHeight - 6;
-      drawStcfnTextAt(ctx, wad, healthText, 16, baseline, HUD_SCALE);
-      drawStcfnTextAt(ctx, wad, armorText, width * 0.38, baseline, HUD_SCALE);
-      drawStcfnTextAt(ctx, wad, weaponLabel, width * 0.58, baseline, HUD_SCALE);
-      drawStcfnTextAt(ctx, wad, activeAmmo, width - 96, baseline, HUD_SCALE);
-
-      const keyY = barY - 14;
-      const keys: string[] = [];
-      if (hud.keys.blue) keys.push('B');
-      if (hud.keys.yellow) keys.push('Y');
-      if (hud.keys.red) keys.push('R');
-      if (keys.length > 0) {
-        drawStcfnTextAt(ctx, wad, keys.join(' '), 12, keyY, HUD_SCALE);
+        drawStcfnTextAt(
+          ctx,
+          wad,
+          powerupLabels.join(' '),
+          barLeft + layout.barWidth * 0.5,
+          powerupY,
+          Math.max(1, scale - 1)
+        );
       }
 
       if (messageRef.current) {
@@ -186,29 +185,41 @@ export const DoomHud: React.FC<DoomHudProps> = ({ active, wad, viewportRef, getH
       <div ref={deathRef} className="doom-hud-message doom-hud-message--death" hidden>
         YOU DIED
       </div>
-      <div className="doom-hud-wrap">
+      <div ref={wrapRef} className="doom-hud-wrap">
         <canvas ref={canvasRef} className="doom-hud" />
       </div>
     </div>
   );
 };
 
-function getActiveAmmoDisplay(hud: HudState): string {
-  switch (hud.weapon) {
-    case 'pistol':
-    case 'chaingun':
-      return String(hud.ammo.bullets);
+function weaponAmmoSlot(weapon: string): 0 | 1 | 2 | 3 {
+  switch (weapon) {
     case 'shotgun':
     case 'superShotgun':
-      return String(hud.ammo.shells);
+      return 1;
     case 'rocket':
-      return String(hud.ammo.rockets);
+      return 2;
     case 'plasma':
     case 'bfg':
-      return String(hud.ammo.cells);
+      return 3;
+    case 'pistol':
+    case 'chaingun':
     case 'chainsaw':
     case 'fist':
     default:
-      return '--';
+      return 0;
+  }
+}
+
+function getAmmoValue(hud: HudState, slot: 0 | 1 | 2 | 3): number {
+  switch (slot) {
+    case 0:
+      return hud.ammo.bullets;
+    case 1:
+      return hud.ammo.shells;
+    case 2:
+      return hud.ammo.rockets;
+    case 3:
+      return hud.ammo.cells;
   }
 }

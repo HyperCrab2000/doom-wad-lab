@@ -15,6 +15,7 @@ uniform float centerClipZ;
 uniform float centerClipW;
 
 in vec3 vPos;
+in vec3 vWorldPos;
 in vec2 vUv;
 in float vParitySpanT;
 

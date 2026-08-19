@@ -9,6 +9,7 @@ import { buildGzdoomDrawState } from '@/wad/renderer/bsp/gzdoomDrawState';
 import {
   buildSupplementedWallDrawOrder,
   isVanillaBackface,
+  supplementTwoSidedClipWallsFromTrace,
   supplementWallDrawFromTrace,
   supplementWallsFromVisibleSubsectors,
 } from '@/wad/renderer/bsp/supplementWallDraw';
@@ -46,6 +47,38 @@ describe('supplementWallDrawFromTrace', () => {
     expect(supplemented.length).toBeGreaterThanOrEqual(bsp.wallDrawOrder.length);
   });
 
+  it('adds screen-gated two-sided clip walls outside the flat mesh pool (E1M1 east)', () => {
+    const map = loadE1M1();
+    const index = buildBspRenderIndex(map)!;
+    const playerStart = map.THINGS.find((thing) => thing.type === 1)!;
+    const viewYaw = (playerStart.angle * Math.PI) / 180;
+
+    const bsp = buildBspVisibleSet({
+      map,
+      index,
+      viewX: playerStart.x,
+      viewY: playerStart.y,
+      viewYaw,
+    });
+
+    const supplemented = supplementTwoSidedClipWallsFromTrace(
+      map,
+      index,
+      playerStart.x,
+      playerStart.y,
+      viewYaw,
+      41,
+      bsp.wallDrawOrder,
+      bsp.visibleSubsectors,
+      new Set([29, 24]),
+      { minPfX: 280, minPfY: 84, maxPfY: 126 },
+    );
+
+    expect(supplemented.lineIndices.has(409)).toBe(true);
+    expect(supplemented.lineIndices.has(413)).toBe(true);
+    expect(supplemented.lineIndices.size).toBeLessThan(120);
+  });
+
   it('draws E1M1 line 7 when BSP or supplement includes the player-start subsector', () => {
     const map = loadE1M1();
     const index = buildBspRenderIndex(map)!;
@@ -65,6 +98,7 @@ describe('supplementWallDrawFromTrace', () => {
     expect(lines.size).toBeGreaterThanOrEqual(8);
     expect(lines.has(37)).toBe(true);
     expect(lines.has(47)).toBe(true);
+    expect(lines.has(53)).toBe(true);
   });
 
   it('supplementWallsFromVisibleSubsectors adds all linedefs in visited subsectors', () => {

@@ -54,6 +54,10 @@ export class MovingFloorSystem {
     return this.movers.size;
   }
 
+  getActiveSectorIndices(): ReadonlySet<number> {
+    return new Set(this.movers.keys());
+  }
+
   stopByTag(tag: number): boolean {
     if (tag === 0) return false;
     let stopped = false;
