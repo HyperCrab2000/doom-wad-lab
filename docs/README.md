@@ -26,6 +26,8 @@ This project is **Doom only**. Yserbius / Twinion work lives in `yserbius_twinio
 | [**GZDoom Renderer Bible**](./bible/gzdoom/README.md) | GZDoom HW/GLES pipeline: level load → BSP → walls/flats/sky/lights/sprites → WASM gold gates |
 | [**Classic Layer Bible**](./bible/classic-layers/README.md) | Layers → Node geometry → WebGL2 stages, live toggles, Puppeteer tests, screenshots |
 | [**Project Chronicle**](./bible/chronicle/README.md) | Decision diary, 68-map deep dives, architectural *why* |
+| [**Release history**](./releases/README.md) | Detailed per-version notes for every published GitHub Release |
+| [**Classic Node/WebGL Renderer Chronicle**](./bible/chronicle/classic-node-webgl-renderer-chronicle.md) | Dated account of the GZDoom-to-pure-WebGL conversion effort, verified progress, hard failures, and remaining parity gaps |
 
 ## Guides
 

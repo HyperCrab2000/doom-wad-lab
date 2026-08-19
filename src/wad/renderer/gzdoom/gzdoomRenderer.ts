@@ -15,6 +15,7 @@ import type { mat4 } from 'gl-matrix';
 
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
+import { skyFlats } from '@/wad/constants/WadInfo';
 import type { MapBuffers } from '@/wad/renderer/geometry/createBuffers';
 import type { WadAssets } from '@/wad/renderer/drawAssets/drawWadAssets';
 import type { WallDrawEntry } from '@/wad/renderer/bsp/bspVisibility';
@@ -69,13 +70,28 @@ export interface GzdoomFlatDrawContext {
 }
 
 let cachedMap: WadMap | null = null;
+let cachedGeometryRevision = -1;
 let cachedFlatsBySector: Map<number, MapBuffers['flats']> | null = null;
 let cachedFlatsBySubsector: Map<number, MapBuffers['subsectorFlats']> | null = null;
 
 export function invalidateGzdoomRendererCaches(): void {
   cachedMap = null;
+  cachedGeometryRevision = -1;
   cachedFlatsBySector = null;
   cachedFlatsBySubsector = null;
+}
+
+function syncFlatDrawCaches(buffers: MapBuffers): void {
+  const revision = buffers.geometryRevision ?? 0;
+  if (revision === cachedGeometryRevision && cachedFlatsBySector && cachedFlatsBySubsector) {
+    return;
+  }
+  cachedGeometryRevision = revision;
+  cachedFlatsBySector = buildFlatsBySector(buffers.flats);
+  cachedFlatsBySubsector =
+    buffers.subsectorFlats.length > 0
+      ? buildFlatsBySubsector(buffers.subsectorFlats)
+      : null;
 }
 
 export function buildFrameDrawState(
@@ -88,12 +104,10 @@ export function buildFrameDrawState(
 ): GzdoomDrawState | null {
   if (map !== cachedMap) {
     cachedMap = map;
-    cachedFlatsBySector = buildFlatsBySector(buffers.flats);
-    cachedFlatsBySubsector =
-      buffers.subsectorFlats.length > 0
-        ? buildFlatsBySubsector(buffers.subsectorFlats)
-        : null;
+    cachedGeometryRevision = -1;
   }
+
+  syncFlatDrawCaches(buffers);
 
   return buildGzdoomDrawState({
     map,
@@ -112,10 +126,31 @@ export function renderGzdoomFlats(
   ctx: GzdoomFlatDrawContext
 ): void {
   const batch = { batchKey: '', lightKey: '' };
+  syncFlatDrawCaches(buffers);
+  const flatsBySector = cachedFlatsBySector!;
 
   if (drawState.flatDrawMode === 'subsector-bsp' && buffers.subsectorFlats.length > 0) {
-    const flatsBySubsector =
-      cachedFlatsBySubsector ?? buildFlatsBySubsector(buffers.subsectorFlats);
+    // Draw broad sector fallback first. BSP subsector flats below are authoritative and
+    // overwrite same/near pixels, while this pass only fills triangulation cracks.
+    const supplementedSectors = new Set<number>();
+    const supplementOrder = drawState.flatSupplementSectorOrder ?? drawState.flatSectorOrder;
+    for (const sectorIndex of supplementOrder) {
+      if (sectorIndex < 0 || supplementedSectors.has(sectorIndex)) continue;
+      const sectorFlats = flatsBySector.get(sectorIndex);
+      if (!sectorFlats) continue;
+      supplementedSectors.add(sectorIndex);
+      for (const flat of sectorFlats) {
+        if (skyFlats.includes(flat.flatName)) continue;
+        const isFloor = flat.flatName === flat.sector.floorpic;
+        const isCeiling = flat.flatName === flat.sector.ceilingpic;
+        if (!isFloor && !isCeiling) continue;
+        if (sectorIndex !== drawState.cameraSectorIndex) continue;
+        if (isFloor && !flatContainsDoomPoint(flat, ctx.cameraPos[0], -ctx.cameraPos[2])) continue;
+        ctx.drawFlat(flat, batch);
+      }
+    }
+    const flatsBySubsector = cachedFlatsBySubsector;
+    if (!flatsBySubsector) return;
     for (const subsectorIndex of drawState.flatSubsectorOrder) {
       const subsectorFlats = flatsBySubsector.get(subsectorIndex);
       if (!subsectorFlats) continue;
@@ -123,23 +158,19 @@ export function renderGzdoomFlats(
         ctx.drawFlat(flat, batch);
       }
     }
-    return;
-  }
-
-  const flatsBySector =
-    cachedFlatsBySector ?? buildFlatsBySector(buffers.flats);
-
-  for (const sectorIndex of drawState.flatSectorOrder) {
-    const sectorFlats = flatsBySector.get(sectorIndex);
-    if (!sectorFlats) continue;
-    for (const flat of sectorFlats) {
-      ctx.drawFlat(flat, batch);
+  } else {
+    for (const sectorIndex of drawState.flatSectorOrder) {
+      const sectorFlats = flatsBySector.get(sectorIndex);
+      if (!sectorFlats) continue;
+      for (const flat of sectorFlats) {
+        ctx.drawFlat(flat, batch);
+      }
     }
   }
 
-  if (buffers.subsectorFlats.length > 0) {
-    const flatsBySubsector =
-      cachedFlatsBySubsector ?? buildFlatsBySubsector(buffers.subsectorFlats);
+  if (drawState.flatDrawMode !== 'subsector-bsp' && buffers.subsectorFlats.length > 0) {
+    const flatsBySubsector = cachedFlatsBySubsector;
+    if (!flatsBySubsector) return;
     for (const subsectorIndex of drawState.flatSubsectorOrder) {
       const subsectorFlats = flatsBySubsector.get(subsectorIndex);
       if (!subsectorFlats) continue;
@@ -148,6 +179,35 @@ export function renderGzdoomFlats(
       }
     }
   }
+}
+
+function flatContainsDoomPoint(
+  flat: MapBuffers['flats'][number],
+  x: number,
+  y: number
+): boolean {
+  for (let i = 0; i < flat.cpuIndices.length; i += 3) {
+    let sign = 0;
+    let inside = true;
+    for (let edge = 0; edge < 3; edge++) {
+      const ia = flat.cpuIndices[i + edge] * 3;
+      const ib = flat.cpuIndices[i + ((edge + 1) % 3)] * 3;
+      const ax = flat.cpuPosition[ia]!;
+      const ay = -flat.cpuPosition[ia + 2]!;
+      const bx = flat.cpuPosition[ib]!;
+      const by = -flat.cpuPosition[ib + 2]!;
+      const cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+      if (Math.abs(cross) < 1e-5) continue;
+      const nextSign = Math.sign(cross);
+      if (sign === 0) sign = nextSign;
+      else if (nextSign !== sign) {
+        inside = false;
+        break;
+      }
+    }
+    if (inside) return true;
+  }
+  return false;
 }
 
 export function wallSliceForEntry(
@@ -159,8 +219,8 @@ export function wallSliceForEntry(
   const bySide = buffers.wallRangesByLineAndSide[lineIndex];
   if (bySide) {
     const line = map.LINEDEFS[lineIndex];
-    if (line) {
-      const useSide1 = line.sidenum[1] >= 0 && sideDefIndex === line.sidenum[1];
+    if (line?.sidenum) {
+      const useSide1 = line.sidenum[1]! >= 0 && sideDefIndex === line.sidenum[1];
       const slice = useSide1 ? bySide.side1 : bySide.side0;
       if (slice.start >= 0 && slice.count > 0) return slice;
     }

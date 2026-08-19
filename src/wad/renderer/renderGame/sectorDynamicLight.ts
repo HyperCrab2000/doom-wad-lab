@@ -34,3 +34,8 @@ export function getEffectiveSectorLightLevel(sector: Sector, timeSeconds: number
 
   return base;
 }
+
+/** GZDoom colormap parity uses simulated sector thinkers (mutated `sector.lightlevel`). */
+export function colormapSectorLightLevel(sector: Sector): number {
+  return sector.lightlevel;
+}

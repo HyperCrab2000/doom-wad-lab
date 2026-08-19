@@ -42,20 +42,48 @@ export const drawSkybox = (
   buffers: ReturnType<typeof createSkyboxBuffers>,
   texture: WebGLTexture,
   yaw: number,
-  pitch: number
+  pitch: number,
+  parityUniforms?: Record<string, number | WebGLTexture>,
 ) => {
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
-  gl.depthMask(true);
+  gl.depthMask(false);
 
   gl.useProgram(shader.program);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, texture);
 
+  const paritySkyScale =
+    typeof parityUniforms?.paritySkyScale === 'number'
+      ? parityUniforms.paritySkyScale
+      : 1.0;
+  const parityColormap =
+    typeof parityUniforms?.parityColormap === 'number'
+      ? parityUniforms.parityColormap
+      : 0;
+
+  const playfieldWidth =
+    typeof parityUniforms?.playfieldWidth === 'number'
+      ? parityUniforms.playfieldWidth
+      : 640;
+  const playfieldHeight =
+    typeof parityUniforms?.playfieldHeight === 'number'
+      ? parityUniforms.playfieldHeight
+      : 480;
+  const playfieldGlY =
+    typeof parityUniforms?.playfieldGlY === 'number'
+      ? parityUniforms.playfieldGlY
+      : 0;
+
   shader.setUniforms({
     tex: texture,
     yaw,
     pitch,
+    parityColormap,
+    paritySkyScale,
+    playfieldWidth,
+    playfieldHeight,
+    playfieldGlY,
   });
 
   shader.setAttributes({
@@ -66,5 +94,5 @@ export const drawSkybox = (
   buffers.indices.draw();
 
   gl.depthMask(true);
-  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LESS);
 };

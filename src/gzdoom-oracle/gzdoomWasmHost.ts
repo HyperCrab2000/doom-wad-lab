@@ -105,8 +105,14 @@ const PK3_FILES = [
 
 let scriptPromise: Promise<void> | null = null;
 
+function isGzdoomGoldScriptLoaded(): boolean {
+  return Boolean(document.querySelector('script[data-gzdoom-wasm]'));
+}
+
 function loadGzdoomScript(): Promise<void> {
-  if (window.createGzdoomModule) return Promise.resolve();
+  // Do not reuse modular /wasm/gzdoom-s/gzdoom.js — both artifacts export createGzdoomModule on window.
+  if (isGzdoomGoldScriptLoaded() && window.createGzdoomModule) return Promise.resolve();
+  if (!isGzdoomGoldScriptLoaded()) scriptPromise = null;
   if (scriptPromise) return scriptPromise;
   scriptPromise = new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-gzdoom-wasm]');

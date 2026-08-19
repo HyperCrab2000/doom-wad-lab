@@ -8,7 +8,7 @@ What exists today in this monorepo is **not** a GZDoom game engine WASM port. It
 |-------|-----------------|-------------------|-----------------|
 | **Asset / map parse** | Full FS, PK3, MAPINFO | IWAD/PWAD merge, vanilla parse | `@hypercrab2000/doom-wad-core` |
 | **Post-load render state** | Internal level structs | **GZSTATE v1** export/import | `doom-wad-core`, GZDoom `-dumpgzstate` |
-| **Draw / GPU** | HW renderer (OpenGL/Vulkan) | Classic WebGL2 + 278-byte WASM stub | `doom-wad-lab` `drawScene`, `gzrender_federated.wasm` |
+| **Draw / GPU** | HW renderer (OpenGL/Vulkan) | **Classic WebGL2** (`drawScene`) | `doom-wad-lab` TS shaders |
 | **Tick simulation** | `P_Ticker`, thinkers, states, AI | Partial **TypeScript** vanilla specials only | `doom-wad-lab/src/wad/game/*` |
 | **Scripting** | ZScript, ACS, DECORATE | None | — |
 | **Actors / inventory / combat** | Full mobj system | Subset (doors, lifts, pickups) | Not GZDoom-parity |
@@ -23,24 +23,23 @@ Those require a separate **game engine WASM** process (or module) derived from G
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser / Node host (doom-wad-lab shell)                        │
-│  - input, audio, HUD, networking (future)                        │
-│  - loads IWAD/PWAD/PK3 via doom-wad-core                         │
+│  - input, audio, HUD/menu overlays (TS today; WASM menu later)   │
+│  - loads IWAD/PWAD via doom-wad-core                             │
+│  - **WebGL2 renderer (TypeScript drawScene)**                    │
 └───────────────┬─────────────────────────────┬───────────────────┘
                 │                             │
                 ▼                             ▼
 ┌───────────────────────────┐   ┌───────────────────────────────┐
-│  gzengine-core.wasm        │   │  gzrender-core.wasm              │
-│  (GAME ENGINE)             │   │  (LEVEL RENDERER)              │
-│  - map setup / thinkers    │   │  - import GZSTATE + patches    │
-│  - mobj tick / states      │   │  - BSP visibility / draw lists │
-│  - line specials (GZDoom)  │   │  - WebGL2 backend (JS or WASM) │
-│  - damage, pickups, AI     │   │  - voxels / sprites / flats    │
-│  - ACS/ZScript (later)     │   │  - emit render events          │
-│  - exports GZTICK snapshots│   │  - consumes thing/sector patches│
-└───────────────┬───────────┘   └───────────────▲───────────────┘
-                │                               │
-                │  GZTICK + patch stream per tick │
-                └───────────────────────────────┘
+│  gzengine-core.wasm        │   │  (no renderer WASM on play)    │
+│  (GAME ENGINE)             │   │  TS/WebGL2 drawScene only      │
+│  - map setup / thinkers    │   │  - BSP visibility (TS; WASM    │
+│  - mobj tick / states      │   │    draw-list export later)     │
+│  - line specials (GZDoom)  │   │  - consumes GZTICK patches     │
+│  - exports GZTICK snapshots│   │  - mirrors hw_walls/flats/2D   │
+└───────────────┬───────────┘   └───────────────────────────────┘
+                │
+                │  GZTICK + patch stream per tick
+                └──────────────────────────────► renderer (TS)
 ```
 
 Principles (from [federation-model.md](./federation-model.md)):
@@ -176,7 +175,7 @@ URL params:
 ?mods=/mods/foo.wad
 ```
 
-HUD shows: `Federated · engine TS + renderer WASM · E1M1 · …`
+HUD shows: `Play · engine TS/WASM + renderer WebGL · E1M1 · …`
 
 ## See also
 

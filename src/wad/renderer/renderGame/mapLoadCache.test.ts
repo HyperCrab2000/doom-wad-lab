@@ -9,14 +9,17 @@ import {
 
 describe('mapLoadCache', () => {
   it('builds stable cache keys from wad path and map name', () => {
-    expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1')).toBe('v13::play::color::/wads/DOOM.WAD::E1M1');
-    expect(mapLoadCacheKey(null, 'MAP01')).toBe('v13::play::color::memory::MAP01');
-    expect(mapLoadCacheKey(undefined, 'MAP01')).toBe('v13::play::color::memory::MAP01');
+    expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1')).toBe('v16::play::color::full::/wads/DOOM.WAD::E1M1');
+    expect(mapLoadCacheKey(null, 'MAP01')).toBe('v16::play::color::full::memory::MAP01');
+    expect(mapLoadCacheKey(undefined, 'MAP01')).toBe('v16::play::color::full::memory::MAP01');
     expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1', false, true)).toBe(
-      'v13::play::index::/wads/DOOM.WAD::E1M1',
+      'v16::play::index::full::/wads/DOOM.WAD::E1M1',
     );
     expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1', true)).toBe(
-      'v13::parity::index::/wads/DOOM.WAD::E1M1',
+      'v16::parity::index::full::/wads/DOOM.WAD::E1M1',
+    );
+    expect(mapLoadCacheKey('/wads/DOOM.WAD', 'E1M1', false, true, true)).toBe(
+      'v16::play::index::gzcore::/wads/DOOM.WAD::E1M1',
     );
   });
 

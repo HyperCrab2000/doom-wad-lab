@@ -93,8 +93,14 @@ async function resolveGzdoomSArtifactKind(): Promise<'emscripten' | 'pure'> {
   );
 }
 
+function isGzdoomSScriptLoaded(): boolean {
+  return Boolean(document.querySelector('script[data-gzdoom-s-wasm]'));
+}
+
 function loadGzdoomSScript(base: string): Promise<void> {
-  if (window.createGzdoomModule) return Promise.resolve();
+  // Do not reuse gold /wasm/gzdoom/gzdoom.js — both artifacts export createGzdoomModule on window.
+  if (isGzdoomSScriptLoaded() && window.createGzdoomModule) return Promise.resolve();
+  if (!isGzdoomSScriptLoaded()) scriptPromise = null;
   if (scriptPromise) return scriptPromise;
   scriptPromise = new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-gzdoom-s-wasm]');

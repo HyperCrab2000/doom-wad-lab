@@ -55,6 +55,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate deployment change summary
+        run: npx tsx tools/release/deployment-notes.mts deployment-notes.md
+
+      - name: Add deployment notes to job summary
+        run: cat deployment-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deployment notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-notes
+          path: deployment-notes.md
+
       - name: Download SoundFont
         run: |
           mkdir -p public/soundfonts

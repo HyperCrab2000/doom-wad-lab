@@ -34,16 +34,18 @@ export interface CachedMapGeometry {
 const mapLoadCache = new Map<string, Promise<CachedMapGeometry>>();
 
 /** Increment when baked geometry or GPU buffer layout changes. */
-const MAP_GEOMETRY_CACHE_VERSION = 13; // GZDoom GETPALOOKUP colormap shading
+const MAP_GEOMETRY_CACHE_VERSION = 21; // raised-platform lower band to back ceiling (E1M1 line 146)
 
 export function mapLoadCacheKey(
   wadPath: string | null | undefined,
   mapName: string,
   frameParity = false,
   useIndexTextures = frameParity,
+  skipClassicExtras = false,
 ): string {
   const textureMode = useIndexTextures ? 'index' : 'color';
-  return `v${MAP_GEOMETRY_CACHE_VERSION}::${frameParity ? 'parity' : 'play'}::${textureMode}::${wadPath ?? 'memory'}::${mapName}`;
+  const extras = skipClassicExtras ? 'gzcore' : 'full';
+  return `v${MAP_GEOMETRY_CACHE_VERSION}::${frameParity ? 'parity' : 'play'}::${textureMode}::${extras}::${wadPath ?? 'memory'}::${mapName}`;
 }
 
 export function getCachedMapLoad(key: string): Promise<CachedMapGeometry> | undefined {

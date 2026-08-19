@@ -1,4 +1,5 @@
 import { wallVisibility } from '@/wad/parity/frame/gzdoomColormap';
+import { rGetGlobVis } from '@/wad/parity/frame/gzdoomGlobVis';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { WallBuffer } from '@/wad/interfaces/WallBuffer';
 
@@ -82,6 +83,12 @@ export function gzdoomWallScreenY(
   return vp.centerY - (z * vp.invZtoScale) / Math.max(sz, 1);
 }
 
+/** Doom pitch (`centery`) — shifts wall columns vertically when looking up/down. */
+export function gzdoomPitchCenteryOffset(vp: GzdoomViewport, viewPitch: number): number {
+  if (viewPitch >= -1e-4) return 0;
+  return vp.centerY * Math.tan(viewPitch);
+}
+
 /** Screen point from doom XY + world height. */
 export function projectDoomVertex(
   doomX: number,
@@ -151,27 +158,36 @@ export function wallUvRunsRightToLeft(wall: WallBuffer): boolean {
   return u0 > u2;
 }
 
+const DEFAULT_WALL_GLOB_VIS = rGetGlobVis({
+  screenWidth: 640,
+  screenHeight: 480,
+  viewWidth: 640,
+  viewHeight: 403,
+  centerX: 320,
+});
+
 export function wallColumnVisibilityRange(
   map: WadMap,
   wall: WallBuffer,
   viewX: number,
   viewY: number,
   yaw: number,
+  wallGlobVis: number = DEFAULT_WALL_GLOB_VIS,
 ): { visLeft: number; visRight: number } {
   const line = map.LINEDEFS[wall.lineIndex];
   if (!line) {
-    const fallback = wallVisibility(512);
+    const fallback = wallVisibility(512, wallGlobVis);
     return { visLeft: fallback, visRight: fallback };
   }
   const v1 = map.VERTEXES[line.v1];
   const v2 = map.VERTEXES[line.v2];
   if (!v1 || !v2) {
-    const fallback = wallVisibility(512);
+    const fallback = wallVisibility(512, wallGlobVis);
     return { visLeft: fallback, visRight: fallback };
   }
 
-  let visAtV1 = wallVisibility(gzdoomScreenZ(v1.x, v1.y, viewX, viewY, yaw));
-  let visAtV2 = wallVisibility(gzdoomScreenZ(v2.x, v2.y, viewX, viewY, yaw));
+  let visAtV1 = wallVisibility(gzdoomScreenZ(v1.x, v1.y, viewX, viewY, yaw), wallGlobVis);
+  let visAtV2 = wallVisibility(gzdoomScreenZ(v2.x, v2.y, viewX, viewY, yaw), wallGlobVis);
   if (wallUvRunsRightToLeft(wall)) {
     [visAtV1, visAtV2] = [visAtV2, visAtV1];
   }
@@ -184,6 +200,7 @@ export function spriteColumnVisibility(
   viewX: number,
   viewY: number,
   yaw: number,
+  wallGlobVis: number = DEFAULT_WALL_GLOB_VIS,
 ): number {
-  return wallVisibility(gzdoomScreenZ(doomX, doomY, viewX, viewY, yaw));
+  return wallVisibility(gzdoomScreenZ(doomX, doomY, viewX, viewY, yaw), wallGlobVis);
 }

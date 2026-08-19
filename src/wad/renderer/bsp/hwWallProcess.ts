@@ -34,6 +34,16 @@ export interface HwWallProcessParams {
   drawFullHeight?: boolean;
 }
 
+const resolveBandTex = (
+  tex: string,
+  texturesByName: Record<string, WallTexture>
+): string | undefined => {
+  const texName = resolveTexName(tex);
+  if (texName && texturesByName[texName] && !texturesByName[texName].transparent) {
+    return texName;
+  }
+};
+
 const resolveSolidTexName = (
   strs: Array<string>,
   texturesByName: Record<string, WallTexture>
@@ -141,7 +151,7 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
       bands.push({
         part,
         texName,
-        bottom: skirtBottom,
+        bottom: ffh,
         top: fch,
         drawFromTop,
         repeatVertical: true,
@@ -153,9 +163,9 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
     };
 
     if (resolveTexName(side.midTexture)) {
-      pushOneSided(side.midTexture, !lineDef.flags.lowerUnpegged);
+      pushOneSided(side.midTexture, lineDef.flags.lowerUnpegged);
     } else if (resolveTexName(side.bottomTexture)) {
-      pushOneSided(side.bottomTexture, !lineDef.flags.lowerUnpegged);
+      pushOneSided(side.bottomTexture, lineDef.flags.lowerUnpegged);
     } else if (resolveTexName(side.topTexture)) {
       pushOneSided(side.topTexture, !lineDef.flags.upperUnpegged);
     }
@@ -182,7 +192,7 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
         texName: midTexName,
         bottom: span.bottom,
         top: span.top,
-        drawFromTop: !lineDef.flags.lowerUnpegged,
+        drawFromTop: lineDef.flags.lowerUnpegged,
         repeatVertical: false,
         transparent: texturesByName[midTexName].transparent,
         twoSidedMiddle: true,
@@ -199,21 +209,11 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
     }
   }
 
-  if (bchA < fch) {
-    const topTex = resolveSolidTexName(
-      [
-        side.topTexture,
-        side.bottomTexture,
-        side.midTexture,
-        otherSide.topTexture,
-        otherSide.bottomTexture,
-        otherSide.midTexture,
-        defaultWall ?? '',
-      ],
-      texturesByName
-    );
-    if (topTex) {
-      bands.push({
+  if (!isSkyFlat(front.ceilingpic) || !isSkyFlat(back.ceilingpic)) {
+    if (bchA < fch) {
+      const topTex = resolveBandTex(side.topTexture, texturesByName);
+      if (topTex) {
+        bands.push({
         part: 'upper',
         texName: topTex,
         bottom: bchA,
@@ -226,6 +226,7 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
         sector,
       });
     }
+    }
   } else if (
     isSkyFlat(front.ceilingpic) &&
     isSkyFlat(back.ceilingpic) &&
@@ -235,7 +236,15 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
   ) {
     // Courtyard short wall: back ceiling above front, same floor (GZDoom sky wall).
     const topTex = resolveSolidTexName(
-      [side.topTexture, side.bottomTexture, side.midTexture, defaultWall ?? ''],
+      [
+        side.topTexture,
+        side.bottomTexture,
+        side.midTexture,
+        otherSide.topTexture,
+        otherSide.bottomTexture,
+        otherSide.midTexture,
+        defaultWall ?? '',
+      ],
       texturesByName
     );
     if (topTex) {
@@ -260,18 +269,7 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
   }
 
   if (bfhDraw > ffh) {
-    const bottomTex = resolveSolidTexName(
-      [
-        side.bottomTexture,
-        side.topTexture,
-        side.midTexture,
-        otherSide.bottomTexture,
-        otherSide.topTexture,
-        otherSide.midTexture,
-        defaultWall ?? '',
-      ],
-      texturesByName
-    );
+    const bottomTex = resolveBandTex(side.bottomTexture, texturesByName);
     if (bottomTex) {
       const bottomStart = lineDef.flags.lowerUnpegged
         ? (fch - skirtBottom - texturesByName[bottomTex].height) / texturesByName[bottomTex].height
@@ -282,7 +280,7 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
         texName: bottomTex,
         bottom: ffh,
         top: bfhDraw,
-        drawFromTop: !lineDef.flags.lowerUnpegged,
+        drawFromTop: lineDef.flags.lowerUnpegged,
         repeatVertical: true,
         transparent: false,
         twoSidedMiddle: false,
@@ -290,6 +288,52 @@ export function hwWallProcessSide(params: HwWallProcessParams): HwWallBand[] {
         sectorIndex,
         sector,
       });
+    }
+  } else if (bfh === ffh && bch < fch) {
+    // Raised platform: lower texture fills floor → back ceiling (E1M1 line 146 STEP6).
+    const bottomTex = resolveBandTex(side.bottomTexture, texturesByName);
+    if (bottomTex && !bands.some((b) => b.part === 'lower')) {
+      bands.push({
+        part: 'lower',
+        texName: bottomTex,
+        bottom: ffh,
+        top: bch,
+        drawFromTop: lineDef.flags.lowerUnpegged,
+        repeatVertical: true,
+        transparent: false,
+        twoSidedMiddle: false,
+        sectorIndex,
+        sector,
+      });
+    }
+  }
+
+  // Aligned two-sided lines (same floor/ceiling both sides): GZDoom draws top+bottom
+  // texture full height when no upper/lower/mid gap exists (E1M1 line 46 STARTAN3).
+  // Skip top-only aligned lines (open crusher doors).
+  if (bands.length === 0 && ffh === bfh && fch === bch) {
+    const hasTop = Boolean(resolveTexName(side.topTexture));
+    const hasBottom = Boolean(resolveTexName(side.bottomTexture));
+    const hasMid = Boolean(resolveTexName(side.midTexture));
+    if ((hasTop && hasBottom) || hasMid) {
+      const alignedTex = resolveSolidTexName(
+        [side.topTexture, side.bottomTexture, side.midTexture],
+        texturesByName,
+      );
+      if (alignedTex) {
+        bands.push({
+          part: 'mid',
+          texName: alignedTex,
+          bottom: ffh,
+          top: fch,
+          drawFromTop: !lineDef.flags.upperUnpegged,
+          repeatVertical: true,
+          transparent: false,
+          twoSidedMiddle: Boolean(hasMid),
+          sectorIndex,
+          sector,
+        });
+      }
     }
   }
 

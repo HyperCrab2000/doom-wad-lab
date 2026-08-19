@@ -43,7 +43,7 @@ describe('mapToWalls', () => {
     const wall = walls[0]!;
     const minV = Math.min(wall.uv[1], wall.uv[3], wall.uv[5], wall.uv[7]);
     const maxV = Math.max(wall.uv[1], wall.uv[3], wall.uv[5], wall.uv[7]);
-    expect(maxV - minV).toBeCloseTo(208 / 128, 5);
+    expect(maxV - minV).toBeCloseTo(210 / 128, 5);
     expect(wall.repeatVertical).not.toBe(false);
   });
 
@@ -53,7 +53,7 @@ describe('mapToWalls', () => {
       BLAKWAL1: texture(false, 64, 128),
     });
 
-    const indoorWalls = walls.filter((wall) => wall.sectorIndex === 0);
+    const indoorWalls = walls.filter((wall) => wall.sectorIndex === 1);
     expect(indoorWalls).toHaveLength(2);
     const lower = indoorWalls.find((wall) => wall.center[1] === -28)!;
     const upper = indoorWalls.find((wall) => wall.center[1] === 144)!;
@@ -63,6 +63,17 @@ describe('mapToWalls', () => {
     expect(lower.position![7]).toBe(1);
     expect(upper.position![1]).toBe(71);
     expect(upper.position![7]).toBe(217);
+  });
+
+  it('draws sky-sector height steps when the top texture is on the opposite sidedef', () => {
+    const walls = mapToWalls(skyStepOppositeTopTextureMap(), {
+      STARG3: texture(false, 64, 128),
+      BLAKWAL1: texture(false, 64, 128),
+    });
+
+    const stepWall = walls.find((wall) => wall.sectorIndex === 1 && wall.texName === 'STARG3');
+    expect(stepWall).toBeDefined();
+    expect(stepWall!.center[1]).toBe(196);
   });
 
   it('computes boundsRadius from wall quad corners', () => {
@@ -260,6 +271,57 @@ function windowFrameMap(): WadMap {
           secret: false,
           blockSound: false,
           notOnMap: false,
+          alreadyOnMap: false,
+        },
+      },
+    ],
+    THINGS: [],
+  } as unknown as WadMap;
+}
+
+function skyStepOppositeTopTextureMap(): WadMap {
+  return {
+    VERTEXES: [
+      { x: 0, y: 0 },
+      { x: 128, y: 0 },
+    ],
+    SECTORS: [
+      { ...sector(0, 264), floorpic: 'FLOOR7_1', ceilingpic: 'F_SKY1' },
+      { ...sector(0, 128), floorpic: 'FLOOR7_1', ceilingpic: 'F_SKY1' },
+    ],
+    SIDEDEFS: [
+      {
+        xOffset: 0,
+        yOffset: 0,
+        topTexture: 'STARG3',
+        bottomTexture: 'STARG3',
+        midTexture: '-',
+        sector: 0,
+      },
+      {
+        xOffset: 0,
+        yOffset: 0,
+        topTexture: '-',
+        bottomTexture: '-',
+        midTexture: '-',
+        sector: 1,
+      },
+    ],
+    LINEDEFS: [
+      {
+        v1: 0,
+        v2: 1,
+        special: 0,
+        sidenum: [0, 1],
+        flags: {
+          impassible: false,
+          blockMonsters: false,
+          twoSided: true,
+          upperUnpegged: true,
+          lowerUnpegged: true,
+          secret: false,
+          blockSound: false,
+          notOnMap: true,
           alreadyOnMap: false,
         },
       },

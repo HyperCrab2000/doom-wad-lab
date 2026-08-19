@@ -1,7 +1,5 @@
 import { vec3 } from 'gl-matrix';
 
-import { skyFlats } from '@/wad/constants/WadInfo';
-
 import { WallObject } from '@/wad/interfaces/WallObject';
 import { LineDef } from '@/wad/interfaces/LineDef';
 import { WadMap } from '@/wad/interfaces/WadMap';
@@ -9,6 +7,7 @@ import { SideDef } from '@/wad/interfaces/SideDef';
 import { Vertex } from '@/wad/interfaces/Vertex';
 import { WallTexture } from '@/wad/interfaces/WallTexture';
 
+import { hwWallProcessSide } from '@/wad/renderer/bsp/hwWallProcess';
 import { firstObjectKey } from '@/wad/utils/firstObjectKey';
 
 interface CreateWallProps {
@@ -185,31 +184,15 @@ function extendLineEndpoints(v1: Vertex, v2: Vertex, overlap: number): { v1: Ver
   };
 }
 
-/** Avoid upper/lower wall segments flickering on/off while door ceilings move. */
-const WALL_VISIBILITY_EPS = 1;
-
 /** Extend wall quads along the linedef to hide sub-texel gaps at corners (E1M2, etc.). */
 export const LINE_ENDPOINT_OVERLAP = 0.75;
 
 /** Overlap upper/lower/mid wall bands at two-sided lines (door frames). */
 const WALL_JOINT_OVERLAP = 1;
 
-const resolveTexName = (str: string): string | undefined => {
-  return str !== '-' ? str : undefined;
-};
-
-const resolveSolidTexName = (
-  strs: Array<string>,
-  texturesByName: Record<string, WallTexture>
-): string | undefined => {
-  for (let i = 0; i < strs.length; i++) {
-    const texName = resolveTexName(strs[i]);
-    const texDef = texName ? texturesByName[texName] : undefined;
-    if (texDef && !texDef.transparent) {
-      return texName;
-    }
-  }
-};
+function resolveDefaultWall(texturesByName: Record<string, WallTexture>): string {
+  return 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : firstObjectKey(texturesByName)!;
+}
 
 const procesSideDef = (
   map: WadMap,
@@ -218,182 +201,52 @@ const procesSideDef = (
   lineDef: LineDef,
   texturesByName: Record<string, WallTexture>,
   inverse: boolean,
-  defaultWall: string
+  defaultWall: string,
 ): Array<WallObject> => {
+  const bands = hwWallProcessSide({
+    map,
+    lineDef,
+    sideDefIndex: sideDef,
+    otherSideDefIndex: otherSideDef,
+    texturesByName,
+    defaultWall,
+  });
+
   const rawV1 = map.VERTEXES[lineDef.v1];
   const rawV2 = map.VERTEXES[lineDef.v2];
+  if (!rawV1 || !rawV2) return [];
   const { v1, v2 } = extendLineEndpoints(rawV1, rawV2, LINE_ENDPOINT_OVERLAP);
   const side = map.SIDEDEFS[sideDef];
-  const sector = map.SECTORS[side.sector];
-  const sectorIndex = side.sector;
+  if (!side) return [];
 
-  let bottom = sector.floorheight;
-  let top = sector.ceilingheight;
-
-  const walls = new Array<WallObject>();
-
-  if (otherSideDef === -1) {
-    const oneSidedTex =
-      resolveTexName(side.midTexture) ??
-      resolveTexName(side.bottomTexture) ??
-      resolveTexName(side.topTexture);
-    const oneSidedTexDef = oneSidedTex ? texturesByName[oneSidedTex] : undefined;
-    if (oneSidedTex && oneSidedTexDef) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: oneSidedTex,
-        ...createWall({
-          v1,
-          v2,
-          bottom,
-          top,
-          inverse,
-          side,
-          texSize: oneSidedTexDef,
-          drawFromTop: !lineDef.flags.lowerUnpegged,
-        }),
-      });
-    }
-
-    return walls;
+  const walls: WallObject[] = [];
+  for (const band of bands) {
+    const texDef = texturesByName[band.texName];
+    if (!texDef) continue;
+    const joint = band.part === 'mid' ? 0 : WALL_JOINT_OVERLAP;
+    walls.push({
+      sector: band.sector,
+      sectorIndex: band.sectorIndex,
+      texName: band.texName,
+      transparent: band.transparent,
+      twoSidedMiddle: band.twoSidedMiddle,
+      repeatVertical: band.repeatVertical,
+      ...createWall({
+        v1,
+        v2,
+        bottom: band.bottom - joint,
+        top: band.top + joint,
+        inverse,
+        side,
+        texSize: texDef,
+        drawFromTop: band.drawFromTop,
+        bottomStart: band.bottomStart,
+        repeatVertical: band.repeatVertical,
+      }),
+    });
   }
-
-  const otherSide = map.SIDEDEFS[otherSideDef];
-  const otherSector = map.SECTORS[otherSide.sector];
-
-  const hasMidTexture = Boolean(resolveTexName(side.midTexture));
-
-  //TODO: if the sector ceiling height is lower than the other sector this ceiling is lower and there are no side-textures we need to place some sky
-  if (hasMidTexture) {
-    const midTexDef = texturesByName[side.midTexture];
-    if (midTexDef) {
-      const midBottom = Math.max(sector.floorheight, otherSector.floorheight);
-      const midTop = Math.min(sector.ceilingheight, otherSector.ceilingheight);
-      if (midTop > midBottom + WALL_VISIBILITY_EPS) {
-        walls.push({
-          sector,
-          sectorIndex,
-          texName: side.midTexture,
-          transparent: midTexDef.transparent,
-          twoSidedMiddle: true,
-          repeatVertical: false,
-          ...createWall({
-            v1,
-            v2,
-            bottom: midBottom - WALL_JOINT_OVERLAP,
-            top: midTop + WALL_JOINT_OVERLAP,
-            inverse,
-            side,
-            texSize: midTexDef,
-            // Doom two-sided midtextures (doors) are bottom-pegged to the linedef floor.
-            drawFromTop: lineDef.flags.upperUnpegged,
-            repeatVertical: false,
-          }),
-        });
-      }
-    }
-  }
-
-  const lowerWallBottom = Math.min(sector.floorheight, otherSector.floorheight);
-  const lowerWallTop = Math.max(sector.floorheight, otherSector.floorheight);
-  if (lowerWallTop > lowerWallBottom + WALL_VISIBILITY_EPS) {
-    // GZDoom: lower wall only renders when bottomTexture is explicitly set (not '-').
-    // Never fall back to other slots — a missing bottom texture means transparent gap.
-    const tex = resolveTexName(side.bottomTexture);
-    const texDef = tex ? texturesByName[tex] : undefined;
-
-    if (tex && texDef) {
-      const bottomStart = lineDef.flags.lowerUnpegged
-        ? (top - bottom - texDef.height) / texDef.height
-        : 0;
-
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: tex,
-        ...createWall({
-          v1,
-          v2,
-          bottom: lowerWallBottom - WALL_JOINT_OVERLAP,
-          top: lowerWallTop + WALL_JOINT_OVERLAP,
-          inverse,
-          side,
-          texSize: texDef,
-          drawFromTop: !lineDef.flags.lowerUnpegged,
-          bottomStart: -bottomStart,
-        }),
-      });
-    }
-  }
-
-  const upperWallBottom = Math.min(sector.ceilingheight, otherSector.ceilingheight);
-  const upperWallTop = Math.max(sector.ceilingheight, otherSector.ceilingheight);
-  const sectorHasSky = skyFlats.indexOf(sector.ceilingpic) >= 0;
-  const otherSectorHasSky = skyFlats.indexOf(otherSector.ceilingpic) >= 0;
-  if (
-    upperWallTop > upperWallBottom + WALL_VISIBILITY_EPS &&
-    (!sectorHasSky || !otherSectorHasSky)
-  ) {
-    // GZDoom: upper wall only renders when topTexture is explicitly set (not '-').
-    const tex = resolveTexName(side.topTexture);
-    const texDef = tex ? texturesByName[tex] : undefined;
-
-    if (tex && texDef) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: tex,
-        ...createWall({
-          v1,
-          v2,
-          bottom: upperWallBottom - WALL_JOINT_OVERLAP,
-          top: upperWallTop + WALL_JOINT_OVERLAP,
-          inverse,
-          side,
-          texSize: texDef,
-          drawFromTop: lineDef.flags.upperUnpegged,
-        }),
-      });
-    }
-  } else if (
-    upperWallTop > upperWallBottom + WALL_VISIBILITY_EPS &&
-    sectorHasSky &&
-    otherSectorHasSky &&
-    sector.floorheight === otherSector.floorheight &&
-    sector.ceilingheight < otherSector.ceilingheight
-  ) {
-    // GZDoom HWWall: short sky-sector step when back ceiling is higher (courtyard edges).
-    // Only render if there is an explicit top texture; sky-sky transitions with no top
-    // texture are handled by the sky portal (seamless sky above the short wall).
-    const tex = resolveTexName(side.topTexture);
-    const texDef = tex ? texturesByName[tex] : undefined;
-
-    if (tex && texDef) {
-      walls.push({
-        sector,
-        sectorIndex,
-        texName: tex,
-        ...createWall({
-          v1,
-          v2,
-          bottom: sector.ceilingheight,
-          top: otherSector.ceilingheight,
-          inverse,
-          side,
-          texSize: texDef,
-          drawFromTop: lineDef.flags.upperUnpegged,
-        }),
-      });
-    }
-  }
-
   return walls;
 };
-
-function resolveDefaultWall(texturesByName: Record<string, WallTexture>): string {
-  return 'BLAKWAL1' in texturesByName ? 'BLAKWAL1' : firstObjectKey(texturesByName)!;
-}
 
 export function mapToWallsForLine(
   map: WadMap,

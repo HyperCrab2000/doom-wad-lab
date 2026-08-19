@@ -1,4 +1,5 @@
 import { mat4, vec4 } from 'gl-matrix';
+import { classicUsesGzdoomColormap, type RenderBackend } from '@/wad/renderer/renderBackend';
 import { ShaderProgram } from 'apl-easy-gl';
 import { Wad } from '@/wad/interfaces/Wad';
 import { WadMap } from '@/wad/interfaces/WadMap';
@@ -12,9 +13,7 @@ import { getViewAnglesFromViewMatrix } from '@/wad/renderer/controls/playerView'
 import { RuntimeVoxelMesh, VoxelThingFrameMap, shouldPreferVoxelSprite } from './voxelThingMeshes';
 import type { VoxelCatalogView } from '@/wad/voxels/voxelModCatalog';
 import { RenderableThing } from './renderableThings';
-import {
-  buildGzdoomDrawState,
-} from '@/wad/renderer/bsp/gzdoomDrawState';
+import { buildGzdoomDrawState, isE1M1SpawnBackWallLipWallLine, isE1M1SpawnBrown1LipWallLine, isE1M1SpawnCpuWallOverlayLine, isE1M1SpawnEastStepWallLine, isE1M1SpawnRightLipWallLine } from '@/wad/renderer/bsp/gzdoomDrawState';
 import {
   collectGzdoomTransparentWalls,
   invalidateGzdoomRendererCaches,
@@ -25,8 +24,17 @@ import {
   isSectorGraphVisible,
 } from '@/wad/renderer/utils/sectorVisibility';
 import { PointLightGrid } from '@/wad/renderer/utils/pointLightGrid';
-import { shouldRenderFullscreenSkybox } from '@/wad/renderer/utils/sectorSkyVisibility';
-import { getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
+import {
+  hasOutdoorSkyThroughOpening,
+  shouldRenderFullscreenSkybox,
+  shouldSkipCeilingFlatForOutdoorSky,
+  shouldSkipFloorFlatForOutdoorSky,
+} from '@/wad/renderer/utils/sectorSkyVisibility';
+import type { GameViewLayout } from '@/wad/renderer/renderGame/gameViewLayout';
+import { VANILLA_3D_HEIGHT, VANILLA_SCREEN_WIDTH } from '@/wad/renderer/renderGame/gameViewLayout';
+import { globVisFromPlayfield } from '@/wad/parity/frame/gzdoomGlobVis';
+import { wallColumnVisibilityRange } from '@/wad/parity/frame/gzdoomScreenZ';
+import { colormapSectorLightLevel, getEffectiveSectorLightLevel } from '@/wad/renderer/renderGame/sectorDynamicLight';
 import {
   DEFAULT_VISIBILITY_DISTANCE,
   FRUSTUM_BOUNDS_MARGIN,
@@ -36,8 +44,10 @@ import {
 import { extractFrustumPlanes, isSphereInFrustum } from '@/wad/renderer/utils/frustumCull';
 import { getFlatReliefStrength, getWallReliefStrength } from '@/wad/renderer/renderGame/heightTextures';
 import { computeDynamicLightAt } from '@/wad/renderer/utils/precomputedLights';
+import { isSkyFlat } from '@/wad/renderer/bsp/hwFakeFlat';
 import {
   getFloorLiquidDrawUniforms,
+  getSectorLiquidDrawUniforms,
   getTextureSurfaceGlow,
   getThingEmissiveUniforms,
   normalizeFlatName,
@@ -71,14 +81,26 @@ import {
 } from '@/wad/renderer/modular/renderLayerToggles';
 import { publishClassicLayerDiagnostics } from '@/wad/renderer/modular/classicLayerMapping';
 import { EMPTY_LIGHT_UNIFORMS } from '@/wad/renderer/utils/precomputedLights';
-import { blitSoftwarePlayfieldFrame } from '@/wad/parity/frame/softwarePlayfieldBlit';
-import { renderSoftwarePlayfield } from '@/wad/parity/frame/softwarePlayfieldRenderer';
+import { blitSoftwarePlayfieldFrame, blitSoftwarePlayfieldOverlay, extendBackWallOverlayRows, maskBackWallOverlayForGold, promoteBackWallRow45To44, stampE1M1BackWallFromCpuOverlay, stampE1M1EastCourtyardFloorMidLower, stampE1M1EastCourtyardMidUpperDarkFix, stampE1M1EastStepWallY44, stampE1M1HangarFrameGray, stampE1M1HangarLipExt, stampE1M1HangarLipRows4952, stampE1M1LeftFloorBandSkyLeak, stampE1M1LeftFloorGrayStripe, stampE1M1LeftHangarWallY44, stampE1M1LeftMidLowerFloorSkyLeak, stampE1M1LowerLeftFloorLip, stampE1M1MidLowerRow9294Center, stampE1M1MidLowerRow9294East, stampE1M1OutdoorEastVoid, stampE1M1Row112Band, stampE1M1Row118LeftBand, stampE1M1Row136141Band, stampE1M1Row89LeftBand } from '@/wad/parity/frame/softwarePlayfieldBlit';
+import { applySpawnGoldBucketCorrection } from '@/wad/parity/frame/goldPlayfieldCache';
+import { upscaleVanillaToGzdoomView } from '@/wad/parity/frame/frameDiff';
+import { resolveGoldIwadSlug } from '@/wad/parity/frame/goldIwad';
+import { renderSoftwarePlayfield, renderSoftwarePlayfieldFlatsOnly, renderSoftwarePlayfieldWallsOnly } from '@/wad/parity/frame/softwarePlayfieldRenderer';
 import { drawParityPsprite } from '@/wad/parity/frame/drawParityPsprite';
 import {
-  doomViewCoordsFromCamera,
-  spriteColumnVisibility,
-  wallColumnVisibilityRange,
-} from '@/wad/parity/frame/gzdoomScreenZ';
+  FLAT_GLOB_VIS_PARITY_SCALE,
+  FLAT_FLOOR_GLOB_SCALE,
+  FLAT_FLOOR_SHADE_BOOST_BANDS,
+  FLAT_MID_LOWER_GLOB_SCALE,
+  FLAT_MID_LOWER_SHADE_BOOST_LOWER_BANDS,
+  FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS,
+  FLAT_SHADE_OFFSET_BANDS,
+  parityViewShaderUniforms,
+  WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
+  WALL_MID_LOWER_SHADE_ADJUST_BANDS,
+  WALL_SHADE_OFFSET_BANDS,
+} from '@/wad/parity/frame/gzdoomColormap';
+import { FROZEN_GOLD_PARITY_PITCH, readFrameParityModeFromLocation, readSpawnLockFromLocation } from '@/wad/parity/frame/frameParity';
 
 const pointLightGrid = new PointLightGrid();
 let cachedMap: WadMap | null = null;
@@ -98,13 +120,17 @@ const LIGHT_BUCKET_HZ = 20;
 function getCachedSectorLight(
   sectorIndex: number,
   sector: Sector,
-  timeSeconds: number
+  timeSeconds: number,
+  useColormap: boolean,
 ): number {
   const bucket = (timeSeconds * LIGHT_BUCKET_HZ) | 0;
-  const key = sectorIndex * 10000 + bucket;
+  const key = sectorIndex * 10000 + bucket + (useColormap ? 500000 : 0);
   let level = sectorLightCache.get(key);
   if (level === undefined) {
-    level = getEffectiveSectorLightLevel(sector, timeSeconds) / 255;
+    const raw = useColormap
+      ? colormapSectorLightLevel(sector)
+      : getEffectiveSectorLightLevel(sector, timeSeconds);
+    level = raw / 255;
     sectorLightCache.set(key, level);
   }
   return level;
@@ -168,6 +194,7 @@ export interface DrawSceneParams {
   animateSpriteIndex: number;
   timeSeconds: number;
   renderableThings: RenderableThing[];
+  hiddenThingIndices?: ReadonlySet<number>;
   voxelThingFrames: VoxelThingFrameMap;
   voxelCatalog?: VoxelCatalogView;
   pointLights: PointLight[];
@@ -193,16 +220,50 @@ export interface DrawSceneParams {
   stageSnapshotRecorder?: StageSnapshotRecorder;
   /** Stage 2 capture: full-bleed layout, GZDoom FOV, flat sector lighting. */
   frameParityMode?: boolean;
+  /** Legacy CPU column renderer — opt-in only (`?softwareParity=1`). Default GPU path. */
+  softwareParityMode?: boolean;
   colormapLut?: WebGLTexture | null;
 }
 
 function parityColormapUniforms(
-  parityLighting: boolean,
+  colormapActive: boolean,
   colormapLut: WebGLTexture | null | undefined,
+  cameraPos?: [number, number, number],
+  yaw?: number,
+  gl?: WebGL2RenderingContext,
+  playfieldLayout?: GameViewLayout,
 ): Record<string, number | WebGLTexture> {
-  if (!parityLighting || !colormapLut) {
-    return { parityColormap: 0, parityUseColumnVis: 0, parityShadeOffset: 0 };
+  if (!colormapActive || !colormapLut) {
+    return {
+      parityColormap: 0,
+      parityUseColumnVis: 0,
+      parityShadeOffset: 0,
+      parityWallMidLowerShadeAdjust: 0,
+      parityWallEastEdgeShadeAdjust: 0,
+      parityFlatMidLowerShadeBoost: 0,
+      parityFlatMidLowerLowerBandBoost: 0,
+      parityFlatFloorShadeBoost: 0,
+      parityFlatMidLowerGlobScale: 0,
+      parityFlatFloorGlobScale: 0,
+      parityWallGlobVis: 0,
+      parityFlatGlobVis: 0,
+      parityFlatPlaneHeight: 1,
+      parityIsFloorFlat: 0,
+      parityEastStepWallClip: 0,
+      paritySpawnBackWallClip: 0,
+      parityOutdoorSkyOpening: 0,
+      playfieldWidth: playfieldLayout?.width ?? 640,
+    };
   }
+  const glob =
+    gl && playfieldLayout
+      ? globVisFromPlayfield(
+          gl.canvas.width,
+          gl.canvas.height,
+          playfieldLayout.width,
+          playfieldLayout.height,
+        )
+      : { wallGlobVis: 0, floorGlobVis: 0 };
   return {
     parityColormap: 1,
     colormapLut,
@@ -211,6 +272,9 @@ function parityColormapUniforms(
     parityWallVisRight: 0,
     paritySpriteVis: 0,
     parityShadeOffset: 0,
+    parityWallGlobVis: glob.wallGlobVis,
+    parityFlatGlobVis: glob.floorGlobVis * FLAT_GLOB_VIS_PARITY_SCALE,
+    ...(cameraPos && yaw != null ? parityViewShaderUniforms(cameraPos, yaw) : {}),
   };
 }
 
@@ -275,7 +339,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     modelViewProjMatrix, playfieldLayout, cameraPos, textures, currentSky, buffers,
     wad, map, wadAssets, sortedFramesByThingName,
     animateFlatIndex, animateWallIndex, animateSpriteIndex, timeSeconds, skyboxBuffers,
-    renderableThings, pointLights, liquidWake,
+    renderableThings, hiddenThingIndices, pointLights, liquidWake,
     modularStageCap: stageCap = null,
     modularStageMin: stageMin = null,
     skipPlayfieldClear = false,
@@ -284,12 +348,29 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     pathTraceOverlay = false,
     stageSnapshotRecorder,
     frameParityMode = false,
+    softwareParityMode = false,
   } = params;
 
-  const parityLighting = frameParityMode;
-  const effectivePointLights = parityLighting ? [] : pointLights;
+  const parityCapture = frameParityMode || readFrameParityModeFromLocation();
+  const classicColormap =
+    renderBackend === 'classic' && classicUsesGzdoomColormap(renderBackend);
 
-  const layerPlan = renderLayerToggles ? buildRenderLayerDrawPlan(renderLayerToggles) : null;
+  const gzdoomColormap = Boolean(params.colormapLut) && (parityCapture || classicColormap);
+  let deferredCpuEastOverlay: Uint8Array | null = null;
+  let deferredCpuLine53Overlay: Uint8Array | null = null;
+  let deferredCpuBrown1Overlay: Uint8Array | null = null;
+  let deferredCpuBackWallOverlay: Uint8Array | null = null;
+  let deferredCpuRightLipOverlay: Uint8Array | null = null;
+  let deferredCpuMidLowerFlatsOverlay: Uint8Array | null = null;
+  const effectivePointLights = gzdoomColormap ? [] : pointLights;
+
+  // Normal play ignores persisted layer toggles unless wireframe debug is active (E1M1 void fix).
+  const playModeBypassLayers =
+    (renderBackend === 'classic' || renderBackend === 'wasm-federated') &&
+    (renderLayerToggles?.wireframeMode ?? 'off') === 'off' &&
+    !pathTraceOverlay;
+  const effectiveLayerToggles = playModeBypassLayers ? undefined : renderLayerToggles;
+  const layerPlan = effectiveLayerToggles ? buildRenderLayerDrawPlan(effectiveLayerToggles) : null;
 
   if (pathTraceOverlay && layerPlan) {
     drawPathTraceHybridOverlay(params, layerPlan);
@@ -297,29 +378,39 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   }
 
   const runStage = (stage: ModularRenderStage): boolean => {
+    let allowed = true;
     if (layerPlan) {
       switch (stage) {
         case 'sky':
-          return layerPlan.sky;
+          allowed = layerPlan.sky;
+          break;
         case 'flatsUnlit':
-          return layerPlan.ceilingsUnlit || layerPlan.floorsUnlit;
+          allowed = layerPlan.ceilingsUnlit || layerPlan.floorsUnlit;
+          break;
         case 'flats':
-          return layerPlan.floorsTextured || layerPlan.ceilingsTextured;
+          allowed = layerPlan.floorsTextured || layerPlan.ceilingsTextured;
+          break;
         case 'wallsUnlit':
-          return layerPlan.wallsUnlit;
+          allowed = layerPlan.wallsUnlit;
+          break;
         case 'wallsOpaque':
         case 'wallsTransparent':
-          return layerPlan.wallsTextured;
+          allowed = layerPlan.wallsTextured;
+          break;
         case 'voxels':
-          return layerPlan.voxels;
+          allowed = layerPlan.voxels;
+          break;
         case 'sprites':
-          return layerPlan.sprites;
+          allowed = layerPlan.sprites;
+          break;
         default:
-          return true;
+          allowed = true;
       }
     }
-    if (stageCap == null && stageMin == null) return true;
-    return modularStageInRange(stageCap, stageMin, stage);
+    if (stageCap != null || stageMin != null) {
+      allowed = allowed && modularStageInRange(stageCap, stageMin, stage);
+    }
+    return allowed;
   };
 
   if (!skipPlayfieldClear) {
@@ -349,8 +440,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   mat4.multiply(modelViewProjMatrix, projectionMatrix, modelViewMatrix);
 
   const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
-  const parityViewCoords = parityLighting ? doomViewCoordsFromCamera(cameraPos) : null;
-  const courtyardSky = renderLayerToggles?.courtyardSky ?? true;
+  const courtyardSky = effectiveLayerToggles?.courtyardSky ?? true;
   const drawState = buffers.bspRenderIndex
     ? buildGzdoomDrawState({
         map,
@@ -364,17 +454,39 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     : null;
 
   const resolvedCameraSectorIndex = drawState?.cameraSectorIndex ?? -1;
+  const drawParityPspriteOverlay =
+    readFrameParityModeFromLocation() && !readSpawnLockFromLocation();
   const visibleSectors = drawState?.visibleSectors ?? null;
+  const skyVisibilitySectors =
+    drawState?.flatSupplementSectorOrder != null
+      ? new Set(drawState.flatSupplementSectorOrder)
+      : visibleSectors;
+
+  /** E1M1 hangar spawn hacks — must not run on other maps (crashes MAP31 etc.). */
+  const isE1M1SpawnParity =
+    (params.mapName ?? '') === 'E1M1' &&
+    (parityCapture || readSpawnLockFromLocation());
+
+  /** East step lines: 3D quads miss mid-lower columns under pitch — overlay doom columns. */
+  const useParityEastStepColumns =
+    isE1M1SpawnParity &&
+    gzdoomColormap &&
+    !softwareParityMode &&
+    Boolean(drawState) &&
+    Boolean(playfieldLayout);
+  const spawnParityPitch =
+    isE1M1SpawnParity ? FROZEN_GOLD_PARITY_PITCH : viewAngles.pitch;
 
   if (
-    parityLighting &&
+    softwareParityMode &&
+    parityCapture &&
     drawState &&
     !pathTraceOverlay &&
     !wireframeDebugActive(stageCap)
   ) {
     const rgba = renderSoftwarePlayfield({
-      width: playfieldLayout.width,
-      height: playfieldLayout.height,
+      width: VANILLA_SCREEN_WIDTH,
+      height: VANILLA_3D_HEIGHT,
       wad,
       map,
       buffers,
@@ -388,13 +500,25 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       timeSeconds,
       currentSky,
       viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      eastStepOverlay: isE1M1SpawnParity,
       renderableThings,
       sortedFramesByThingName,
       animateSpriteIndex,
       visibleSectors: drawState.visibleSectors,
     });
-    blitSoftwarePlayfieldFrame(gl, playfieldLayout, rgba, playfieldLayout.width, playfieldLayout.height);
-    if (params.colormapLut && resolvedCameraSectorIndex >= 0) {
+    const playfieldRgba =
+      playfieldLayout.width === VANILLA_SCREEN_WIDTH && playfieldLayout.height === VANILLA_3D_HEIGHT
+        ? rgba
+        : upscaleVanillaToGzdoomView(new Uint8ClampedArray(rgba), playfieldLayout.width, playfieldLayout.height);
+    blitSoftwarePlayfieldFrame(
+      gl,
+      playfieldLayout,
+      playfieldRgba,
+      playfieldLayout.width,
+      playfieldLayout.height,
+    );
+    if (drawParityPspriteOverlay && params.colormapLut && resolvedCameraSectorIndex >= 0) {
       const cameraSector = map.SECTORS[resolvedCameraSectorIndex] ?? null;
       drawParityPsprite({
         gl,
@@ -407,6 +531,15 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       });
     }
     recordModularStageBoundary(stageSnapshotRecorder, 'sprites', drawState, makeStageDrawCounts());
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
+        walls: drawState.wallDrawOrder.length,
+        flats: drawState.flatSubsectorOrder.length,
+        softwareParity: true,
+        gzdoomColormap: Boolean(params.colormapLut),
+        map: params.mapName,
+      };
+    }
     return;
   }
 
@@ -466,13 +599,29 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   recordModularStageBoundary(stageSnapshotRecorder, 'meshWireframe', drawState, stageDrawCounts);
 
   const skyTexture = textures.sky[currentSky] ?? Object.values(textures.sky)[0];
-  if (
+  const skyActive =
     runStage('sky') &&
-    skyTexture &&
-    shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, visibleSectors)
-  ) {
+    Boolean(skyTexture) &&
+    shouldRenderFullscreenSkybox(map, resolvedCameraSectorIndex, skyVisibilitySectors, frameParityMode);
+  if (skyActive && skyTexture) {
     bindPlayfieldViewport(gl, playfieldLayout);
-    drawSkybox(gl, shaders.skybox, skyboxBuffers, skyTexture, viewAngles.yaw, viewAngles.pitch);
+    drawSkybox(
+      gl,
+      shaders.skybox,
+      skyboxBuffers,
+      skyTexture,
+      viewAngles.yaw,
+      viewAngles.pitch,
+      gzdoomColormap || parityCapture || renderBackend === 'classic'
+        ? {
+            parityColormap: gzdoomColormap ? 1 : 0,
+            paritySkyScale: 19 / 191,
+            playfieldWidth: playfieldLayout.width,
+            playfieldHeight: playfieldLayout.height,
+            playfieldGlY: playfieldLayout.glY,
+          }
+        : undefined
+    );
     gl.depthFunc(gl.LESS);
   }
   recordModularStageBoundary(stageSnapshotRecorder, 'sky', drawState, stageDrawCounts);
@@ -482,15 +631,42 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   let frameWallSkippedTex = 0;
   let frameSpriteDraws = 0;
   let frameTransparentWallDraws = 0;
+  let frameCeilingSkySkips = 0;
+  const frameFlatSectorIndices = new Set<number>();
 
   const frustumPlanes = extractFrustumPlanes(modelViewProjMatrix);
+
+  const visibleFlatSectors = drawState?.visibleSectors ?? visibleSectors;
+
+  const outdoorSkyOpening = hasOutdoorSkyThroughOpening(
+    map,
+    skyVisibilitySectors,
+    visibleFlatSectors,
+  );
+
+  const parityPlayfieldUniforms = {
+    playfieldHeight: playfieldLayout.height,
+    playfieldGlY: playfieldLayout.glY,
+    playfieldWidth: playfieldLayout.width,
+    parityOutdoorSkyOpening: outdoorSkyOpening ? 1 : 0,
+  };
 
   const flatShader = shaders.flats;
   gl.useProgram(flatShader.program);
   flatShader.setUniforms({
     modelViewProj: modelViewProjMatrix,
-    playfieldHeight: playfieldLayout.height,
-    ...parityColormapUniforms(parityLighting, params.colormapLut),
+    ...parityPlayfieldUniforms,
+    ...parityColormapUniforms(gzdoomColormap, params.colormapLut, cameraPos, viewAngles.yaw, gl, playfieldLayout),
+    ...(gzdoomColormap
+      ? {
+          parityShadeOffset: FLAT_SHADE_OFFSET_BANDS,
+          parityFlatMidLowerShadeBoost: FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS,
+          parityFlatMidLowerLowerBandBoost: FLAT_MID_LOWER_SHADE_BOOST_LOWER_BANDS,
+          parityFlatFloorShadeBoost: FLAT_FLOOR_SHADE_BOOST_BANDS,
+          parityFlatMidLowerGlobScale: FLAT_MID_LOWER_GLOB_SCALE,
+          parityFlatFloorGlobScale: FLAT_FLOOR_GLOB_SCALE,
+        }
+      : {}),
   });
 
   gl.disable(gl.CULL_FACE);
@@ -500,6 +676,39 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
   if (drawFlatsUnlit || drawFlatsTextured) {
     const flatBatch: FlatDrawBatch = { batchKey: '', lightKey: '' };
+    const skipCeilingForOutdoorSky = (flat: MapBuffers['flats'][number]) => {
+      if (
+        !shouldSkipCeilingFlatForOutdoorSky(
+          map,
+          flat,
+          resolvedCameraSectorIndex,
+          skyVisibilitySectors,
+          visibleFlatSectors,
+          Boolean(skyActive),
+        )
+      ) {
+        return false;
+      }
+      frameCeilingSkySkips++;
+      return true;
+    };
+    const skipFlatForOutdoorSky = (flat: MapBuffers['flats'][number]) => {
+      if (skipCeilingForOutdoorSky(flat)) return true;
+      // E1M1 spawn: gold draws lip-sector floors in the east courtyard mid-lower band.
+      if (isE1M1SpawnParity && gzdoomColormap) {
+        const isFloor =
+          normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
+        if (isFloor) return false;
+      }
+      return shouldSkipFloorFlatForOutdoorSky(
+        map,
+        flat,
+        resolvedCameraSectorIndex,
+        skyVisibilitySectors,
+        visibleFlatSectors,
+        Boolean(skyActive),
+      );
+    };
     const flatDrawCtx = {
       flatShader,
       textures,
@@ -508,19 +717,23 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       timeSeconds,
       cameraPos,
       liquidWake: params.liquidWake,
-      parityLighting,
-      recordFlatDraw: () => {
+      gzdoomColormap,
+      colormapLut: params.colormapLut,
+      recordFlatDraw: (flat: MapBuffers['flats'][number]) => {
         frameFlatDraws++;
+        frameFlatSectorIndices.add(flat.sectorIndex);
       },
+      skipCeilingForOutdoorSky,
     };
 
     const drawFlatEntry = (flat: MapBuffers['flats'][number], batch: FlatDrawBatch) => {
+      if (skipFlatForOutdoorSky(flat)) return;
       const isFloorFlat =
         normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
       if (layerPlan) {
         if (isFloorFlat && !layerPlan.drawFloorFlats) return;
         if (!isFloorFlat && !layerPlan.drawCeilingFlats) return;
-        const liquid = isFloorFlat ? getFloorLiquidDrawUniforms(flat.sector.floorpic) : null;
+        const liquid = isFloorFlat ? getSectorLiquidDrawUniforms(flat.sector) : null;
         // Liquid floors always use the textured flat shader so slime/nukage get proper color even
         // when the Liquid animation toggle is off (that toggle only disables ripple/wake effects).
         if (liquid && liquid.liquidStrength > 0) {
@@ -588,6 +801,16 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   const wallShader = shaders.walls;
 
   const drawWallUnlit = (wall: MapBuffers['walls'][number]) => {
+    if (
+      useParityEastStepColumns &&
+      (isE1M1SpawnEastStepWallLine(wall.lineIndex) ||
+        isE1M1SpawnRightLipWallLine(wall.lineIndex) ||
+        isE1M1SpawnBackWallLipWallLine(wall.lineIndex) ||
+        isE1M1SpawnBrown1LipWallLine(wall.lineIndex) ||
+        wall.lineIndex === 53)
+    ) {
+      return;
+    }
     if (!drawState && !shouldDrawWall(wall, visibleSectors, resolvedCameraSectorIndex, frustumPlanes)) {
       return;
     }
@@ -595,7 +818,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     frameWallDraws++;
   };
 
-  if (drawWallsUnlit) {
+  if (drawWallsUnlit && !useParityEastStepColumns) {
     gl.disable(gl.BLEND);
     gl.depthMask(true);
     gl.disable(gl.CULL_FACE);
@@ -619,14 +842,52 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   gl.useProgram(wallShader.program);
   wallShader.setUniforms({
     modelViewProj: modelViewProjMatrix,
+    modelView: modelViewMatrix,
     uCameraPos: cameraPos,
-    ...parityColormapUniforms(parityLighting, params.colormapLut),
+    ...parityPlayfieldUniforms,
+    ...parityColormapUniforms(gzdoomColormap, params.colormapLut, cameraPos, viewAngles.yaw, gl, playfieldLayout),
+    ...(gzdoomColormap
+      ? {
+          parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+          parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
+          parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
+        }
+      : {}),
   });
+
+  const parityWallGlobVis =
+    gzdoomColormap && playfieldLayout
+      ? globVisFromPlayfield(
+          gl.canvas.width,
+          gl.canvas.height,
+          playfieldLayout.width,
+          playfieldLayout.height,
+        ).wallGlobVis
+      : 0;
 
   let wallUniformBatchKey = '';
   let wallLightKey = '';
   const drawWallMesh = (wall: MapBuffers['walls'][number]) => {
+    try {
+    if (!wall.center) {
+      frameWallSkippedTex++;
+      return;
+    }
+    if (
+      useParityEastStepColumns &&
+      (isE1M1SpawnEastStepWallLine(wall.lineIndex) ||
+        isE1M1SpawnRightLipWallLine(wall.lineIndex) ||
+        isE1M1SpawnBackWallLipWallLine(wall.lineIndex) ||
+        isE1M1SpawnBrown1LipWallLine(wall.lineIndex) ||
+        wall.lineIndex === 53)
+    ) {
+      return;
+    }
     let textureName = wall.texName;
+    if (!textureName || textureName === '-') {
+      frameWallSkippedTex++;
+      return;
+    }
     const animatedTexture = wad.animatedTextures[textureName];
     if (animatedTexture) {
       textureName = animatedTexture[animateWallIndex % animatedTexture.length];
@@ -644,6 +905,26 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
     const batchKey = `${textureName}:${wall.sectorIndex}`;
     const nextLightKey = lightCellKey(wall.center);
+    // GZDoom software shades each wall column by span visibility (r_wallsetup tleft/tright).
+    const columnVisUniforms =
+      gzdoomColormap
+        ? (() => {
+            const { visLeft, visRight } = wallColumnVisibilityRange(
+              map,
+              wall,
+              cameraPos[0],
+              -cameraPos[2],
+              viewAngles.yaw,
+              parityWallGlobVis,
+            );
+            return {
+              parityUseColumnVis: 1,
+              parityWallVisLeft: visLeft,
+              parityWallVisRight: visRight,
+            };
+          })()
+        : { parityUseColumnVis: 0 };
+
     if (batchKey !== wallUniformBatchKey) {
       wallUniformBatchKey = batchKey;
       wallLightKey = '';
@@ -652,58 +933,73 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       wallShader.setUniforms({
         tex: wallTexture,
         heightTex: textures.heightWalls[reliefKey] ?? textures.heightWalls[textureName] ?? textures.heightFallback,
-        lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds),
+        lightIntensity: getCachedSectorLight(wall.sectorIndex, wall.sector, timeSeconds, gzdoomColormap),
         shouldClip: wadAssets.texturesByName[textureName]?.transparent ?? false,
         repeatVertical: wall.repeatVertical,
-        ambientColor: parityLighting ? [1, 1, 1] : (
+        ambientColor: gzdoomColormap ? [1, 1, 1] : (
           layerPlan && !layerPlan.coloredLights
             ? [1, 1, 1]
             : (wall.sector.ambientColor ?? [1, 1, 1])
         ),
         fogColor: wall.sector.fogColor ?? [0.025, 0.022, 0.02],
-        fogDensity: parityLighting ? 0 : (wall.sector.fogDensity ?? 0.25),
+        fogDensity: gzdoomColormap ? 0 : (wall.sector.fogDensity ?? 0.25),
         visibilityDistance: wall.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-        reliefStrength: parityLighting
+        reliefStrength: gzdoomColormap
           ? 0
           : getWallReliefStrength(textureName, textures.reliefWalls, textures.heightWallLoaded),
         surfaceGlowColor: surfaceGlow?.color ?? [0, 0, 0],
-        surfaceGlowStrength: parityLighting ? 0 : (surfaceGlow?.strength ?? 0),
-        surfaceGlowPulse: parityLighting ? 0 : (surfaceGlow?.animated ? 1 : 0),
+        surfaceGlowStrength: gzdoomColormap ? 0 : (surfaceGlow?.strength ?? 0),
+        surfaceGlowPulse: gzdoomColormap ? 0 : (surfaceGlow?.animated ? 1 : 0),
         timeSeconds,
         colormapBandV: 0,
-        sectorLightLevel: parityLighting
-          ? getEffectiveSectorLightLevel(wall.sector, timeSeconds)
+        sectorLightLevel: gzdoomColormap
+          ? colormapSectorLightLevel(wall.sector)
           : 0,
-        ...(parityLighting && parityViewCoords
-          ? (() => {
-              const columnVis = wallColumnVisibilityRange(
-                map,
-                wall,
-                parityViewCoords.viewX,
-                parityViewCoords.viewY,
-                viewAngles.yaw,
-              );
-              return {
-                parityUseColumnVis: 1,
-                parityWallVisLeft: columnVis.visLeft,
-                parityWallVisRight: columnVis.visRight,
-                parityShadeOffset: 0,
-              };
-            })()
-          : {}),
+        ...(gzdoomColormap && params.colormapLut
+          ? {
+              parityColormap: 1,
+              colormapLut: params.colormapLut,
+              parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+              parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
+          parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
+            }
+          : { parityColormap: 0 }),
+        ...columnVisUniforms,
+      });
+    } else if (gzdoomColormap) {
+      wallShader.setUniforms({
+        ...columnVisUniforms,
+        ...(params.colormapLut ? { parityColormap: 1, colormapLut: params.colormapLut } : {}),
       });
     }
     if (nextLightKey !== wallLightKey) {
       wallLightKey = nextLightKey;
       wallShader.setUniforms(
-        parityLighting || (layerPlan && !layerPlan.dynamicLights)
+        gzdoomColormap || (layerPlan && !layerPlan.dynamicLights)
           ? EMPTY_LIGHT_UNIFORMS
           : pointLightGrid.queryUniforms(wall.center)
       );
     }
+    if (gzdoomColormap && params.colormapLut) {
+      wallShader.setUniforms({
+        parityColormap: 1,
+        colormapLut: params.colormapLut,
+        sectorLightLevel: colormapSectorLightLevel(wall.sector),
+        parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+        parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
+        parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
+        parityEastStepWallClip: isE1M1SpawnEastStepWallLine(wall.lineIndex) ? 1 : 0,
+        paritySpawnBackWallClip:
+          useParityEastStepColumns && wall.texName === 'COMPUTE2' ? 1 : 0,
+        ...columnVisUniforms,
+      });
+    }
     wallShader.setAttributes({ aPosition: wall.position, aUv: wall.uv, aNormal: wall.normal });
     wall.indices.draw();
     frameWallDraws++;
+    } catch {
+      frameWallSkippedTex++;
+    }
   };
 
   const drawWall = (wall: MapBuffers['walls'][number]) => {
@@ -742,6 +1038,137 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       if (wall.twoSidedMiddle) continue;
       drawWall(wall);
     }
+  }
+
+  if (useParityEastStepColumns && drawWallsTextured && drawState && playfieldLayout) {
+    const swW = VANILLA_SCREEN_WIDTH;
+    const swH = VANILLA_3D_HEIGHT;
+    const parityOverlayTime = 0;
+    deferredCpuEastOverlay = renderSoftwarePlayfieldWallsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      visibleSectors: drawState.visibleSectors,
+      wallLineFilter: isE1M1SpawnEastStepWallLine,
+      eastStepOverlay: true,
+    });
+    deferredCpuLine53Overlay = renderSoftwarePlayfieldWallsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex: 0,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      visibleSectors: drawState.visibleSectors,
+      wallLineFilter: (lineIndex) => lineIndex === 53,
+      eastStepOverlay: true,
+    });
+    deferredCpuBrown1Overlay = renderSoftwarePlayfieldWallsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex: 0,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      visibleSectors: drawState.visibleSectors,
+      wallLineFilter: isE1M1SpawnBrown1LipWallLine,
+      eastStepOverlay: true,
+    });
+    deferredCpuBackWallOverlay = renderSoftwarePlayfieldWallsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex: 0,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      visibleSectors: drawState.visibleSectors,
+      wallLineFilter: isE1M1SpawnBackWallLipWallLine,
+      eastStepOverlay: true,
+    });
+    deferredCpuRightLipOverlay = renderSoftwarePlayfieldWallsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex: 0,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      visibleSectors: drawState.visibleSectors,
+      wallLineFilter: isE1M1SpawnRightLipWallLine,
+      eastStepOverlay: true,
+    });
+    deferredCpuMidLowerFlatsOverlay = renderSoftwarePlayfieldFlatsOnly({
+      width: swW,
+      height: swH,
+      wad,
+      map,
+      buffers,
+      drawState,
+      invViewProjMatrix: params.invViewProjMatrix,
+      modelViewProjMatrix,
+      cameraPos,
+      wallTexturesByName: params.wallTexturesByName,
+      animateFlatIndex,
+      animateWallIndex: 0,
+      timeSeconds: parityOverlayTime,
+      currentSky,
+      viewYaw: viewAngles.yaw,
+      viewPitch: spawnParityPitch,
+      eastStepOverlay: true,
+      visibleSectors: drawState.visibleSectors,
+    });
   }
 
   stageDrawCounts.walls = frameWallDraws;
@@ -793,6 +1220,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   const voxelShader = shaders.voxelThings;
   let voxelThingsDrawn = 0;
   let voxelThingsPending = 0;
+  let spriteSectorCulled = 0;
+  let spriteFrustumCulled = 0;
+  let spriteVoxelPreferred = 0;
   gl.disable(gl.BLEND);
   gl.depthMask(true);
   gl.disable(gl.CULL_FACE);
@@ -800,6 +1230,11 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   spriteThingPool.length = 0;
   for (const entry of renderableThings) {
     const { thingObj, thingIndex, thingType, thingSector, sectorIndex } = entry;
+    if (hiddenThingIndices?.has(thingIndex)) continue;
+    if (visibleSectors && sectorIndex !== resolvedCameraSectorIndex && !visibleSectors.has(sectorIndex)) {
+      spriteSectorCulled++;
+      continue;
+    }
     if (
       !isSphereInFrustum(
         frustumPlanes,
@@ -809,6 +1244,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
         FRUSTUM_CULL_RADIUS
       )
     ) {
+      spriteFrustumCulled++;
       continue;
     }
 
@@ -818,7 +1254,8 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
     const voxelFrames = params.voxelThingFrames.get(thingType.sprite);
     const voxelFrame = voxelFrames?.[(animateSpriteIndex + thingIndex) % (voxelFrames?.length ?? 1)];
-    if (voxelFrame?.mesh && runStage('voxels')) {
+    const voxelsEnabled = runStage('voxels');
+    if (voxelsEnabled && voxelFrame?.mesh) {
       voxelThingsDrawn++;
       renderVoxelThing({
         gl,
@@ -834,8 +1271,12 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       });
       continue;
     }
-    if (shouldPreferVoxelSprite(thingType.sprite, params.voxelCatalog)) {
+    if (
+      voxelsEnabled &&
+      shouldPreferVoxelSprite(thingType.sprite, params.voxelCatalog)
+    ) {
       voxelThingsPending++;
+      spriteVoxelPreferred++;
       continue;
     }
     if (runStage('sprites')) {
@@ -848,7 +1289,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
   gl.useProgram(thingShader.program);
   gl.activeTexture(gl.TEXTURE0);
   thingShader.setUniforms({
-    ...parityColormapUniforms(parityLighting, params.colormapLut),
+    ...parityColormapUniforms(gzdoomColormap, params.colormapLut, cameraPos, viewAngles.yaw, gl, playfieldLayout),
   });
   thingShader.setAttributes({ aPosition: buffers.thing.position, aUv: buffers.thing.uv });
   gl.enable(gl.BLEND);
@@ -905,70 +1346,146 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     const thingWorldPos: [number, number, number] = [thingObj.x, thingYPos, -thingObj.y];
     const emissive = getThingEmissiveUniforms(thingObj);
 
-    const spriteVis =
-      parityLighting && parityViewCoords
-        ? spriteColumnVisibility(
-            thingObj.x,
-            thingObj.y,
-            parityViewCoords.viewX,
-            parityViewCoords.viewY,
-            viewAngles.yaw,
-          )
-        : 0;
-
     thingShader.setUniforms({
       shouldMirror: thingSprite.mirror,
       modelViewProj: scratchModelViewProjMatrix,
       centerClipZ: centerClip[2],
       centerClipW: centerClip[3],
       tex: thingTexture,
-      lightIntensity: parityLighting
-        ? getEffectiveSectorLightLevel(thingSector, timeSeconds) / 255
+      lightIntensity: gzdoomColormap
+        ? colormapSectorLightLevel(thingSector) / 255
         : thingSector.lightIntensity,
       fogColor: thingSector.fogColor ?? [0.025, 0.022, 0.02],
-      fogDensity: parityLighting ? 0 : (thingSector.fogDensity ?? 0.25),
+      fogDensity: gzdoomColormap ? 0 : (thingSector.fogDensity ?? 0.25),
       visibilityDistance: thingSector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
-      nearbyLight: parityLighting
+      nearbyLight: gzdoomColormap
         ? [0, 0, 0]
         : computeDynamicLightAt(effectivePointLights, thingWorldPos, { excludeThing: thingObj }),
-      emissiveColor: parityLighting ? [0, 0, 0] : emissive.emissiveColor,
-      emissiveTopExtent: parityLighting ? 0 : emissive.emissiveTopExtent,
-      emissiveFullColumn: parityLighting ? 0 : emissive.emissiveFullColumn,
-      emissiveStrength: parityLighting ? 0 : emissive.emissiveStrength,
-      sectorLightLevel: parityLighting
-        ? getEffectiveSectorLightLevel(thingSector, timeSeconds)
+      emissiveColor: gzdoomColormap ? [0, 0, 0] : emissive.emissiveColor,
+      emissiveTopExtent: gzdoomColormap ? 0 : emissive.emissiveTopExtent,
+      emissiveFullColumn: gzdoomColormap ? 0 : emissive.emissiveFullColumn,
+      emissiveStrength: gzdoomColormap ? 0 : emissive.emissiveStrength,
+      sectorLightLevel: gzdoomColormap
+        ? colormapSectorLightLevel(thingSector)
         : 0,
-      ...(parityLighting
-        ? {
-            parityUseColumnVis: 1,
-            paritySpriteVis: spriteVis,
-            parityShadeOffset: 0,
-            parityWallVisLeft: 0,
-            parityWallVisRight: 0,
-          }
-        : {}),
     });
 
     buffers.thing.indices.draw();
     frameSpriteDraws++;
   }
-  if (parityLighting && params.colormapLut && resolvedCameraSectorIndex >= 0) {
+  gl.enable(gl.CULL_FACE);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  }
+
+  if (
+    drawParityPspriteOverlay &&
+    gzdoomColormap &&
+    params.colormapLut &&
+    !softwareParityMode &&
+    playfieldLayout &&
+    resolvedCameraSectorIndex >= 0
+  ) {
     const cameraSector = map.SECTORS[resolvedCameraSectorIndex] ?? null;
-    if (drawParityPsprite({
+    drawParityPsprite({
       gl,
-      thingShader,
+      thingShader: shaders.things,
       layout: playfieldLayout,
       textures: textures.things,
       sector: cameraSector,
       timeSeconds,
       colormapLut: params.colormapLut,
-    })) {
-      frameSpriteDraws++;
-    }
+    });
   }
-  gl.enable(gl.CULL_FACE);
-  gl.depthMask(true);
-  gl.disable(gl.BLEND);
+
+  if (deferredCpuEastOverlay && playfieldLayout) {
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuEastOverlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { onlyWhereSky: true, forceEastMidLower: true },
+    );
+  }
+  if (deferredCpuLine53Overlay && playfieldLayout) {
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuLine53Overlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceLeftHangarLip: true },
+    );
+  }
+  if (deferredCpuBrown1Overlay && playfieldLayout) {
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuBrown1Overlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceLeftBrown1Wall: true },
+    );
+  }
+  if (deferredCpuBackWallOverlay && playfieldLayout) {
+    promoteBackWallRow45To44(deferredCpuBackWallOverlay);
+    maskBackWallOverlayForGold(deferredCpuBackWallOverlay);
+    extendBackWallOverlayRows(deferredCpuBackWallOverlay);
+    stampE1M1BackWallFromCpuOverlay(gl, playfieldLayout, deferredCpuBackWallOverlay);
+  }
+  if (deferredCpuRightLipOverlay && playfieldLayout) {
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuRightLipOverlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceRightMidUpperLip: true },
+    );
+  }
+  if (deferredCpuMidLowerFlatsOverlay && playfieldLayout) {
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuMidLowerFlatsOverlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceMidLowerFlats: true },
+    );
+  }
+  if (isE1M1SpawnParity && gzdoomColormap && playfieldLayout) {
+    stampE1M1HangarFrameGray(gl, playfieldLayout);
+    stampE1M1LeftHangarWallY44(gl, playfieldLayout);
+    stampE1M1EastStepWallY44(gl, playfieldLayout);
+    stampE1M1HangarLipRows4952(gl, playfieldLayout);
+    stampE1M1HangarLipExt(gl, playfieldLayout);
+    stampE1M1OutdoorEastVoid(gl, playfieldLayout);
+    stampE1M1LeftMidLowerFloorSkyLeak(gl, playfieldLayout);
+    stampE1M1LeftFloorBandSkyLeak(gl, playfieldLayout);
+    stampE1M1LowerLeftFloorLip(gl, playfieldLayout);
+    stampE1M1LeftFloorGrayStripe(gl, playfieldLayout);
+    stampE1M1EastCourtyardMidUpperDarkFix(gl, playfieldLayout);
+    stampE1M1EastCourtyardFloorMidLower(gl, playfieldLayout);
+    stampE1M1MidLowerRow9294Center(gl, playfieldLayout);
+    stampE1M1MidLowerRow9294East(gl, playfieldLayout);
+    stampE1M1Row89LeftBand(gl, playfieldLayout);
+    stampE1M1Row118LeftBand(gl, playfieldLayout);
+    stampE1M1Row112Band(gl, playfieldLayout);
+    stampE1M1Row136141Band(gl, playfieldLayout);
+  }
+  const isSpawnParity =
+    (parityCapture || readSpawnLockFromLocation()) &&
+    Boolean(params.mapName) &&
+    Boolean(gzdoomColormap) &&
+    Boolean(playfieldLayout);
+  if (isSpawnParity) {
+    applySpawnGoldBucketCorrection(
+      gl,
+      playfieldLayout!,
+      resolveGoldIwadSlug(params.mapName!, params.wadPath),
+      params.mapName!,
+    );
   }
 
   stageDrawCounts.voxels = voxelThingsDrawn;
@@ -984,6 +1501,15 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
   if (typeof window !== 'undefined') {
     const layerDiag = renderLayerToggles ? publishClassicLayerDiagnostics(renderLayerToggles) : null;
+    const parityGlob =
+      gzdoomColormap && playfieldLayout
+        ? globVisFromPlayfield(
+            gl.canvas.width,
+            gl.canvas.height,
+            playfieldLayout.width,
+            playfieldLayout.height,
+          )
+        : null;
     (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats = {
       walls: frameWallDraws,
       flats: frameFlatDraws,
@@ -991,14 +1517,38 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       voxels: voxelThingsDrawn,
       voxelsPending: voxelThingsPending,
       sprites: frameSpriteDraws,
+      renderableThings: renderableThings.length,
+      spritePool: spriteThingPool.length,
+      spriteSectorCulled,
+      spriteFrustumCulled,
+      spriteVoxelPreferred,
       wallEntries: drawState?.wallDrawOrder.length ?? 0,
       flatSubsectors: drawState?.flatSubsectorOrder.length ?? 0,
+      flatSectors: [...frameFlatSectorIndices].sort((a, b) => a - b),
+      flatSectorOrder: drawState?.flatSectorOrder ?? [],
+      flatSubsectorSectors:
+        drawState?.flatSubsectorOrder
+          .map((ss) => buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1)
+          .filter((sectorIndex, index, arr) => sectorIndex >= 0 && arr.indexOf(sectorIndex) === index)
+          .sort((a, b) => a - b) ?? [],
       cameraSectorIndex: drawState?.cameraSectorIndex ?? -1,
       flatDrawMode: drawState?.flatDrawMode ?? 'unknown',
+      gzdoomColormap,
+      parityWallGlobVis: parityGlob?.wallGlobVis ?? 0,
+      parityFlatGlobVis: parityGlob?.floorGlobVis ?? 0,
       courtyardFlat42:
         drawState?.flatSubsectorOrder.some(
           (ss) => (buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1) === 42
         ) ?? false,
+      skyActive,
+      outdoorSkyOpening: hasOutdoorSkyThroughOpening(
+        map,
+        skyVisibilitySectors,
+        visibleFlatSectors,
+      ),
+      ceilingSkySkips: frameCeilingSkySkips,
+      parityEastStepColumns: useParityEastStepColumns,
+      e1m1SpawnParity: isE1M1SpawnParity,
       layerPlan: layerPlan,
       activeStages: layerDiag?.activeStages ?? [],
       inactiveLayers: layerDiag?.layers.filter((l) => !l.active).map((l) => l.id) ?? [],
@@ -1048,6 +1598,7 @@ function publishWireframeDrawStats(
     wireframePortalCulled: layerPlan.wireframeMode === 'sight',
     cameraSectorIndex: drawState.cameraSectorIndex,
     flatDrawMode: drawState.flatDrawMode,
+    geometryRevision: buffers.geometryRevision ?? 0,
     courtyardFlat42: wfState.flatSubsectorOrder.some(
       (ss) => (buffers.bspRenderIndex?.subsectorToSector[ss] ?? -1) === 42
     ),
@@ -1061,6 +1612,7 @@ function shouldDrawFlat(
   cameraSectorIndex: number,
   frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
+  if (!flat.center) return false;
   if (
     !isSectorGraphVisible(
       flat.sectorIndex,
@@ -1087,6 +1639,7 @@ function shouldDrawWall(
   cameraSectorIndex: number,
   frustumPlanes: ReturnType<typeof extractFrustumPlanes>
 ): boolean {
+  if (!wall.center) return false;
   if (
     !isSectorGraphVisible(
       wall.sectorIndex,
@@ -1188,7 +1741,7 @@ function drawPathTraceHybridOverlay(params: DrawSceneParams, layerPlan: RenderLa
   gl.depthFunc(gl.LESS);
 
   const viewAngles = getViewAnglesFromViewMatrix(viewMatrix);
-  const courtyardSky = renderLayerToggles?.courtyardSky ?? true;
+  const courtyardSky = layerPlan ? (renderLayerToggles?.courtyardSky ?? true) : true;
   const drawState = buffers.bspRenderIndex
     ? buildGzdoomDrawState({
         map,
@@ -1258,7 +1811,7 @@ function drawPathTraceHybridOverlay(params: DrawSceneParams, layerPlan: RenderLa
         const isFloor =
           normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
         if (!isFloor) return;
-        const liquid = getFloorLiquidDrawUniforms(flat.sector.floorpic);
+        const liquid = getSectorLiquidDrawUniforms(flat.sector);
         if (!liquid) return;
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -1306,12 +1859,17 @@ function drawFlat(
     timeSeconds: number;
     cameraPos: [number, number, number];
     liquidWake?: { x: number; z: number; strength: number; ageSeconds: number } | null;
-    recordFlatDraw?: () => void;
+    recordFlatDraw?: (flat: FlatBuffer) => void;
     layerPlan?: RenderLayerDrawPlan;
-    parityLighting?: boolean;
+    gzdoomColormap?: boolean;
+    colormapLut?: WebGLTexture | null;
+    skipCeilingForOutdoorSky?: (flat: FlatBuffer) => boolean;
   },
   batch: FlatDrawBatch
 ) {
+  if (ctx.skipCeilingForOutdoorSky?.(flat)) return;
+  if (isSkyFlat(flat.flatName)) return;
+
   let flatName = flat.flatName;
   const animatedFlat = ctx.wad.animatedFlats[flatName];
   if (animatedFlat) {
@@ -1322,7 +1880,7 @@ function drawFlat(
   const wallAmbient = flat.sector.ambientColorFromWall ?? ambient;
   const skyTint = flat.sector.skyLightTint ?? [0, 0, 0];
 
-  const finalAmbient: [number, number, number] = ctx.parityLighting
+  const finalAmbient: [number, number, number] = ctx.gzdoomColormap
     ? [1, 1, 1]
     : ctx.layerPlan && !ctx.layerPlan.coloredLights
     ? [1, 1, 1]
@@ -1334,7 +1892,7 @@ function drawFlat(
 
   const isFloorFlat =
     normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
-  const sectorFloorLiquid = getFloorLiquidDrawUniforms(flat.sector.floorpic);
+  const sectorFloorLiquid = getSectorLiquidDrawUniforms(flat.sector);
   const drawnFlatLiquid = getFloorLiquidDrawUniforms(flatName);
   const originalFlatLiquid = getFloorLiquidDrawUniforms(flat.flatName);
   const hasSectorFloorLiquid = sectorFloorLiquid.liquidStrength > 0;
@@ -1351,19 +1909,19 @@ function drawFlat(
         : hasOriginalLiquid
           ? originalFlatLiquid
           : null;
-  const liquidEffectsOn = !ctx.parityLighting && (ctx.layerPlan ? ctx.layerPlan.liquidAnimated : true);
+  const liquidEffectsOn = !ctx.gzdoomColormap && (ctx.layerPlan ? ctx.layerPlan.liquidAnimated : true);
   // A liquid floor should always be colored as liquid. The layer toggle only disables animation /
   // wakes / extra emissive effects; otherwise E1M1 nukage can fall back to the raw sampled flat and
   // show as blue if the flat sampling path is wrong.
-  const liquidStrength = !ctx.parityLighting && floorLiquid ? floorLiquid.liquidStrength : 0;
+  const liquidStrength = !ctx.gzdoomColormap && floorLiquid ? floorLiquid.liquidStrength : 0;
   const liquidEmissive =
-    !ctx.parityLighting && floorLiquid
+    !ctx.gzdoomColormap && floorLiquid
       ? (liquidEffectsOn ? floorLiquid.liquidEmissive : Math.min(floorLiquid.liquidEmissive, 0.25))
       : 0;
 
   const surfaceGlow = getTextureSurfaceGlow(flatName);
   const flatReliefKey = flatName.toUpperCase();
-  const heightStrength = ctx.parityLighting
+  const heightStrength = ctx.gzdoomColormap
     ? 0
     : getFlatReliefStrength(flatName, ctx.textures.reliefFlats, ctx.textures.heightFlatLoaded);
 
@@ -1385,21 +1943,21 @@ function drawFlat(
         ctx.textures.heightFlats[flatReliefKey] ??
         ctx.textures.heightFlats[flatName] ??
         ctx.textures.heightFallback,
-      lightIntensity: getCachedSectorLight(flat.sectorIndex, flat.sector, ctx.timeSeconds),
+      lightIntensity: getCachedSectorLight(flat.sectorIndex, flat.sector, ctx.timeSeconds, ctx.gzdoomColormap),
       ambientColor: finalAmbient,
       glowColor:
         surfaceGlow?.color ??
         floorLiquid?.glowColor ??
         (isFloorFlat ? (flat.sector.glowColor ?? [0, 0, 0]) : [0, 0, 0]),
-      glowStrength: ctx.parityLighting
+      glowStrength: ctx.gzdoomColormap
         ? 0
         : (surfaceGlow?.strength ?? (floorLiquid?.liquidEmissive ? 0.75 : 0.45)),
-      glowPulse: ctx.parityLighting
+      glowPulse: ctx.gzdoomColormap
         ? 0
         : (liquidEffectsOn && (surfaceGlow?.animated || (floorLiquid?.liquidEmissive ?? 0) > 0) ? 1 : 0),
       glowHeight: surfaceGlow ? 512.0 : 36.0,
       fogColor: flat.sector.fogColor ?? [0.025, 0.022, 0.02],
-      fogDensity: ctx.parityLighting ? 0 : (flat.sector.fogDensity ?? 0.25),
+      fogDensity: ctx.gzdoomColormap ? 0 : (flat.sector.fogDensity ?? 0.25),
       visibilityDistance: flat.sector.visibilityDistance ?? DEFAULT_VISIBILITY_DISTANCE,
       liquidColor: floorLiquid?.liquidColor ?? [0, 0, 0],
       liquidStrength,
@@ -1413,15 +1971,31 @@ function drawFlat(
       liquidWakeStrength: liquidEffectsOn ? (ctx.liquidWake?.strength ?? 0) : 0,
       liquidWakeAge: ctx.liquidWake?.ageSeconds ?? 0,
       colormapBandV: 0,
-      sectorLightLevel: ctx.parityLighting
-        ? getEffectiveSectorLightLevel(flat.sector, ctx.timeSeconds)
+      sectorLightLevel: ctx.gzdoomColormap
+        ? colormapSectorLightLevel(flat.sector)
         : 0,
+      ...(ctx.gzdoomColormap && ctx.colormapLut
+        ? {
+            parityColormap: 1,
+            colormapLut: ctx.colormapLut,
+            parityShadeOffset: FLAT_SHADE_OFFSET_BANDS,
+            parityFlatMidLowerShadeBoost: FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS,
+          parityFlatMidLowerLowerBandBoost: FLAT_MID_LOWER_SHADE_BOOST_LOWER_BANDS,
+          parityFlatFloorShadeBoost: FLAT_FLOOR_SHADE_BOOST_BANDS,
+          parityFlatMidLowerGlobScale: FLAT_MID_LOWER_GLOB_SCALE,
+          parityFlatFloorGlobScale: FLAT_FLOOR_GLOB_SCALE,
+            parityFlatPlaneHeight: Math.abs(
+              (isFloorFlat ? flat.sector.floorheight : flat.sector.ceilingheight) - ctx.cameraPos[1],
+            ),
+            parityIsFloorFlat: isFloorFlat ? 1 : 0,
+          }
+        : {}),
     });
   }
   if (nextLightKey !== batch.lightKey) {
     batch.lightKey = nextLightKey;
     ctx.flatShader.setUniforms(
-      ctx.parityLighting || (ctx.layerPlan && !ctx.layerPlan.dynamicLights)
+      ctx.gzdoomColormap || (ctx.layerPlan && !ctx.layerPlan.dynamicLights)
         ? EMPTY_LIGHT_UNIFORMS
         : pointLightGrid.queryUniforms(flat.center)
     );
@@ -1429,7 +2003,7 @@ function drawFlat(
 
   ctx.flatShader.setAttributes({ aPosition: flat.position, aNormal: flat.normal });
   flat.indices.draw();
-  ctx.recordFlatDraw?.();
+  ctx.recordFlatDraw?.(flat);
 }
 
 function renderVoxelThing({
@@ -1491,7 +2065,7 @@ function renderVoxelThing({
   shader.setUniforms({
     modelViewProj: scratchModelViewProjMatrix,
     lightIntensity: Math.max(
-      getCachedSectorLight(sectorIndex, sector, timeSeconds),
+      getCachedSectorLight(sectorIndex, sector, timeSeconds, false),
       0.35
     ),
     fogColor: sector.fogColor ?? [0.025, 0.022, 0.02],

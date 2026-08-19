@@ -74,7 +74,7 @@ export function createOpeningStatus(path: string): WadLoadStatus {
     ...initialWadLoadStatus,
     state: 'loading',
     title: 'Opening WAD directory',
-    detail: path,
+    detail: `Node.js doom-wad-core · ${path}`,
     steps,
     statusLine: statusFromSteps(steps, 'M_LoadDefaults: Load system defaults.'),
     fromCache: false,
@@ -93,10 +93,36 @@ export function createReadingStatus(previous: WadLoadStatus): WadLoadStatus {
 
   return {
     ...previous,
+    state: 'loading',
     title: 'Reading bytes',
     detail: 'Fetching IWAD data from public/wads...',
     steps,
     statusLine: statusFromSteps(steps, 'W_AddFile: reading WAD header and directory.'),
+    fromCache: false,
+  };
+}
+
+/** Advance W_Init while doom-wad-core indexes LMP lumps in the parse worker. */
+export function tickLumpParseProgress(previous: WadLoadStatus, progress: number): WadLoadStatus {
+  const clamped = Math.min(0.98, Math.max(0.15, progress));
+  const steps = createSteps({
+    Z_Init: { complete: true, progress: 1 },
+    W_Init: {
+      active: true,
+      progress: clamped,
+      message: clamped < 0.55 ? 'Reading lump directory.' : 'Decoding TEXTURE1, PNAMES, flats, sprites…',
+    },
+    P_Init: clamped > 0.85 ? { active: true, progress: (clamped - 0.85) / 0.15 } : {},
+  });
+
+  return {
+    ...previous,
+    state: 'loading',
+    title: 'Indexing WAD lumps',
+    detail: 'Node.js doom-wad-core parse (LMP decode)',
+    steps,
+    statusLine: statusFromSteps(steps, 'W_Init: lump directory.'),
+    fromCache: false,
   };
 }
 

@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 gzrender-core = { path = "../../../gzrender-core" }
+js-sys = "0.3.103"
 wasm-bindgen = "0.2"
 
 [profile.release]

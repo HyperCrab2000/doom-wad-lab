@@ -64,6 +64,10 @@ export class FloorMoverSystem {
     return this.movers.size;
   }
 
+  getActiveSectorIndices(): ReadonlySet<number> {
+    return new Set(this.movers.keys());
+  }
+
   /** Move a sector floor toward an absolute height (stairs, scripts). */
   startFloorMoveTo(sectorIndex: number, targetFloor: number, speed: number): boolean {
     const sector = this.map.SECTORS[sectorIndex];

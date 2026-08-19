@@ -9,6 +9,7 @@ import { MusicVisualizer } from './music/MusicVisualizer';
 import { MuteIcon } from './MuteIcon';
 import { PerfMeter } from './PerfMeter';
 import { DoomLevelTransition } from './DoomLevelTransition';
+import { DoomIntermission } from './DoomIntermission';
 import {
   AutomapCheatLevel,
   cycleAutomapCheat,
@@ -16,16 +17,31 @@ import {
 } from '@/wad/renderer/automap/automap';
 import { drawBspDebugView } from '@/wad/renderer/bsp/bspDebugView';
 import { buildBspRenderIndex } from '@/wad/renderer/bsp/bspRenderIndex';
-import { readFrameParityModeFromLocation } from '@/wad/parity/frame/frameParity';
+import { readFrameParityModeFromLocation, readSpawnLockFromLocation } from '@/wad/parity/frame/frameParity';
+import { resolveWadPathFromLocation } from '@/wad/parity/frame/goldIwad';
+import {
+  mergeClassicParityLayerToggles,
+  readClassicGzdoomParityMode,
+} from '@/wad/parity/classicGzdoomParity';
 import { appendCheatChar, cheatTriggered } from '@/wad/game/doomCheats';
+import { getNextMapName, type LevelStatsSnapshot } from '@/wad/game/levelStats';
 import { ViewportLabelGrid } from './ViewportLabelGrid';
 import {
   backendForMapLoad,
   isGzdoomWasmFamily,
+  isPlayRenderBackend,
+  needsClassicWebGLGame,
+  needsNodeWadLumpParse,
   persistRenderBackend,
   readDefaultRenderBackend,
+  showRenderLayerRail,
   type RenderBackend,
 } from '@/wad/renderer/renderBackend';
+import {
+  persistFederatedEngineMode,
+  readFederatedEngineMode,
+  type FederatedEngineMode,
+} from '@/wad/federated/federatedEngineMode';
 import { getHostedGzdoomModule } from '@/wad/renderer/gzrender-v2/gzdoom/gzdoomViewerRuntime';
 import { getGzdoomSModule } from '@/wad/renderer/gzrender-v2/gzdoom/gzdoomSViewerRuntime';
 import {
@@ -42,17 +58,28 @@ import {
 } from '@/wad/renderer/modular/modularRenderStage';
 import { RenderLayerPanel, summarizeLayerToggles } from './RenderLayerPanel';
 import { GzdoomPlayLoadingOverlay } from './GzdoomPlayLoadingOverlay';
+import { DoomHud, type HudState } from './DoomHud';
+import { ClassicPatchMenu, type DoomPatchMenuScreen } from './ClassicPatchMenu';
 import type { GzdoomWasmModule } from '@/gzdoom-oracle/gzdoomWasmHost';
 
 interface GameRenderer {
   load: ReturnType<typeof renderGame>['load'];
   setPresentationVisible: ReturnType<typeof renderGame>['setPresentationVisible'];
   setAutomapActive: ReturnType<typeof renderGame>['setAutomapActive'];
+  setPauseMenuOpen: ReturnType<typeof renderGame>['setPauseMenuOpen'];
+  setPauseMenuRequestHandler: ReturnType<typeof renderGame>['setPauseMenuRequestHandler'];
+  setSfxMuted: ReturnType<typeof renderGame>['setSfxMuted'];
+  isSfxMuted: ReturnType<typeof renderGame>['isSfxMuted'];
+  resumeSfx: ReturnType<typeof renderGame>['resumeSfx'];
   setBspDebugActive: ReturnType<typeof renderGame>['setBspDebugActive'];
   setRenderBackend: ReturnType<typeof renderGame>['setRenderBackend'];
   setRenderLayerToggles: ReturnType<typeof renderGame>['setRenderLayerToggles'];
   getPlayerState: ReturnType<typeof renderGame>['getPlayerState'];
   getBspTraceYaw: ReturnType<typeof renderGame>['getBspTraceYaw'];
+  getHudState: ReturnType<typeof renderGame>['getHudState'];
+  consumeExitRequest: ReturnType<typeof renderGame>['consumeExitRequest'];
+  getLevelStats: ReturnType<typeof renderGame>['getLevelStats'];
+  applyCheat: ReturnType<typeof renderGame>['applyCheat'];
   waitForRenderedFrame: ReturnType<typeof renderGame>['waitForRenderedFrame'];
   getPathTraceDebugInfo: ReturnType<typeof renderGame>['getPathTraceDebugInfo'];
   getFederatedWasmDebugInfo: ReturnType<typeof renderGame>['getFederatedWasmDebugInfo'];
@@ -61,6 +88,35 @@ interface GameRenderer {
 type TransitionPhase = 'loading' | 'wiping' | 'playing';
 
 const MIN_LOADING_SCREEN_MS = 450;
+
+const EMPTY_LEVEL_STATS: LevelStatsSnapshot = {
+  totals: { monsters: 0, items: 0, secrets: 0 },
+  found: { monsters: 0, items: 0, secrets: 0 },
+};
+
+const FALLBACK_HUD_STATE: HudState = {
+  health: 100,
+  healthCap: 100,
+  armor: 0,
+  armorCap: 100,
+  ammo: { bullets: 50, shells: 0, rockets: 0, cells: 0 },
+  maxAmmo: { bullets: 200, shells: 50, rockets: 50, cells: 300 },
+  weapon: 'pistol',
+  weapons: ['fist', 'pistol'],
+  keys: { blue: false, red: false, yellow: false },
+  backpack: false,
+  alive: true,
+  message: null,
+  faceLump: 'STFSTF0',
+  powerups: {
+    invuln: false,
+    berserk: false,
+    invis: false,
+    radSuit: false,
+    lightAmp: false,
+    computerMap: false,
+  },
+};
 
 function activeGzdoomWasmModule(backend: RenderBackend): GzdoomWasmModule | null {
   if (backend === 'gzdoom-s-wasm') return getGzdoomSModule();
@@ -89,12 +145,31 @@ export const LevelViewer: React.FC<{
   const loadStartedAtRef = useRef(0);
   const [automapActive, setAutomapActive] = useState(false);
   const [bspDebugActive, setBspDebugActive] = useState(false);
+  const [classicMenuOpen, setClassicMenuOpen] = useState(false);
+  const [classicMenuScreen, setClassicMenuScreen] = useState<DoomPatchMenuScreen>('pause');
+  const [classicSfxMuted, setClassicSfxMuted] = useState(false);
+  const classicMenuOpenRef = useRef(false);
+  const classicMenuScreenRef = useRef(classicMenuScreen);
+  /** Suppress pause overlay when Esc intentionally opens the main menu (pointer lock exit). */
+  const escOpensMainMenuRef = useRef(false);
+  useEffect(() => {
+    classicMenuOpenRef.current = classicMenuOpen;
+  }, [classicMenuOpen]);
+  useEffect(() => {
+    classicMenuScreenRef.current = classicMenuScreen;
+  }, [classicMenuScreen]);
+  const [intermission, setIntermission] = useState<{
+    mapName: string;
+    nextMapName: string | null;
+    stats: LevelStatsSnapshot;
+  } | null>(null);
   const [labelGridActive, setLabelGridActive] = useState(
     () => new URLSearchParams(window.location.search).has('labels')
   );
   const [renderBackend, setRenderBackendState] = useState<RenderBackend>(readDefaultRenderBackend);
+  const [simulationEngine, setSimulationEngine] = useState<FederatedEngineMode>(readFederatedEngineMode);
   const [renderLayerToggles, setRenderLayerTogglesState] = useState<RenderLayerToggles>(
-    readStoredRenderLayerToggles
+    () => readStoredRenderLayerToggles(readDefaultRenderBackend() === 'classic' ? 'classic' : undefined)
   );
   const gzdoomHadReadyRef = useRef(false);
   const [layersDrawerOpen, setLayersDrawerOpen] = useState(false);
@@ -116,7 +191,9 @@ export const LevelViewer: React.FC<{
     setGzdoomPlayCanvasLive(node != null);
   }, []);
   /** Gold = WASM spawn frame (Phase 2c). Play = GZDoom WASM hosted renderer. */
-  const [gzdoomSubView, setGzdoomSubView] = useState<'gold' | 'play'>('play');
+  const [gzdoomSubView, setGzdoomSubView] = useState<'gold' | 'play'>(() =>
+    new URLSearchParams(window.location.search).get('gzdoomSubView') === 'gold' ? 'gold' : 'play'
+  );
   const [visibilityHud, setVisibilityHud] = useState('');
   const [automapCheat, setAutomapCheat] = useState<AutomapCheatLevel>(0);
   const [loadTick, setLoadTick] = useState(0);
@@ -173,8 +250,19 @@ export const LevelViewer: React.FC<{
 
   useEffect(() => {
     if (wadPath) return;
-    if (isGzdoomWasmFamily(renderBackend) || game) {
-      setWadPath(PLAYABLE_WAD_OPTIONS[0]?.path ?? '/wads/DOOM.WAD');
+    if (
+      isGzdoomWasmFamily(renderBackend) ||
+      game ||
+      renderBackend === 'classic' ||
+      readSpawnLockFromLocation() ||
+      readFrameParityModeFromLocation()
+    ) {
+      setWadPath(
+        resolveWadPathFromLocation(
+          typeof window !== 'undefined' ? window.location.search : '',
+          PLAYABLE_WAD_OPTIONS[0]?.path ?? '/wads/DOOM.WAD',
+        ),
+      );
     }
   }, [game, wadPath, setWadPath, renderBackend]);
 
@@ -185,19 +273,20 @@ export const LevelViewer: React.FC<{
   }, [renderBackend, selectedMap, wadPath]);
 
   useEffect(() => {
-    const shell = document.querySelector('.app-shell');
-    const hero = document.querySelector('.hero');
-    const immersive =
-      (isGzdoomPlayMode(renderBackend, gzdoomSubView) && classicPlayState === 'ready') ||
-      (renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && mapLoadState === 'ready') ||
-      (!isGzdoomWasmFamily(renderBackend) && mapLoadState === 'ready' && transitionPhase === 'playing');
-    shell?.classList.toggle('app-shell--playing', immersive);
-    hero?.classList.toggle('hero--compact', immersive);
-    return () => {
-      shell?.classList.remove('app-shell--playing');
-      hero?.classList.remove('hero--compact');
-    };
-  }, [mapLoadState, renderBackend, transitionPhase, gzdoomSubView, classicPlayState]);
+    if (renderBackend !== 'classic' || !game) return;
+    const toggles = mergeClassicParityLayerToggles(
+      readStoredRenderLayerToggles('classic'),
+      readClassicGzdoomParityMode(),
+    );
+    setRenderLayerTogglesState(toggles);
+    game.setRenderLayerToggles(toggles);
+  }, [renderBackend, game, selectedMap]);
+
+  useEffect(() => {
+    if (!showRenderLayerRail(renderBackend)) {
+      setLayersDrawerOpen(false);
+    }
+  }, [renderBackend]);
 
   useEffect(() => {
     if (!isGzdoomPlayMode(renderBackend, gzdoomSubView) || classicPlayState !== 'ready') return;
@@ -351,6 +440,19 @@ export const LevelViewer: React.FC<{
 
   const handleRenderBackendChange = useCallback((backend: RenderBackend) => {
     setRenderBackendState(backend);
+    persistRenderBackend(backend);
+    const url = new URL(window.location.href);
+    url.searchParams.set('renderer', backend);
+    window.history.replaceState(null, '', url.toString());
+  }, []);
+
+  const handleSimulationEngineChange = useCallback((mode: FederatedEngineMode) => {
+    setSimulationEngine(mode);
+    persistFederatedEngineMode(mode);
+    const url = new URL(window.location.href);
+    url.searchParams.set('engine', mode);
+    window.history.replaceState(null, '', url.toString());
+    window.location.reload();
   }, []);
 
   const handleRenderLayerChange = useCallback((next: RenderLayerToggles) => {
@@ -390,6 +492,19 @@ export const LevelViewer: React.FC<{
         ? classicPlayState === 'ready'
         : mapLoadState === 'ready'
       : transitionPhase === 'playing';
+
+  useEffect(() => {
+    const shell = document.querySelector('.app-shell');
+    const hero = document.querySelector('.hero');
+    shell?.classList.toggle('app-shell--playing', isPlaying);
+    hero?.classList.toggle('hero--compact', isPlaying);
+    return () => {
+      shell?.classList.remove('app-shell--playing');
+      hero?.classList.remove('hero--compact');
+    };
+  }, [isPlaying]);
+
+  const showLayerRail = showRenderLayerRail(renderBackend);
   const showGoldFrame =
     renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && Boolean(gzdoomFrameUrl);
   const classicLoadElapsedSec =
@@ -481,7 +596,7 @@ export const LevelViewer: React.FC<{
   }, [showGzdoomPlayCanvas, gzdoomCanvasRef, renderBackend]);
 
   useEffect(() => {
-    if (renderBackend !== 'wasm-federated' || !game) return;
+    if ((renderBackend !== 'classic' && renderBackend !== 'wasm-federated') || !game) return;
     const id = window.setInterval(() => {
       const info = game.getFederatedWasmDebugInfo?.();
       if (!info) return;
@@ -495,13 +610,17 @@ export const LevelViewer: React.FC<{
               : 'engine TS';
         const patchSuffix =
           debug.patchesLastFrame > 0 ? ` · ${debug.patchesLastFrame} patches` : '';
+        const rendererLabel =
+          renderBackend === 'wasm-federated'
+            ? 'renderer WebGL (GZSTATE)'
+            : 'renderer WebGL';
         const voxelSuffix =
           debug.voxelsDrawn != null
             ? ` · vox ${debug.voxelsDrawn}${debug.voxelsPending ? `/${debug.voxelsPending} pend` : ''}`
             : '';
         const errSuffix = debug.error ? ` · ${debug.error}` : '';
         setFederatedWasmHud(
-          `Federated · ${engineLabel} + renderer WASM · ${debug.mapName || '—'} · ${debug.vertexCount}v ${debug.sectorCount}s · GZSTATE ${Math.round(debug.gzstateBytes / 1024)}KB${patchSuffix}${voxelSuffix}${errSuffix}`,
+          `${engineLabel} + ${rendererLabel} · ${debug.mapName || '—'} · tick ${debug.tickNumber}${patchSuffix}${voxelSuffix}${errSuffix}`,
         );
       });
     }, 400);
@@ -514,10 +633,9 @@ export const LevelViewer: React.FC<{
       const stats = (window as unknown as { __doomDrawStats?: Record<string, unknown> }).__doomDrawStats;
       if (!stats) return;
       const cam = stats.cameraSectorIndex ?? '?';
-      const flat42 = stats.courtyardFlat42 ? 'yes' : 'no';
       const mode = stats.flatDrawMode ?? '?';
       setVisibilityHud(
-        `BSP · sector ${cam} · flat42 ${flat42} · ${mode} · walls ${stats.wallEntries ?? 0} flats ${stats.flatSubsectors ?? 0} · drawn w${stats.walls ?? 0} f${stats.flats ?? 0}${Array.isArray(stats.inactiveLayers) && stats.inactiveLayers.length ? ` · off: ${(stats.inactiveLayers as string[]).slice(0, 3).join(',')}` : ''}${stats.wireframeMode && stats.wireframeMode !== 'off' ? ` · wire ${stats.wireframeMode}` : ''}`
+        `Classic WebGL · BSP sector ${cam} · geo r${stats.geometryRevision ?? '?'} · ${mode} · walls ${stats.wallEntries ?? 0} flats ${stats.flatSubsectors ?? 0} · drawn w${stats.walls ?? 0} f${stats.flats ?? 0}${Array.isArray(stats.inactiveLayers) && stats.inactiveLayers.length ? ` · off: ${(stats.inactiveLayers as string[]).slice(0, 3).join(',')}` : ''}${stats.wireframeMode && stats.wireframeMode !== 'off' ? ` · wire ${stats.wireframeMode}` : ''}`
       );
     }, 400);
     return () => window.clearInterval(id);
@@ -536,6 +654,9 @@ export const LevelViewer: React.FC<{
     }
     setAutomapActive(false);
     setBspDebugActive(false);
+    setClassicMenuOpen(false);
+    setClassicMenuScreen('pause');
+    setIntermission(null);
     setAutomapCheat(0);
     cheatBufferRef.current = '';
     game?.setAutomapActive(false);
@@ -565,7 +686,7 @@ export const LevelViewer: React.FC<{
         return;
       }
 
-      if (readFrameParityModeFromLocation()) {
+      if (readFrameParityModeFromLocation() || readSpawnLockFromLocation()) {
         game.setPresentationVisible(true);
         if (!cancelled) {
           setTransitionPhase('playing');
@@ -634,17 +755,71 @@ export const LevelViewer: React.FC<{
     game?.setAutomapActive(true);
   }, [game]);
 
+  const openClassicPauseMenu = useCallback(() => {
+    setClassicMenuScreen('pause');
+    setClassicMenuOpen(true);
+  }, []);
+
+  const openClassicMainMenu = useCallback(() => {
+    setClassicMenuScreen('main');
+    setClassicMenuOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!game || !needsClassicWebGLGame(renderBackend)) return;
+    game.setPauseMenuRequestHandler(openClassicPauseMenu);
+    return () => game.setPauseMenuRequestHandler(null);
+  }, [game, openClassicPauseMenu, renderBackend]);
+
+  useEffect(() => {
+    game?.setPauseMenuOpen(classicMenuOpen);
+  }, [classicMenuOpen, game]);
+
   useEffect(() => {
     if (!isPlaying) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Tab') {
+        if (classicMenuOpen) return;
         event.preventDefault();
         toggleAutomap();
         return;
       }
 
+      if (event.code === 'Escape' && needsClassicWebGLGame(renderBackend)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        escOpensMainMenuRef.current = true;
+        window.setTimeout(() => {
+          escOpensMainMenuRef.current = false;
+        }, 150);
+        if (classicMenuOpenRef.current && classicMenuScreenRef.current === 'main') {
+          setClassicMenuOpen(false);
+          gameCanvasRef.current?.focus();
+          return;
+        }
+        if (classicMenuOpenRef.current && classicMenuScreenRef.current === 'options') {
+          setClassicMenuScreen('main');
+          return;
+        }
+        openClassicMainMenu();
+        return;
+      }
+
+      if (event.code === 'KeyM' && needsClassicWebGLGame(renderBackend)) {
+        event.preventDefault();
+        if (classicMenuOpen && classicMenuScreen === 'pause') {
+          setClassicMenuOpen(false);
+          gameCanvasRef.current?.focus();
+          return;
+        }
+        if (classicMenuOpen) return;
+        openClassicPauseMenu();
+        return;
+      }
+
       if (event.code === 'KeyV') {
+        if (classicMenuOpen) return;
         event.preventDefault();
         toggleBspDebug();
         return;
@@ -665,13 +840,71 @@ export const LevelViewer: React.FC<{
           cheatBufferRef.current = '';
           event.preventDefault();
           triggerIddt();
+        } else {
+          for (const code of ['idkfa', 'idfa', 'iddqd'] as const) {
+            if (cheatTriggered(cheatBufferRef.current, code)) {
+              cheatBufferRef.current = '';
+              event.preventDefault();
+              game?.applyCheat(code);
+              break;
+            }
+          }
         }
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isPlaying, toggleAutomap, toggleBspDebug, triggerIddt]);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [classicMenuOpen, classicMenuScreen, game, isPlaying, openClassicMainMenu, openClassicPauseMenu, renderBackend, toggleAutomap, toggleBspDebug, triggerIddt]);
+
+  useEffect(() => {
+    if (!isPlaying || !needsClassicWebGLGame(renderBackend)) return;
+    const canvas = gameCanvasRef.current;
+    if (!canvas) return;
+
+    const onPointerLockChange = () => {
+      if (document.pointerLockElement === canvas) return;
+      if (escOpensMainMenuRef.current) return;
+      if (!classicMenuOpenRef.current) {
+        openClassicPauseMenu();
+      }
+    };
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    return () => document.removeEventListener('pointerlockchange', onPointerLockChange);
+  }, [isPlaying, openClassicPauseMenu, renderBackend]);
+
+  useEffect(() => {
+    if (!classicMenuOpen) return;
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }, [classicMenuOpen]);
+
+  useEffect(() => {
+    if (!isPlaying || !needsClassicWebGLGame(renderBackend) || !game || !selectedMap) return;
+    const id = window.setInterval(() => {
+      if (!game.consumeExitRequest()) return;
+      setClassicMenuOpen(false);
+      setAutomapActive(false);
+      game.setAutomapActive(false);
+      const nextMapName = getNextMapName(mapNames, selectedMap);
+      setIntermission({
+        mapName: selectedMap,
+        nextMapName,
+        stats: game.getLevelStats() ?? EMPTY_LEVEL_STATS,
+      });
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [game, isPlaying, mapNames, renderBackend, selectedMap]);
+
+  const continueIntermission = useCallback(() => {
+    const next = intermission?.nextMapName;
+    setIntermission(null);
+    if (next) {
+      setSelectedMap(next);
+    }
+  }, [intermission?.nextMapName, setSelectedMap]);
 
   useEffect(() => {
     if (!bspDebugActive || !isPlaying || !wad || !selectedMap || !game) return;
@@ -739,13 +972,17 @@ export const LevelViewer: React.FC<{
     ((gzdoomPlaySubview && classicPlayState !== 'ready' && classicPlayState !== 'error') ||
       (renderBackend === 'gzdoom-wasm' && gzdoomSubView === 'gold' && mapLoadState === 'loading'));
 
-  const isImmersivePlay =
-    isPlaying || (isGzdoomWasmFamily(renderBackend) && mapLoadState === 'ready');
+  const isImmersivePlay = isPlaying;
+  const wadOrMapLoading =
+    status.state === 'loading' ||
+    mapLoadState === 'loading' ||
+    classicPlayState === 'loading';
 
   const viewerClassName = [
     'doom-panel',
     'level-viewer',
     isImmersivePlay ? 'level-viewer--playing' : '',
+    wadOrMapLoading ? 'level-viewer--loading' : '',
     isGzdoomWasmLoading ? 'level-viewer--gzdoom-loading' : '',
     showGoldFrame ? 'level-viewer--gzdoom-gold' : '',
   ]
@@ -764,10 +1001,14 @@ export const LevelViewer: React.FC<{
     <div className={shellClassName}>
       <section
         className={viewerClassName}
+        data-render-backend={renderBackend}
         data-map-load-state={mapLoadState}
         data-classic-play-state={classicPlayState}
         data-is-playing={isPlaying ? 'true' : 'false'}
+        data-classic-menu-open={classicMenuOpen ? 'true' : 'false'}
+        data-wad-present={wad ? 'true' : 'false'}
       >
+      {showLayerRail ? (
       <nav className="layer-rail" aria-label="Render layers">
         <button
           type="button"
@@ -800,6 +1041,7 @@ export const LevelViewer: React.FC<{
           />
         </aside>
       </nav>
+      ) : null}
 
       <header className="level-chrome">
         <div className="level-chrome__row">
@@ -843,18 +1085,38 @@ export const LevelViewer: React.FC<{
             </label>
 
             <label className="control-field">
-              <span className="control-field__label">Engine</span>
+              <span className="control-field__label">Renderer</span>
               <select
                 className="control-field__input control-field__input--engine"
                 value={renderBackend}
                 onChange={(e) => handleRenderBackendChange(e.target.value as RenderBackend)}
               >
-                <option value="gzdoom-wasm">GZDoom gold</option>
-                <option value="gzdoom-s-wasm">GZDoom modular (s)</option>
-                <option value="classic">Classic WebGL</option>
-                <option value="pathtrace">Path trace</option>
+                <optgroup label="Play (Node + WebGL2)">
+                  <option value="classic">Classic WebGL</option>
+                  <option value="wasm-federated">Classic · GZSTATE geometry</option>
+                  <option value="pathtrace">Path trace (debug)</option>
+                </optgroup>
+                <optgroup label="Oracle (GZDoom GLES in WASM — not play)">
+                  <option value="gzdoom-wasm">GZDoom gold (Emscripten)</option>
+                  <option value="gzdoom-s-wasm">GZDoom modular (s)</option>
+                </optgroup>
               </select>
             </label>
+
+            {isPlayRenderBackend(renderBackend) ? (
+              <label className="control-field">
+                <span className="control-field__label">Simulation</span>
+                <select
+                  className="control-field__input control-field__input--engine"
+                  value={simulationEngine}
+                  onChange={(e) => handleSimulationEngineChange(e.target.value as FederatedEngineMode)}
+                  title="Game tick backend — pure WASM when built (no Emscripten); renderer stays WebGL"
+                >
+                  <option value="typescript">TypeScript (default)</option>
+                  <option value="wasm">Pure WASM engine</option>
+                </select>
+              </label>
+            ) : null}
           </div>
 
           <div className="level-chrome__actions">
@@ -890,20 +1152,41 @@ export const LevelViewer: React.FC<{
             <div className="audio-chip" title="Sound effects">
               <button
                 type="button"
-                className={`audio-chip__btn ${!sfx.muted ? 'active' : ''}`}
+                className={`audio-chip__btn ${!(renderBackend === 'classic' ? classicSfxMuted : sfx.muted) ? 'active' : ''}`}
                 onClick={() => {
+                  if (renderBackend === 'classic') {
+                    setClassicSfxMuted((muted) => {
+                      const next = !muted;
+                      game?.setSfxMuted(next);
+                      if (!next) void game?.resumeSfx();
+                      return next;
+                    });
+                    return;
+                  }
                   sfx.unlock();
                   sfx.toggleMuted();
                 }}
-                disabled={!isGzdoomWasmFamily(renderBackend)}
-                aria-pressed={!sfx.muted}
-                aria-label={sfx.muted ? 'Unmute sound effects' : 'Mute sound effects'}
+                disabled={renderBackend !== 'classic' && !isGzdoomWasmFamily(renderBackend)}
+                aria-pressed={renderBackend === 'classic' ? !classicSfxMuted : !sfx.muted}
+                aria-label={
+                  (renderBackend === 'classic' ? classicSfxMuted : sfx.muted)
+                    ? 'Unmute sound effects'
+                    : 'Mute sound effects'
+                }
               >
-                <MuteIcon muted={sfx.muted} />
+                <MuteIcon muted={renderBackend === 'classic' ? classicSfxMuted : sfx.muted} />
               </button>
               <span className="audio-chip__label">SFX</span>
               <span className="audio-chip__status">
-                {!isGzdoomWasmFamily(renderBackend) ? '—' : sfx.muted ? 'Off' : 'On'}
+                {renderBackend === 'classic'
+                  ? classicSfxMuted
+                    ? 'Off'
+                    : 'On'
+                  : !isGzdoomWasmFamily(renderBackend)
+                    ? '—'
+                    : sfx.muted
+                      ? 'Off'
+                      : 'On'}
               </span>
             </div>
             <div className="audio-chip" title={music.currentLump ?? 'Level music'}>
@@ -951,23 +1234,30 @@ export const LevelViewer: React.FC<{
         <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
           <figcaption className="game-card__caption">
             {renderBackend === 'pathtrace'
-              ? 'GPU preview · ~10 fps cap · switch to Classic to play'
+              ? 'GPU preview · ~10 fps cap · switch to Classic WebGL to play'
               : renderBackend === 'wasm-federated'
-                ? 'GZRender federated · GZSTATE + WASM host · classic WebGL draw'
+                ? 'Play · Node GZSTATE + pure WebGL2 draw · simulation via ?engine='
+                : renderBackend === 'classic'
+                  ? 'Play · Node WAD parse + pure WebGL2 · Esc menu · M pause · simulation via ?engine='
                 : renderBackend === 'gzdoom-s-wasm'
                   ? 'GZDoom (s) WASM · Node GZSTATE map load · full engine + renderer'
                 : renderBackend === 'gzdoom-wasm'
                   ? gzdoomSubView === 'play'
                     ? 'GZDoom in WASM · full game · click to play · WASD + mouse · Space = use/open'
                     : 'GZDoom WASM · Phase 2 gold renderer · spawn view vs ref.png'
-                  : 'Classic HW · BSP submit + Z (solids) · debug/legacy'}
-            <span>Tab automap · V BSP debug · L label grid</span>
+                  : 'Classic HW · BSP submit · Esc menu · M pause · Tab automap · V BSP debug · L label grid'}
           </figcaption>
           <div className="game-card__viewport" ref={viewportRef}>
             <canvas
               ref={gameCanvasRef}
               className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''} ${bspDebugActive ? 'game-canvas--bsp-debug' : ''} ${hideGameCanvas ? 'game-canvas--hidden' : ''}`}
               tabIndex={0}
+            />
+            <DoomHud
+              active={renderBackend === 'classic' && isPlaying && transitionPhase === 'playing'}
+              wad={wad}
+              viewportRef={viewportRef}
+              getHudState={() => game?.getHudState() ?? FALLBACK_HUD_STATE}
             />
             {selectedMap && gzdoomPlaySubview ? (
             <canvas
@@ -1057,6 +1347,17 @@ export const LevelViewer: React.FC<{
               onSnapshotCaptured={handleSnapshotCaptured}
               onComplete={handleWipeComplete}
             />
+            {intermission ? (
+              <DoomIntermission
+                active
+                wad={wad}
+                mapName={intermission.mapName}
+                nextMapName={intermission.nextMapName}
+                stats={intermission.stats}
+                viewportRef={viewportRef}
+                onContinue={continueIntermission}
+              />
+            ) : null}
             {automapActive ? (
               <div className="automap-hud" aria-live="polite">
                 AUTOMAP · follow
@@ -1067,6 +1368,42 @@ export const LevelViewer: React.FC<{
               <div className="bsp-debug-hud" aria-live="polite">
                 BSP VISIBILITY · 3D wireframe + 2D seg trace · green=visible · red=clip · yellow=backface
               </div>
+            ) : null}
+            {classicMenuOpen && needsClassicWebGLGame(renderBackend) ? (
+              <ClassicPatchMenu
+                active
+                screen={classicMenuScreen}
+                wad={wad}
+                mapName={selectedMap}
+                sfxMuted={classicSfxMuted}
+                musicEnabled={music.enabled}
+                viewportRef={viewportRef}
+                gameCanvasRef={gameCanvasRef}
+                onResume={() => {
+                  setClassicMenuOpen(false);
+                  gameCanvasRef.current?.focus();
+                }}
+                onRestartLevel={() => {
+                  setClassicMenuOpen(false);
+                  setSelectedMap(selectedMap);
+                }}
+                onOpenMain={() => setClassicMenuScreen('main')}
+                onOpenOptions={() => setClassicMenuScreen('options')}
+                onBack={() => setClassicMenuScreen('main')}
+                onToggleSfx={() => {
+                  setClassicSfxMuted((muted) => {
+                    const next = !muted;
+                    game?.setSfxMuted(next);
+                    if (!next) void game?.resumeSfx();
+                    return next;
+                  });
+                }}
+                onToggleMusic={() => music.toggle()}
+                onClose={() => {
+                  setClassicMenuOpen(false);
+                  gameCanvasRef.current?.focus();
+                }}
+              />
             ) : null}
             <ViewportLabelGrid active={labelGridActive && isPlaying} />
             {labelGridActive && isPlaying ? (
@@ -1128,10 +1465,8 @@ const DoomLoader: React.FC<{
   const loadedAt = status.loadedAt ? new Date(status.loadedAt).toLocaleTimeString() : null;
   const isReady = status.state === 'ready' || status.state === 'cache-hit';
   const showProgress = !isReady || mapLoading || status.state === 'loading' || status.state === 'error';
-  // GZDoom WASM never parses lumps in Node — no Z_Init/W_Init bar. GZDoom (s) uses the overlay
-  // for lump parse + WASM; hide duplicate segmented bar while play is loading.
-  const showWadSegmentedBar =
-    !isGzdoomWasmFamily(renderBackend) && showProgress;
+  // GZDoom WASM never parses lumps in Node — no Z_Init/W_Init bar. Classic / (s) show doom-wad-core parse.
+  const showWadSegmentedBar = needsNodeWadLumpParse(renderBackend) && showProgress;
   const showDetail = showProgress && status.detail;
 
   return (

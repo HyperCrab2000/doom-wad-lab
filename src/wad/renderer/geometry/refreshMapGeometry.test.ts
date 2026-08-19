@@ -1,7 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { createLineSpecialSimulator, simulateUseLine } from '@/wad/game/lineSpecialSimulator';
 import { Sector } from '@/wad/interfaces/Sector';
 import { WadMap } from '@/wad/interfaces/WadMap';
 import { DoorSystem } from '@/wad/game/doorSystem';
+import { loadWadFromArrayBuffer } from '@/wad/parser/loadWadFromArrayBuffer';
 import {
   getCachedBlockingSegments,
   invalidateBlockingSegmentCache,
@@ -292,6 +296,99 @@ describe('refreshMapGeometry', () => {
 
     const after = new Float32Array(gl.getBufferData(positionBuffer)!);
     expect(after.some((value, index) => value !== before[index])).toBe(true);
+  });
+
+  it('updates subsector flat Y when a floor sector moves (lift path)', () => {
+    const wadPath = path.resolve(process.cwd(), 'public/wads/DOOM2.WAD');
+    if (!fs.existsSync(wadPath)) return;
+
+    const buf = fs.readFileSync(wadPath);
+    const wad = loadWadFromArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+    const map = structuredClone(wad.maps.MAP01);
+    const sim = createLineSpecialSimulator(map);
+    expect(simulateUseLine(sim, 84).triggered).toBe(true);
+    for (let i = 0; i < 120 && sim.controller.floors.getActiveMoverCount() > 0; i++) {
+      sim.controller.floors.tick(0.05);
+    }
+    expect(map.SECTORS[46].floorheight).toBe(48);
+
+    const texturesByName: Record<string, { name: string; width: number; height: number; transparent: boolean }> = {};
+    for (const side of map.SIDEDEFS) {
+      for (const tex of [side.topTexture, side.bottomTexture, side.midTexture]) {
+        if (!tex || tex === '-') continue;
+        const def = wad.textures[tex] ?? wad.textures[tex.toUpperCase()];
+        texturesByName[tex] = {
+          name: tex,
+          width: def?.width ?? 64,
+          height: def?.height ?? 128,
+          transparent: false,
+        };
+      }
+    }
+
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    const flatBefore = buffers.subsectorFlats.find((f) => f.sectorIndex === 46)?.center?.[1];
+    expect(flatBefore).toBeDefined();
+
+    map.SECTORS[46].floorheight = 0;
+    const resetGeometry = buildMapGeometryCpu(map, texturesByName);
+    const resetBuffers = uploadCpuGeometry(gl, map, resetGeometry);
+    const staleY = resetBuffers.subsectorFlats.find((f) => f.sectorIndex === 46)?.center?.[1]!;
+    expect(staleY).not.toBe(flatBefore);
+
+    map.SECTORS[46].floorheight = 48;
+    refreshMapGeometry(gl, map, texturesByName, resetBuffers, new Set([46, 47, 50, 51]));
+
+    const flatAfter = resetBuffers.subsectorFlats.find((f) => f.sectorIndex === 46)?.center?.[1];
+    expect(flatAfter).toBeCloseTo(flatBefore!, 0.5);
+  });
+
+  it('refreshes lift subsector flats from active mover sectors after dirty was cleared', () => {
+    const wadPath = path.resolve(process.cwd(), 'public/wads/DOOM2.WAD');
+    if (!fs.existsSync(wadPath)) return;
+
+    const buf = fs.readFileSync(wadPath);
+    const wad = loadWadFromArrayBuffer(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength));
+    const map = structuredClone(wad.maps.MAP01);
+    const sim = createLineSpecialSimulator(map);
+    expect(simulateUseLine(sim, 84).triggered).toBe(true);
+    for (let i = 0; i < 120 && sim.controller.floors.getActiveMoverCount() > 0; i++) {
+      sim.controller.floors.tick(0.05);
+    }
+    expect(map.SECTORS[46].floorheight).toBe(48);
+
+    const texturesByName: Record<string, { name: string; width: number; height: number; transparent: boolean }> = {};
+    for (const side of map.SIDEDEFS) {
+      for (const tex of [side.topTexture, side.bottomTexture, side.midTexture]) {
+        if (!tex || tex === '-') continue;
+        const def = wad.textures[tex] ?? wad.textures[tex.toUpperCase()];
+        texturesByName[tex] = {
+          name: tex,
+          width: def?.width ?? 64,
+          height: def?.height ?? 128,
+          transparent: false,
+        };
+      }
+    }
+
+    map.SECTORS[46].floorheight = 0;
+    const geometry = buildMapGeometryCpu(map, texturesByName);
+    const gl = createMockGl();
+    const buffers = uploadCpuGeometry(gl, map, geometry);
+    const staleY = buffers.subsectorFlats.find((f) => f.sectorIndex === 46)?.center?.[1]!;
+    expect(staleY).toBeLessThan(40);
+
+    map.SECTORS[46].floorheight = 48;
+    sim.controller.clearDirty();
+    const activeSectors = sim.controller.getActiveMoverSectors();
+    expect(activeSectors.size).toBe(0);
+
+    refreshMapGeometry(gl, map, texturesByName, buffers, new Set([46, 47, 50, 51]));
+    const flatAfter = buffers.subsectorFlats.find((f) => f.sectorIndex === 46)?.center?.[1];
+    expect(flatAfter).toBeGreaterThan(staleY);
+    expect(flatAfter).toBeCloseTo(48, 0.5);
   });
 });
 

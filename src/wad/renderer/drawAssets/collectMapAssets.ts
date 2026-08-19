@@ -13,8 +13,21 @@ export interface MapAssetNames {
 const LOADING_UI_PATCHES = [
   'TITLEPIC',
   'M_LOADG',
+  'M_DOOM',
+  'M_PAUSE',
+  'M_OPTTTL',
+  'M_NGAME',
+  'M_NEWG',
+  'M_OPTION',
+  'M_SAVEG',
+  'M_QUITG',
+  'M_ENDGAM',
+  'M_SKULL1',
+  'M_SKULL2',
   ...Array.from({ length: 95 - 33 + 1 }, (_, i) => `STCFN0${(33 + i).toString().padStart(2, '0')}`),
 ];
+
+const PLAYER_WEAPON_SPRITES = ['PISGA0'];
 
 function addAnimated(names: Set<string>, animated: Record<string, string[]>): void {
   for (const group of Object.values(animated)) {
@@ -41,6 +54,27 @@ function addWallTexture(names: Set<string>, patchLumps: Set<string>, wad: Wad, t
   patchesForTexture(wad, texName, patchLumps);
 }
 
+/** SW1/SW2 and DB1/DB2 pairs — switches flip at runtime; both variants must be uploaded. */
+function addSwitchTexturePairs(
+  wallTextures: Set<string>,
+  patchLumps: Set<string>,
+  wad: Wad
+): void {
+  const seed = [...wallTextures];
+  for (const name of seed) {
+    const upper = name.toUpperCase();
+    let pair: string | null = null;
+    if (upper.startsWith('SW1')) pair = `SW2${name.slice(3)}`;
+    else if (upper.startsWith('SW2')) pair = `SW1${name.slice(3)}`;
+    else if (upper.startsWith('DB1')) pair = `DB2${name.slice(3)}`;
+    else if (upper.startsWith('DB2')) pair = `DB1${name.slice(3)}`;
+    if (!pair) continue;
+    if (wad.textures[pair] || wad.textures[pair.toUpperCase()]) {
+      addWallTexture(wallTextures, patchLumps, wad, pair);
+    }
+  }
+}
+
 export function collectMapAssetNames(wad: Wad, map: WadMap, mapName: string): MapAssetNames {
   const wallTextures = new Set<string>();
   const flats = new Set<string>();
@@ -58,6 +92,8 @@ export function collectMapAssetNames(wad: Wad, map: WadMap, mapName: string): Ma
     addWallTexture(wallTextures, patchLumps, wad, side.midTexture);
   }
 
+  addSwitchTexturePairs(wallTextures, patchLumps, wad);
+
   for (const thing of map.THINGS) {
     const thingType = DOOM_THING_MAP_BY_ID[thing.type];
     if (!thingType?.sprite) continue;
@@ -67,6 +103,10 @@ export function collectMapAssetNames(wad: Wad, map: WadMap, mapName: string): Ma
         spriteLumps.add(lumpName);
       }
     }
+  }
+
+  for (const spriteName of PLAYER_WEAPON_SPRITES) {
+    if (wad.sprites[spriteName]) spriteLumps.add(spriteName);
   }
 
   addAnimated(wallTextures, wad.animatedTextures);

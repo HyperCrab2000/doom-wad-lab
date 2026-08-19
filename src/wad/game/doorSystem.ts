@@ -63,6 +63,10 @@ export class DoorSystem {
     return this.doors.size;
   }
 
+  getActiveSectorIndices(): ReadonlySet<number> {
+    return new Set(this.doors.keys());
+  }
+
   tryUseLine(lineIndex: number, line: LineDef): DoorTriggerResult {
     const def = getDoorSpecial(line.special);
     if (!def || def.activation !== 'switch') {

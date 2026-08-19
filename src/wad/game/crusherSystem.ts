@@ -50,6 +50,10 @@ export class CrusherSystem {
     return this.crushers.size;
   }
 
+  getActiveSectorIndices(): ReadonlySet<number> {
+    return new Set(this.crushers.keys());
+  }
+
   tryUseLine(lineIndex: number, line: LineDef): CrusherTriggerResult {
     const def = getCrusherSpecial(line.special);
     if (!def || def.activation !== 'switch') return emptyResult();

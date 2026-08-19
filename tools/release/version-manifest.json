@@ -1,0 +1,70 @@
+{
+  "versions": [
+    {
+      "tag": "v0.1.0",
+      "sha": "9088dc7",
+      "title": "Initial rebuild and AWS deploy pipeline",
+      "summary": "Rebuilt Doom WAD Lab on Vite/React, added Terraform + GitHub Actions deploy to S3/CloudFront."
+    },
+    {
+      "tag": "v0.2.0",
+      "sha": "fdc68cc",
+      "title": "Classic automap, surface relief, and gameplay polish",
+      "summary": "Added automap overlay, parallax surface relief, and early gameplay polish on the Classic WebGL renderer."
+    },
+    {
+      "tag": "v0.3.0",
+      "sha": "2b3f11b",
+      "title": "Production docs and renderer polish",
+      "summary": "Comprehensive documentation, shader fixes, and production-ready renderer improvements."
+    },
+    {
+      "tag": "v0.4.0",
+      "sha": "d90c50a",
+      "title": "Unit and integration test suites",
+      "summary": "Split CI into unit and integration projects; added project history documentation."
+    },
+    {
+      "tag": "v0.5.0",
+      "sha": "cde8251",
+      "title": "Line specials, sky sealing, and live mover geometry",
+      "summary": "Implemented map line specials, sky sector sealing, and geometry refresh for moving sectors."
+    },
+    {
+      "tag": "v0.6.0",
+      "sha": "99c4736",
+      "title": "Gameplay systems and renderer performance",
+      "summary": "Wired gameplay systems into the live loop and improved renderer performance; fixed CI smoke tests."
+    },
+    {
+      "tag": "v0.7.0",
+      "sha": "f217842",
+      "title": "GZDoom BSP visibility pipeline",
+      "summary": "Added GZDoom-style BSP traversal, visibility culling, and renderer debug tooling."
+    },
+    {
+      "tag": "v0.8.0",
+      "sha": "5938a74",
+      "title": "GZRender-V2 renderer and federated WAD stack",
+      "summary": "Introduced gzrender-v2 modular renderer, federated WAD/mod loading, and engine hooks."
+    },
+    {
+      "tag": "v0.9.0",
+      "sha": "950e041",
+      "title": "GZDoom (s) modular host and gameplay sim parity",
+      "summary": "Added GZDoom (s) WASM modular host, render layer drawer UI, and restored gameplay simulation parity modules."
+    },
+    {
+      "tag": "v0.10.0",
+      "sha": "8599873",
+      "title": "Diamond test pyramid and documentation bibles",
+      "summary": "Added diamond E2E test pyramid, PerfMeter overlay, CI hardening, and expanded technical bibles."
+    },
+    {
+      "tag": "v0.10.1",
+      "sha": "f8b3ae0",
+      "title": "CI diamond E2E skip without commercial IWAD",
+      "summary": "Skip GZDoom diamond E2E when CI runners lack a commercial IWAD."
+    }
+  ]
+}

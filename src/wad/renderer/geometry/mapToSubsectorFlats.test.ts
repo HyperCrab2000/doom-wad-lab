@@ -27,6 +27,18 @@ describe('subsector flats', () => {
     expect(Math.abs(subsectorSignedArea(map, segIndices))).toBeGreaterThan(1000);
   });
 
+  it('triangulates E1M1 two-seg courtyard subsector 119', () => {
+    const map = loadMap('DOOM.WAD', 'E1M1');
+    const index = buildBspRenderIndex(map)!;
+    const segIndices = index.subsectorSegs[119] ?? [];
+    const triangles = subsectorToTriangles(map, segIndices);
+    const flats = mapToSubsectorFlats(map, index).filter((flat) => flat.subsectorIndex === 119);
+
+    expect(segIndices).toHaveLength(2);
+    expect(triangles.length).toBeGreaterThan(0);
+    expect(flats.some((flat) => flat.flatName === 'FLOOR7_1')).toBe(true);
+  });
+
   it('includes sector flats in CPU geometry build', () => {
     const map = loadMap('DOOM2.WAD', 'MAP01');
     const geometry = buildMapGeometryCpu(map, {});

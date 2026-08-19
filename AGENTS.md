@@ -17,3 +17,10 @@ Walk-over door linedefs (specials 2, 4, etc.) still trigger via `findCrossedWalk
 Tests: `src/wad/game/useLines.test.ts`, `src/wad/game/doorSystem.test.ts`.
 
 Do not revert the “use before pointer lock” behavior — first click must open doors without requiring mouse capture first.
+
+## Cursor AI spend
+
+Always-on: `agent-efficiency.mdc`, `agent-discipline.mdc`, `classic-parity-efficiency.mdc` + global `~/.cursor/rules/agent-efficiency.mdc`.
+
+- Agent: unit tests + small diffs; user runs `npm run dev` and Puppeteer gate.
+- No `Task`/subagents unless you explicitly ask.

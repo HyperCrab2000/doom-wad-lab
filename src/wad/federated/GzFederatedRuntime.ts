@@ -1,5 +1,5 @@
 import type { GztickPatch } from '@hypercrab2000/doom-gzengine-core';
-import { createGzEngineHost } from '@hypercrab2000/doom-gzengine-core';
+import { createBridgeEngineHost, createGzEngineHost } from '@hypercrab2000/doom-gzengine-core';
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { MapActionController } from '@/wad/game/mapActionController';
@@ -14,6 +14,7 @@ import {
   type FederatedEngineMode,
 } from '@/wad/federated/federatedEngineMode';
 import { patchesFromDirtySectors } from '@/wad/federated/typescriptEngineBridge';
+import { exportGztickFromMap } from '@/wad/federated/exportGztickFromMap';
 
 export interface FederatedSimulationMotion {
   playOpen: boolean;
@@ -51,6 +52,16 @@ export interface FederatedRuntimeDebug {
 export class GzFederatedRuntime {
   private engineMode: FederatedEngineMode = readFederatedEngineMode();
   private engineHost = createGzEngineHost();
+  private bridgeHost = createBridgeEngineHost({
+    exportSnapshot: () => ({
+      header: { magic: 0, version: 0, tickNumber: 0, mapName: '', engineTag: 'GZENGINE', flags: 0 },
+      strings: [],
+      sectorDynamics: [],
+      things: [],
+      eventLog: [],
+    }),
+  });
+  private liveMap: WadMap | null = null;
   private engineWasmLoaded = false;
   private engineFallbackReason?: string;
   private loaded = false;
@@ -68,15 +79,28 @@ export class GzFederatedRuntime {
     return this.engineMode;
   }
 
-  async loadMap(wad: Wad, mapName: string, map: WadMap): Promise<void> {
+  async loadMap(
+    wad: Wad,
+    mapName: string,
+    map: WadMap,
+    options?: { skipRendererPrewarm?: boolean },
+  ): Promise<void> {
     this.reset();
     this.engineMode = readFederatedEngineMode();
 
     const { bytes } = loadGzstateFromWad(wad, mapName);
     this.gzstateBytes = bytes.byteLength;
     this.mapName = mapName;
+    this.liveMap = map;
+    this.bridgeHost.dispose();
+    this.bridgeHost = createBridgeEngineHost({
+      exportSnapshot: (tickNumber) => exportGztickFromMap(map, mapName, tickNumber),
+    });
+    await this.bridgeHost.loadGzstate();
 
-    await prewarmFederatedWasmMap(wad, mapName, map);
+    if (!options?.skipRendererPrewarm) {
+      await prewarmFederatedWasmMap(wad, mapName, map);
+    }
 
     if (this.engineMode === 'wasm') {
       try {
@@ -126,7 +150,8 @@ export class GzFederatedRuntime {
 
     const motion = mapActions.tick(dtSeconds);
     const patches = patchesFromDirtySectors(map, mapActions.getDirtySectors());
-    mapActions.clearDirty();
+    this.bridgeHost.tick(Math.max(1, Math.round(dtSeconds * 35)));
+    this.bridgeHost.queuePatches(patches);
     this.lastPatchCount = patches.length;
 
     return {
@@ -134,6 +159,14 @@ export class GzFederatedRuntime {
       motion,
       engineMode: 'typescript',
     };
+  }
+
+  exportGztick(): ArrayBuffer {
+    if (!this.loaded || !this.liveMap) return new ArrayBuffer(0);
+    if (this.engineMode === 'typescript' || !this.engineWasmLoaded) {
+      return this.bridgeHost.exportGztick();
+    }
+    return this.engineHost.exportGztick();
   }
 
   getDebugInfo(): FederatedRuntimeDebug {
@@ -161,9 +194,20 @@ export class GzFederatedRuntime {
     this.lastPatchCount = 0;
     this.gzstateBytes = 0;
     this.mapName = '';
+    this.liveMap = null;
     this.loadError = undefined;
     this.engineWasmLoaded = false;
     this.engineFallbackReason = undefined;
+    this.bridgeHost.dispose();
+    this.bridgeHost = createBridgeEngineHost({
+      exportSnapshot: () => ({
+        header: { magic: 0, version: 0, tickNumber: 0, mapName: '', engineTag: 'GZENGINE', flags: 0 },
+        strings: [],
+        sectorDynamics: [],
+        things: [],
+        eventLog: [],
+      }),
+    });
     this.engineHost.dispose();
     this.engineHost = createGzEngineHost();
     resetFederatedWasmBackend();

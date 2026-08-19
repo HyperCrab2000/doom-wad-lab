@@ -1,0 +1,6 @@
+# GZTICK replay script (v0 text format)
+# target <tick>   — dump snapshot after this map tic
+# event <tick> useLine <lineIndex>
+
+target 35
+event 5 useLine 148

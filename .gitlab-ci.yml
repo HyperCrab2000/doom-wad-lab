@@ -1,0 +1,43 @@
+stages:
+  - package
+
+variables:
+  NODE_VERSION: '22'
+  SOUNDFONT_URL: https://raw.githubusercontent.com/craffel/pretty-midi/main/pretty_midi/TimGM6mb.sf2
+
+release_package:
+  stage: package
+  image: node:${NODE_VERSION}-bookworm
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl tar && rm -rf /var/lib/apt/lists/*
+    - git clone --depth 1 https://github.com/HyperCrab2000/doom-wad-core.git ../doom-wad-core
+    - cd ../doom-wad-core && npm ci && npm run build
+    - cd "$CI_PROJECT_DIR"
+    - git clone --depth 1 https://github.com/HyperCrab2000/doom-gzengine-core.git ../doom-gzengine-core
+    - cd ../doom-gzengine-core && npm ci && npm run build
+    - cd "$CI_PROJECT_DIR"
+  script:
+    - npm ci
+    - npx tsx tools/release/deployment-notes.mts deployment-notes.md
+    - mkdir -p public/soundfonts
+    - curl -fsSL -o public/soundfonts/TimGM6mb.sf2 "$SOUNDFONT_URL"
+    - npm run package:release
+  artifacts:
+    name: doom-wad-lab-release-$CI_COMMIT_REF_SLUG
+    expire_in: 30 days
+    paths:
+      - releases/*.tgz
+      - releases/*.sha256
+      - deployment-notes.md
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: doom-wad-lab $CI_COMMIT_TAG
+    description: ./deployment-notes.md
+    assets:
+      links:
+        - name: Release archive
+          url: $CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/browse/releases/
+        - name: Deployment notes
+          url: $CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/file/deployment-notes.md
+  rules:
+    - if: $CI_COMMIT_TAG

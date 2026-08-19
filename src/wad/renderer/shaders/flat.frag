@@ -65,9 +65,13 @@ void main() {
   vec2 sampleUv = fract(texCoord);
 
   if (parityColormap != 0) {
+    parityOutdoorSkyCeilingFlatDiscard();
+    parityOutdoorSkyFloorDiscard();
+    if (parityFlatHorizonDiscard()) discard;
     vec4 texVal = texture(tex, sampleUv);
-    float visibility = flatPlaneVisibility(vWorldPos, uCameraPos, playfieldHeight);
-    fragColor = vec4(sampleColormapParity(texVal, sectorLightLevel, visibility), 1.0);
+    if (floor(texVal.r * 255.0 + 0.5) < 0.5) discard;
+    float visibility = flatColormapVisibility(vWorldPos);
+    fragColor = vec4(sampleColormapParityFlat(texVal, sectorLightLevel, visibility), 1.0);
     return;
   }
 

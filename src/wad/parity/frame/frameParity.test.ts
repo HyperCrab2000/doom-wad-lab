@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { colormapBandV, sectorColormapBand } from '@/wad/parity/frame/colormapParity';
+import { colormapBandV, sectorColormapBand, buildColormapLutRgba } from '@/wad/parity/frame/colormapParity';
 import {
   doomVerticalFovDegrees,
   readFrameParityModeFromSearch,
@@ -39,6 +39,20 @@ describe('colormapParity', () => {
   it('maps sector light 160 to band 20', () => {
     expect(sectorColormapBand(160)).toBe(20);
     expect(colormapBandV(160)).toBeCloseTo(20.5 / 32, 3);
+  });
+
+  it('builds distinct colormap bands from an ArrayBuffer COLORMAP lump', () => {
+    const colormap = new Uint8Array(256 * 32);
+    colormap[1 * 256 + 76] = 76;
+    colormap[21 * 256 + 76] = 2;
+    const playpal: Array<[number, number, number]> = Array.from({ length: 256 }, (_, i) => [i, i, i]);
+    playpal[2] = [23, 15, 7];
+    playpal[76] = [75, 55, 27];
+    const lut = buildColormapLutRgba(playpal, colormap.buffer);
+    const bright = (1 * 256 + 76) * 4;
+    const dark = (21 * 256 + 76) * 4;
+    expect([lut[bright]!, lut[bright + 1]!, lut[bright + 2]!]).toEqual([75, 55, 27]);
+    expect([lut[dark]!, lut[dark + 1]!, lut[dark + 2]!]).toEqual([23, 15, 7]);
   });
 });
 
