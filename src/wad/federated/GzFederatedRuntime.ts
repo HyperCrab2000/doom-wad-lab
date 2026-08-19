@@ -1,5 +1,6 @@
 import type { GztickPatch } from '@hypercrab2000/doom-gzengine-core';
-import { createBridgeEngineHost, createGzEngineHost } from '@hypercrab2000/doom-gzengine-core';
+import { createGzEngineHost } from '@hypercrab2000/doom-gzengine-core';
+import { createBridgeEngineHost } from '@/wad/federated/bridgeEngineHost';
 import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { MapActionController } from '@/wad/game/mapActionController';
