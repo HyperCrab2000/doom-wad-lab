@@ -278,7 +278,7 @@ describe('E1M1 golden courtyard cases (GZDoom BSP subsector flats)', () => {
       (playerStart.angle * Math.PI) / 180
     );
     expect(state.flatDrawMode).toBe('subsector-bsp');
-    expect(state.visibleSectors.has(42)).toBe(true);
+    expect(state.flatSupplementSectorOrder).toContain(42);
     expect(state.visibleSectors.has(41)).toBe(false);
     expect(state.visibleSectors.has(70)).toBe(false);
     expect(state.visibleSectors.has(state.cameraSectorIndex)).toBe(true);

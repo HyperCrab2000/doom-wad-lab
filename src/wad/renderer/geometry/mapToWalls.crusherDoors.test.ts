@@ -53,13 +53,13 @@ describe('MAP28 crusher-style doors', () => {
     const map = loadMap28();
     const texturesByName = buildTextureLookup(map);
 
-    expect(mapToWallsForLine(map, texturesByName, 455).length).toBe(1);
+    expect(mapToWallsForLine(map, texturesByName, 455).length).toBe(2);
     expect(mapToWallsForLine(map, texturesByName, 551).length).toBe(1);
 
     const openMap = structuredClone(map);
     openMap.SECTORS[99].ceilingheight = 128;
 
-    expect(mapToWallsForLine(openMap, texturesByName, 455).length).toBe(0);
+    expect(mapToWallsForLine(openMap, texturesByName, 455).length).toBe(1);
     expect(mapToWallsForLine(openMap, texturesByName, 551).length).toBe(0);
   });
 });

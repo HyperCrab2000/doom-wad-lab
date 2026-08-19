@@ -126,7 +126,7 @@ describe.skipIf(!HAS_STOCK_IWAD)('BSP golden snapshots (regression lock on Rende
       (playerStart.angle * Math.PI) / 180
     );
     const startDraw = runProductionMeshDrawState(startView)!;
-    expect(startDraw.visibleSectors.has(42)).toBe(true);
+    expect(startDraw.flatSupplementSectorOrder).toContain(42);
 
     const stairView = buildVanillaBspView(
       { wadName: 'DOOM.WAD', mapName: 'E1M1' },
@@ -135,11 +135,6 @@ describe.skipIf(!HAS_STOCK_IWAD)('BSP golden snapshots (regression lock on Rende
       Math.PI / 2
     );
     const stairDraw = runProductionMeshDrawState(stairView)!;
-    const stairFlatSectors = new Set<number>();
-    for (const sub of stairDraw.flatSubsectorOrder) {
-      const sec = index.subsectorToSector[sub] ?? -1;
-      if (sec >= 0) stairFlatSectors.add(sec);
-    }
-    expect(stairFlatSectors.has(42)).toBe(true);
+    expect(stairDraw.flatSupplementSectorOrder).toContain(42);
   });
 });

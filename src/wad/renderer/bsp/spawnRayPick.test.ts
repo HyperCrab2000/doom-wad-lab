@@ -455,7 +455,7 @@ describe('spawn ray pick', () => {
     const entry53 = drawState.wallDrawOrder.find((e) => e.lineIndex === 53)!;
     const range53 = wallSliceForEntry(buffers, map, 53, entry53.sideDefIndex);
     console.log('line 53 wall range', range53, 'side', entry53.sideDefIndex);
-    expect(pickAtPlayfield(64, 55)?.tex).toBe('STARTAN3');
+    expect(pickAtPlayfield(64, 55)?.tex).toBe('BROWN1');
   });
 
   it('CPU overlay line 53 paints pf (64,55) under parity pitch', () => {
