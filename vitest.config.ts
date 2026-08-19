@@ -85,6 +85,7 @@ const coverageExclude = [
   'src/wad/renderer/gzrender-v2/federated/mapStateStore.ts',
   'src/wad/renderer/gzrender-v2/federated/stateLoader.ts',
   'src/wad/parity/frame/**',
+  'src/wad/parity/compare/runFullParity.ts',
   'src/wad/parity/gzdraw/**',
   'src/wad/parity/raster/**',
   'src/features/level-viewer/sfx/**',
