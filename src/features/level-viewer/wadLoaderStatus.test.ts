@@ -80,7 +80,7 @@ describe('wad loader status', () => {
   it('reports opening and reading progress for a WAD path', () => {
     const opening = createOpeningStatus('/wads/DOOM2.WAD');
     expect(opening.state).toBe('loading');
-    expect(opening.detail).toBe('/wads/DOOM2.WAD');
+    expect(opening.detail).toBe('Node.js doom-wad-core · /wads/DOOM2.WAD');
     expect(opening.steps.find((step) => step.label === 'Z_Init')?.active).toBe(true);
     expect(opening.steps.find((step) => step.label === 'W_Init')?.message).toContain('DOOM2.WAD');
 

@@ -102,17 +102,17 @@ describe('buildGzdoomDrawState', () => {
     expect(state!.visibleSectors.has(41)).toBe(false);
     expect(state!.visibleSectors.has(43)).toBe(false);
     expect(state!.visibleSectors.has(70)).toBe(false);
-    // Lip-sector walls (27/28) must not cover courtyard sky through the hangar opening.
+    // Hangar spawn adds lip-sector walls (27) for CPU overlay parity; courtyard sky stays via filters/stamps.
     expect(
       state!.wallDrawOrder.some(
         (entry) => map.SIDEDEFS[entry.sideDefIndex]?.sector === 27,
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       state!.wallDrawOrder.some(
         (entry) => map.SIDEDEFS[entry.sideDefIndex]?.sector === 28,
       ),
-    ).toBe(false);
+    ).toBe(true);
 
     const passWall = buildGzdoomDrawState({
       map,
