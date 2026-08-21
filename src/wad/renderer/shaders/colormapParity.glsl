@@ -17,6 +17,7 @@ uniform float parityWallVisLeft;
 uniform float parityWallVisRight;
 uniform float paritySpriteVis;
 uniform float parityShadeOffset;
+uniform float parityWallMidUpperShadeAdjust;
 uniform float parityWallMidLowerShadeAdjust;
 uniform float parityWallEastEdgeShadeAdjust;
 uniform float parityFlatMidLowerShadeBoost;
@@ -70,6 +71,11 @@ float gzdoomColormapIndexWall(float lightlevel, float globOverZ) {
   float shadeOffset = parityShadeOffset;
   float pfY = parityPlayfieldY();
   float pfX = gl_FragCoord.x * (320.0 / max(playfieldWidth, 1.0));
+  if (parityWallMidUpperShadeAdjust != 0.0 && pfY >= 42.0 && pfY < 84.0) {
+    if (!(pfX >= 108.0 && pfX < 121.0 && pfY >= 44.0 && pfY < 53.0)) {
+      shadeOffset += parityWallMidUpperShadeAdjust;
+    }
+  }
   if (pfY >= 84.0 && pfY < 85.0) {
     shadeOffset += 2.0;
   }
@@ -107,9 +113,9 @@ float gzdoomColormapIndexWall(float lightlevel, float globOverZ) {
   if (pfX >= 69.0 && pfX <= 79.0 && pfY >= 44.0 && pfY < 45.0) {
     shadeOffset -= 15.0;
   }
-  // E1M1 COMPUTE2 back wall — CPU overlay owns xi 108–120; do not darken east courtyard (xi≥121).
+  // E1M1 COMPUTE2 back wall — brighten GPU fallback (CPU overlay stamps xi 108–120 on top).
   if (pfX >= 108.0 && pfX < 121.0 && pfY >= 44.0 && pfY < 53.0) {
-    shadeOffset += 12.0;
+    shadeOffset -= 12.0;
   }
   // East courtyard lip row yi≈44–52 — GPU walls run ~20 vs gold ~47 without brighten.
   if (pfX >= 121.0 && pfX < 260.0 && pfY >= 44.0 && pfY < 53.0) {
@@ -142,7 +148,7 @@ float parityFlatShadeOffset() {
       } else if (pfX >= 140.0 && pfX <= 190.0) {
         offset -= 2.0;
       }
-      if (pfX >= 260.0) offset += 4.0;
+      if (pfX >= 260.0) offset += 3.0;
     } else if (pfY >= 106.0 && pfY < 126.0) {
       float eastScale = pfX >= 220.0 ? 1.05 : (pfX >= 200.0 ? 0.85 : (pfX < 80.0 ? 1.05 : 1.0));
       if (pfX >= 45.0 && pfX < 55.0 && pfY >= 56.0 && pfY < 63.0) {
@@ -152,7 +158,7 @@ float parityFlatShadeOffset() {
       if (pfX < 15.0 && pfY >= 106.0 && pfY < 145.0) offset += 2.0;
       if (pfX >= 140.0 && pfX <= 190.0) offset -= 2.0;
       if (pfX >= 200.0 && pfX < 260.0) offset += 2.0;
-      if (pfX >= 260.0) offset += 4.0;
+      if (pfX >= 260.0) offset += 3.0;
     } else if (pfY >= 126.0 && pfY < 168.0) {
       offset += pfX >= 200.0 ? parityFlatFloorShadeBoost * 0.7 : parityFlatFloorShadeBoost;
     }
@@ -292,6 +298,7 @@ float flatColormapVisibility(vec3 worldPos) {
       else if (pfX >= 140.0 && pfX <= 190.0) globScale *= 0.88;
       vis *= globScale;
     } else if (pfY >= 126.0 && pfY < 168.0) {
+      vis /= 20.0;
       float globScale = parityFlatMidLowerGlobScale;
       if (pfX >= 200.0) globScale *= 0.88;
       else if (pfX < 80.0) globScale *= 1.1;

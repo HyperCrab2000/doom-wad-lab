@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=640, height=480" />
+    <title>Classic parity capture</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 640px;
+        height: 480px;
+        overflow: hidden;
+        background: #000;
+      }
+      canvas.game-canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 640px;
+        height: 480px;
+        visibility: hidden;
+      }
+      canvas.parity-frame {
+        display: block;
+        width: 640px;
+        height: 480px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" class="game-canvas" width="640" height="480"></canvas>
+    <canvas id="frame" class="parity-frame" width="640" height="480"></canvas>
+    <script type="module" src="/src/parity-capture/main.ts"></script>
+  </body>
+</html>

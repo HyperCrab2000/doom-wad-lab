@@ -39,19 +39,23 @@ export const PSPRITE_SHADE_OFFSET = -24;
 /** Flat mesh colormap runs bright vs gold in floor bands (E1M1 spawn). */
 export const FLAT_SHADE_OFFSET_BANDS = 1.5;
 /** GPU flat path (pfY≈vanilla yi) — mid-lower brightening vs gold. */
-export const FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS = 9;
-export const FLAT_MID_LOWER_SHADE_BOOST_LOWER_BANDS = 5;
-export const FLAT_FLOOR_SHADE_BOOST_BANDS = 9;
+export const FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS = 16;
+export const FLAT_MID_LOWER_SHADE_BOOST_LOWER_BANDS = 9;
+export const FLAT_FLOOR_SHADE_BOOST_BANDS = 10;
 export const FLAT_FLOOR_GLOB_SCALE = 1.0;
+/** Raw `flatPlaneVisibility` is >>1; scale before x-glob so vis clamp keeps spatial variation. */
+export const FLAT_FLOOR_VIS_RAW_DIVISOR = 20;
 /** @deprecated Alias for upper band — use band-specific constants in new code. */
 export const FLAT_MID_LOWER_SHADE_BOOST_BANDS = FLAT_MID_LOWER_SHADE_BOOST_UPPER_BANDS;
-export const FLAT_MID_LOWER_GLOB_SCALE = 0.48;
+export const FLAT_MID_LOWER_GLOB_SCALE = 0.78;
 export const FLAT_GLOB_VIS_PARITY_SCALE = 1.15;
 
 /** Wall mesh colormap runs bright vs gold in mid-upper band (E1M1 spawn). */
 export const WALL_SHADE_OFFSET_BANDS = 1.76;
+/** Brighten pfY 42–84 walls (classic ~19/27 vs gold browns/grays). */
+export const WALL_MID_UPPER_SHADE_ADJUST_BANDS = -10.0;
 /** Extra wall shade adjust for pfY 85–126 (negative = brighter). */
-export const WALL_MID_LOWER_SHADE_ADJUST_BANDS = -3.0;
+export const WALL_MID_LOWER_SHADE_ADJUST_BANDS = 4.0;
 export const WALL_EAST_EDGE_SHADE_ADJUST_BANDS = -4.0;
 /** Extra brighten for CPU east-step overlay (PLANET1 runs dark vs gold STARGR band). */
 export const SOFTWARE_EAST_OVERLAY_EXTRA_SHADE_BANDS = -6;
@@ -64,6 +68,8 @@ export const FLAT_CEILING_MID_UPPER_LIP_BRIGHTEN_BANDS = -0.5;
 export const WALL_MID_UPPER_CENTER_DARKEN_BANDS = 1.0;
 /** pfY 84 bucket seam — wall shade only (flats use pfY 85+ mid-lower boost). */
 export const WALL_MID_LOWER_SEAM_ROW_SHADE_BANDS = 2.0;
+/** GPU yi≈44–52 COMPUTE2 back wall — was +=12 in GLSL (darkened to ~20,20,20). */
+export const WALL_BACK_WALL_GPU_BRIGHTEN_BANDS = -12.0;
 
 export function shadePalIndex(
   playpal: ColourPalette,
@@ -100,6 +106,11 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   let offset = WALL_SHADE_OFFSET_BANDS;
   const spawnLipBand =
     isSpawnRightLipWallPfBand(pfX, pfY) || isSpawnLeftHangarLipWallPfBand(pfX, pfY);
+  if (pfY >= 42 && pfY < 84) {
+    if (!(pfX >= 108 && pfX < 121 && pfY >= 44 && pfY < 53)) {
+      offset += WALL_MID_UPPER_SHADE_ADJUST_BANDS;
+    }
+  }
   if (pfY >= 84 && pfY < 85) {
     offset += WALL_MID_LOWER_SEAM_ROW_SHADE_BANDS;
   }
@@ -129,6 +140,9 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   }
   if (pfX >= 90 && pfX <= 200 && pfY >= 110 && pfY < 120 && !spawnLipBand) {
     offset += WALL_MID_UPPER_CENTER_DARKEN_BANDS;
+  }
+  if (pfX >= 108 && pfX < 121 && pfY >= 44 && pfY < 53) {
+    offset += WALL_BACK_WALL_GPU_BRIGHTEN_BANDS;
   }
   if (eastStepOverlay && pfX > 280 && pfY >= 84 && pfY < 126) {
     offset += SOFTWARE_EAST_OVERLAY_EXTRA_SHADE_BANDS;
@@ -391,6 +405,7 @@ export function shadePalIndexFlat(
     else if (pfX >= 140 && pfX <= 190) globScale *= 0.88;
     vis *= globScale;
   } else if (isFloor && rowY >= 126 && rowY < 168) {
+    vis /= FLAT_FLOOR_VIS_RAW_DIVISOR;
     let globScale = FLAT_MID_LOWER_GLOB_SCALE;
     if (pfX >= 200) globScale *= 0.88;
     else if (pfX < 80) globScale *= 1.1;

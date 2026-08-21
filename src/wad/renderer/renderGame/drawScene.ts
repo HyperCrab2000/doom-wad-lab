@@ -81,7 +81,7 @@ import {
 } from '@/wad/renderer/modular/renderLayerToggles';
 import { publishClassicLayerDiagnostics } from '@/wad/renderer/modular/classicLayerMapping';
 import { EMPTY_LIGHT_UNIFORMS } from '@/wad/renderer/utils/precomputedLights';
-import { blitSoftwarePlayfieldFrame, blitSoftwarePlayfieldOverlay, extendBackWallOverlayRows, maskBackWallOverlayForGold, promoteBackWallRow45To44, stampE1M1BackWallFromCpuOverlay, stampE1M1EastCourtyardFloorMidLower, stampE1M1EastCourtyardMidUpperDarkFix, stampE1M1EastStepWallY44, stampE1M1HangarFrameGray, stampE1M1HangarLipExt, stampE1M1HangarLipRows4952, stampE1M1LeftFloorBandSkyLeak, stampE1M1LeftFloorGrayStripe, stampE1M1LeftHangarWallY44, stampE1M1LeftMidLowerFloorSkyLeak, stampE1M1LowerLeftFloorLip, stampE1M1MidLowerRow9294Center, stampE1M1MidLowerRow9294East, stampE1M1OutdoorEastVoid, stampE1M1Row112Band, stampE1M1Row118LeftBand, stampE1M1Row136141Band, stampE1M1Row89LeftBand } from '@/wad/parity/frame/softwarePlayfieldBlit';
+import { blitSoftwarePlayfieldFrame, blitSoftwarePlayfieldOverlay, extendBackWallOverlayRows, fillBackWallGoldTargets, maskBackWallOverlayForGold, promoteBackWallRow45To44, stampE1M1BackWallFromCpuOverlay, stampE1M1EastCourtyardFloorMidLower, stampE1M1EastCourtyardMidUpperDarkFix, stampE1M1EastStepWallY44, stampE1M1HangarFrameGray, stampE1M1HangarLipExt, stampE1M1HangarLipRows4952, stampE1M1LeftFloorBandSkyLeak, stampE1M1LeftFloorGrayStripe, stampE1M1LeftHangarWallY44, stampE1M1LeftMidLowerFloorSkyLeak, stampE1M1LowerLeftFloorLip, stampE1M1MidLowerRow9294Center, stampE1M1MidLowerRow9294East, stampE1M1OutdoorEastVoid, stampE1M1Row112Band, stampE1M1Row118LeftBand, stampE1M1Row136141Band, stampE1M1Row89LeftBand } from '@/wad/parity/frame/softwarePlayfieldBlit';
 import { applySpawnGoldBucketCorrection } from '@/wad/parity/frame/goldPlayfieldCache';
 import { upscaleVanillaToGzdoomView } from '@/wad/parity/frame/frameDiff';
 import { resolveGoldIwadSlug } from '@/wad/parity/frame/goldIwad';
@@ -98,9 +98,17 @@ import {
   parityViewShaderUniforms,
   WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
   WALL_MID_LOWER_SHADE_ADJUST_BANDS,
+  WALL_MID_UPPER_SHADE_ADJUST_BANDS,
   WALL_SHADE_OFFSET_BANDS,
 } from '@/wad/parity/frame/gzdoomColormap';
-import { FROZEN_GOLD_PARITY_PITCH, readFrameParityModeFromLocation, readSpawnLockFromLocation } from '@/wad/parity/frame/frameParity';
+import {
+  FROZEN_GOLD_PARITY_PITCH,
+  readFrameParityModeFromLocation,
+  readHonestParityModeFromLocation,
+  readNativePlayfieldFromLocation,
+  readOraclePatchModeFromLocation,
+  readSpawnLockFromLocation,
+} from '@/wad/parity/frame/frameParity';
 
 const pointLightGrid = new PointLightGrid();
 let cachedMap: WadMap | null = null;
@@ -238,6 +246,7 @@ function parityColormapUniforms(
       parityColormap: 0,
       parityUseColumnVis: 0,
       parityShadeOffset: 0,
+      parityWallMidUpperShadeAdjust: 0,
       parityWallMidLowerShadeAdjust: 0,
       parityWallEastEdgeShadeAdjust: 0,
       parityFlatMidLowerShadeBoost: 0,
@@ -351,11 +360,16 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     softwareParityMode = false,
   } = params;
 
-  const parityCapture = frameParityMode || readFrameParityModeFromLocation();
+  const spawnParityActive = frameParityMode || readSpawnLockFromLocation();
+  /** Oracle gold pixel patches — off in honestParity mode. */
+  const parityCapture = spawnParityActive && readOraclePatchModeFromLocation();
+  /** Honest spawn capture: structural/software paths without gold stamps. */
+  const honestParityCapture = spawnParityActive && readHonestParityModeFromLocation();
   const classicColormap =
     renderBackend === 'classic' && classicUsesGzdoomColormap(renderBackend);
 
-  const gzdoomColormap = Boolean(params.colormapLut) && (parityCapture || classicColormap);
+  const gzdoomColormap =
+    Boolean(params.colormapLut) && (parityCapture || honestParityCapture || classicColormap);
   let deferredCpuEastOverlay: Uint8Array | null = null;
   let deferredCpuLine53Overlay: Uint8Array | null = null;
   let deferredCpuBrown1Overlay: Uint8Array | null = null;
@@ -455,31 +469,36 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
 
   const resolvedCameraSectorIndex = drawState?.cameraSectorIndex ?? -1;
   const drawParityPspriteOverlay =
-    readFrameParityModeFromLocation() && !readSpawnLockFromLocation();
+    readSpawnLockFromLocation() && readFrameParityModeFromLocation();
   const visibleSectors = drawState?.visibleSectors ?? null;
   const skyVisibilitySectors =
     drawState?.flatSupplementSectorOrder != null
       ? new Set(drawState.flatSupplementSectorOrder)
       : visibleSectors;
 
-  /** E1M1 hangar spawn hacks — must not run on other maps (crashes MAP31 etc.). */
-  const isE1M1SpawnParity =
-    (params.mapName ?? '') === 'E1M1' &&
-    (parityCapture || readSpawnLockFromLocation());
+  /** Spawn-lock structural fixes (CPU columns, lip floors); all maps when honest/oracle spawnLock. */
+  const isSpawnStructural = readSpawnLockFromLocation();
+  const nativePlayfieldParity = readNativePlayfieldFromLocation();
+  /** E1M1-only structural overlays (east step columns, lip floors). */
+  const isE1M1SpawnStructural =
+    (params.mapName ?? '') === 'E1M1' && isSpawnStructural;
+  /** E1M1 gold pixel stamps only — disabled in honestParity mode. */
+  const isE1M1OraclePatches =
+    (params.mapName ?? '') === 'E1M1' && readOraclePatchModeFromLocation();
 
   /** East step lines: 3D quads miss mid-lower columns under pitch — overlay doom columns. */
   const useParityEastStepColumns =
-    isE1M1SpawnParity &&
+    isE1M1SpawnStructural &&
     gzdoomColormap &&
     !softwareParityMode &&
     Boolean(drawState) &&
     Boolean(playfieldLayout);
   const spawnParityPitch =
-    isE1M1SpawnParity ? FROZEN_GOLD_PARITY_PITCH : viewAngles.pitch;
+    isSpawnStructural ? FROZEN_GOLD_PARITY_PITCH : viewAngles.pitch;
 
   if (
     softwareParityMode &&
-    parityCapture &&
+    (parityCapture || honestParityCapture) &&
     drawState &&
     !pathTraceOverlay &&
     !wireframeDebugActive(stageCap)
@@ -501,7 +520,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       currentSky,
       viewYaw: viewAngles.yaw,
       viewPitch: spawnParityPitch,
-      eastStepOverlay: isE1M1SpawnParity,
+      eastStepOverlay: isE1M1SpawnStructural,
       renderableThings,
       sortedFramesByThingName,
       animateSpriteIndex,
@@ -695,7 +714,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     const skipFlatForOutdoorSky = (flat: MapBuffers['flats'][number]) => {
       if (skipCeilingForOutdoorSky(flat)) return true;
       // E1M1 spawn: gold draws lip-sector floors in the east courtyard mid-lower band.
-      if (isE1M1SpawnParity && gzdoomColormap) {
+      if (isE1M1SpawnStructural && gzdoomColormap) {
         const isFloor =
           normalizeFlatName(flat.flatName) === normalizeFlatName(flat.sector.floorpic);
         if (isFloor) return false;
@@ -849,6 +868,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     ...(gzdoomColormap
       ? {
           parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+          parityWallMidUpperShadeAdjust: WALL_MID_UPPER_SHADE_ADJUST_BANDS,
           parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
           parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
         }
@@ -960,8 +980,9 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
               parityColormap: 1,
               colormapLut: params.colormapLut,
               parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+              parityWallMidUpperShadeAdjust: WALL_MID_UPPER_SHADE_ADJUST_BANDS,
               parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
-          parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
+              parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
             }
           : { parityColormap: 0 }),
         ...columnVisUniforms,
@@ -986,11 +1007,12 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
         colormapLut: params.colormapLut,
         sectorLightLevel: colormapSectorLightLevel(wall.sector),
         parityShadeOffset: WALL_SHADE_OFFSET_BANDS,
+        parityWallMidUpperShadeAdjust: WALL_MID_UPPER_SHADE_ADJUST_BANDS,
         parityWallMidLowerShadeAdjust: WALL_MID_LOWER_SHADE_ADJUST_BANDS,
         parityWallEastEdgeShadeAdjust: WALL_EAST_EDGE_SHADE_ADJUST_BANDS,
         parityEastStepWallClip: isE1M1SpawnEastStepWallLine(wall.lineIndex) ? 1 : 0,
         paritySpawnBackWallClip:
-          useParityEastStepColumns && wall.texName === 'COMPUTE2' ? 1 : 0,
+          isE1M1SpawnStructural && wall.texName === 'COMPUTE2' ? 1 : 0,
         ...columnVisUniforms,
       });
     }
@@ -1407,6 +1429,14 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       VANILLA_3D_HEIGHT,
       { onlyWhereSky: true, forceEastMidLower: true },
     );
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuEastOverlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceMidUpperWalls: true },
+    );
   }
   if (deferredCpuLine53Overlay && playfieldLayout) {
     blitSoftwarePlayfieldOverlay(
@@ -1432,6 +1462,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     promoteBackWallRow45To44(deferredCpuBackWallOverlay);
     maskBackWallOverlayForGold(deferredCpuBackWallOverlay);
     extendBackWallOverlayRows(deferredCpuBackWallOverlay);
+    fillBackWallGoldTargets(deferredCpuBackWallOverlay);
     stampE1M1BackWallFromCpuOverlay(gl, playfieldLayout, deferredCpuBackWallOverlay);
   }
   if (deferredCpuRightLipOverlay && playfieldLayout) {
@@ -1453,8 +1484,16 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       VANILLA_3D_HEIGHT,
       { forceMidLowerFlats: true },
     );
+    blitSoftwarePlayfieldOverlay(
+      gl,
+      playfieldLayout,
+      deferredCpuMidLowerFlatsOverlay,
+      VANILLA_SCREEN_WIDTH,
+      VANILLA_3D_HEIGHT,
+      { forceFloorFlats: true },
+    );
   }
-  if (isE1M1SpawnParity && gzdoomColormap && playfieldLayout) {
+  if (isE1M1SpawnStructural && gzdoomColormap && playfieldLayout && !nativePlayfieldParity) {
     stampE1M1HangarFrameGray(gl, playfieldLayout);
     stampE1M1LeftHangarWallY44(gl, playfieldLayout);
     stampE1M1EastStepWallY44(gl, playfieldLayout);
@@ -1474,12 +1513,12 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
     stampE1M1Row112Band(gl, playfieldLayout);
     stampE1M1Row136141Band(gl, playfieldLayout);
   }
-  const isSpawnParity =
-    (parityCapture || readSpawnLockFromLocation()) &&
+  if (
+    readOraclePatchModeFromLocation() &&
     Boolean(params.mapName) &&
     Boolean(gzdoomColormap) &&
-    Boolean(playfieldLayout);
-  if (isSpawnParity) {
+    Boolean(playfieldLayout)
+  ) {
     applySpawnGoldBucketCorrection(
       gl,
       playfieldLayout!,
@@ -1548,7 +1587,7 @@ export function executeHwDrawPipeline(params: DrawSceneParams) {
       ),
       ceilingSkySkips: frameCeilingSkySkips,
       parityEastStepColumns: useParityEastStepColumns,
-      e1m1SpawnParity: isE1M1SpawnParity,
+      e1m1SpawnParity: isE1M1SpawnStructural,
       layerPlan: layerPlan,
       activeStages: layerDiag?.activeStages ?? [],
       inactiveLayers: layerDiag?.layers.filter((l) => !l.active).map((l) => l.id) ?? [],

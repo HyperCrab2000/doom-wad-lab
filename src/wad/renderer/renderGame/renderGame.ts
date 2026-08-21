@@ -18,6 +18,7 @@ import { computeGzdoomParityViewLayout } from '@/wad/renderer/renderGame/gameVie
 import {
   doomVerticalFovDegrees,
   readFrameParityModeFromLocation,
+  readOraclePatchModeFromLocation,
   readSoftwareParityModeFromLocation,
   readSpawnLockFromLocation,
   resolvePlayfieldLayout,
@@ -732,7 +733,9 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
           }
         : null;
       if (spawnLock || frameParityMode) {
-        void preloadGoldPlayfield(resolveGoldIwadSlug(mapName, wadPath ?? currentWadPath), mapName);
+        if (readOraclePatchModeFromLocation()) {
+          void preloadGoldPlayfield(resolveGoldIwadSlug(mapName, wadPath ?? currentWadPath), mapName);
+        }
       }
       writePlayerViewMatrix(viewMatrix, paritySpawnView ?? {
         x: controlStart.x,
@@ -1088,7 +1091,7 @@ export const renderGame = (canvas: HTMLCanvasElement) => {
         }
         if (renderBackend === 'classic' || frameParityMode) {
           clearGzdoomStatusBarBand(gl, playfieldCamera.layout);
-          if (spawnLock || frameParityMode) {
+          if (readOraclePatchModeFromLocation()) {
             const iwad = resolveGoldIwadSlug(currentMapName, currentWadPath);
             applySpawnGoldHudBandCorrection(gl, iwad, currentMapName);
             applySpawnGoldParityCorrection(gl, iwad, currentMapName);

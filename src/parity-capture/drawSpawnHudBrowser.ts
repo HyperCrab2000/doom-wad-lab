@@ -1,9 +1,8 @@
-import { createCanvas, type CanvasRenderingContext2D } from 'canvas';
-
 import type { Wad } from '@/wad/interfaces/Wad';
 import { findWadLump } from '@/features/level-viewer/doomWadGraphics';
 import { resolveStatusFaceLumpName } from '@/wad/game/statusFaceLumps';
 import { rasterizePatchHudLut } from '@/wad/parity/raster/rasterizePatch';
+import { rasterImageToCanvas } from '@/wad/adapters/rasterToCanvas';
 import { drawSpawnHudAtBottom, type SpawnHudPatchImage } from '@/parity-capture/drawSpawnHudShared';
 import { GZDOOM_SPAWN_HUD_PAL_LUT } from '@/parity-capture/gzdoomSpawnHudPalLut';
 
@@ -12,17 +11,10 @@ function patchImage(wad: Wad, lumpName: string): SpawnHudPatchImage | null {
   if (!lump) return null;
 
   const raster = rasterizePatchHudLut(lump, wad.playpal, GZDOOM_SPAWN_HUD_PAL_LUT);
-  const canvas = createCanvas(raster.width, raster.height);
-  const ctx = canvas.getContext('2d')!;
-  const img = ctx.createImageData(raster.width, raster.height);
-  const d = img.data;
-  for (let i = 0; i < raster.rgba.length; i++) {
-    d[i] = raster.rgba[i]!;
-  }
-  ctx.putImageData(img, 0, 0);
+  const ctx = rasterImageToCanvas(raster);
   const view = new DataView(lump);
   return {
-    canvas,
+    canvas: ctx.canvas,
     width: raster.width,
     height: raster.height,
     leftOffset: view.getInt16(4, true),
@@ -30,8 +22,8 @@ function patchImage(wad: Wad, lumpName: string): SpawnHudPatchImage | null {
   };
 }
 
-/** GZDoom gold spawn HUD — pistol start, no keys, default face. */
-export function drawSpawnHudNode(
+/** GZDoom gold spawn HUD — pistol start defaults (browser canvas). */
+export function drawSpawnHudBrowser(
   ctx: CanvasRenderingContext2D,
   wad: Wad,
   frameWidth: number,

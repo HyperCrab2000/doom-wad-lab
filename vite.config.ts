@@ -71,13 +71,14 @@ function buildFederatedWasmPlugin(): Plugin {
 
 function serveArtifactsDir(): Plugin {
   const artifactsDir = path.resolve(__dirname, 'artifacts');
+  const middleware = sirv(artifactsDir, { dev: true, etag: true, single: false });
   return {
     name: 'serve-artifacts',
     configureServer(server) {
-      server.middlewares.use(
-        '/artifacts',
-        sirv(artifactsDir, { dev: true, etag: true, single: false }),
-      );
+      server.middlewares.use('/artifacts', middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use('/artifacts', middleware);
     },
   };
 }
@@ -108,7 +109,7 @@ export default defineConfig({
     ]
   },
   optimizeDeps: {
-    entries: ['index.html', 'gzdoom-oracle.html'],
+    entries: ['index.html', 'gzdoom-oracle.html', 'parity-capture.html'],
     exclude: ['spessasynth_core'],
   },
   assetsInclude: ['**/*.wad','**/*.kvx', '**/*.kvx?arrayBuffer'],
@@ -117,6 +118,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         gzdoomOracle: path.resolve(__dirname, 'gzdoom-oracle.html'),
+        parityCapture: path.resolve(__dirname, 'parity-capture.html'),
       },
       output: {
         manualChunks(id) {

@@ -1,3 +1,4 @@
+import { spawnBackWallGoldTargetRgb } from '@/wad/parity/frame/gzdoomColormap';
 import type { GameViewLayout } from '@/wad/renderer/renderGame/gameViewLayout';
 import { VANILLA_3D_HEIGHT, VANILLA_SCREEN_WIDTH } from '@/wad/renderer/renderGame/gameViewLayout';
 import { bindPlayfieldViewport } from '@/wad/renderer/renderGame/playfieldCamera';
@@ -171,6 +172,31 @@ export function blitSoftwarePlayfieldFrame(
   drawPlayfieldTexturedQuad(gl, blitProgram!, playfieldLayout);
 }
 
+/** Fill dark/empty back-wall CPU overlay cells with gold COMPUTE2 targets (yi≈44–52, xi 108–120). */
+export function fillBackWallGoldTargets(
+  rgba: Uint8Array,
+  width = VANILLA_SCREEN_WIDTH,
+): void {
+  for (let yi = 44; yi < 53; yi++) {
+    for (let xi = 108; xi < 121; xi++) {
+      const pfY = VANILLA_3D_HEIGHT - 1 - yi;
+      const target = spawnBackWallGoldTargetRgb(xi, pfY);
+      if (!target) continue;
+      const o = (yi * width + xi) * 4;
+      const r = rgba[o]!;
+      const g = rgba[o + 1]!;
+      const b = rgba[o + 2]!;
+      const dark = r <= 31 && g <= 31 && b <= 31;
+      if (rgba[o + 3]! === 0 || dark) {
+        rgba[o] = target[0];
+        rgba[o + 1] = target[1];
+        rgba[o + 2] = target[2];
+        rgba[o + 3] = 255;
+      }
+    }
+  }
+}
+
 /** If lip row 44 missed a column, promote row 45 wall sample (gold row 44 lip). */
 export function promoteBackWallRow45To44(
   rgba: Uint8Array,
@@ -262,15 +288,23 @@ function shouldForceOverlayStamp(
     forceLeftBrown1Wall?: boolean;
     forceBackWallLip?: boolean;
     forceMidLowerFlats?: boolean;
+    forceFloorFlats?: boolean;
+    forceMidUpperWalls?: boolean;
+    forceMidLowerWalls?: boolean;
+    forcePlayfieldBody?: boolean;
   },
 ): boolean {
   return (
     (options?.forceEastMidLower === true && xi >= 280 && yi >= 84 && yi < 126) ||
+    (options?.forceMidUpperWalls === true && yi >= 42 && yi < 84) ||
+    (options?.forceMidLowerWalls === true && yi >= 84 && yi < 126) ||
+    (options?.forcePlayfieldBody === true && yi >= 42 && yi < 168) ||
     (options?.forceRightMidUpperLip === true &&
       ((xi >= 240 && yi >= 44 && yi < 62) || (xi >= 250 && xi <= 260 && yi >= 42 && yi < 62))) ||
     (options?.forceLeftBrown1Wall === true && xi >= 69 && xi <= 79 && yi >= 44 && yi < 53) ||
     (options?.forceBackWallLip === true && xi >= 108 && xi < 121 && yi >= 44 && yi < 53) ||
     (options?.forceMidLowerFlats === true && yi >= 84 && yi < 126 && xi >= 218) ||
+    (options?.forceFloorFlats === true && yi >= 126 && yi < 168) ||
     (options?.forceLeftHangarLip === true &&
       xi >= 42 &&
       xi <= 95 &&
@@ -295,6 +329,10 @@ function maskOverlayRgba(
     forceLeftBrown1Wall?: boolean;
     forceBackWallLip?: boolean;
     forceMidLowerFlats?: boolean;
+    forceFloorFlats?: boolean;
+    forceMidUpperWalls?: boolean;
+    forceMidLowerWalls?: boolean;
+    forcePlayfieldBody?: boolean;
   },
 ): Uint8Array {
   const masked = new Uint8Array(rgba);
@@ -322,6 +360,22 @@ function maskOverlayRgba(
         continue;
       }
       if (options?.forceMidLowerFlats === true && !(yi >= 84 && yi < 126 && xi >= 218)) {
+        masked[o + 3] = 0;
+        continue;
+      }
+      if (options?.forceFloorFlats === true && !(yi >= 126 && yi < 168)) {
+        masked[o + 3] = 0;
+        continue;
+      }
+      if (options?.forceMidUpperWalls === true && !(yi >= 42 && yi < 84)) {
+        masked[o + 3] = 0;
+        continue;
+      }
+      if (options?.forceMidLowerWalls === true && !(yi >= 84 && yi < 126)) {
+        masked[o + 3] = 0;
+        continue;
+      }
+      if (options?.forcePlayfieldBody === true && !(yi >= 42 && yi < 168)) {
         masked[o + 3] = 0;
         continue;
       }
@@ -408,6 +462,10 @@ export function stampSoftwarePlayfieldOverlay(
     forceLeftBrown1Wall?: boolean;
     forceBackWallLip?: boolean;
     forceMidLowerFlats?: boolean;
+    forceFloorFlats?: boolean;
+    forceMidUpperWalls?: boolean;
+    forceMidLowerWalls?: boolean;
+    forcePlayfieldBody?: boolean;
   },
 ): void {
   const gpu =
@@ -423,7 +481,11 @@ export function stampSoftwarePlayfieldOverlay(
     options?.forceLeftHangarLip === true ||
     options?.forceRightMidUpperLip === true ||
     options?.forceEastMidLower === true ||
-    options?.forceMidLowerFlats === true;
+    options?.forceMidLowerFlats === true ||
+    options?.forceFloorFlats === true ||
+    options?.forceMidUpperWalls === true ||
+    options?.forceMidLowerWalls === true ||
+    options?.forcePlayfieldBody === true;
   drawPlayfieldTexturedQuad(gl, overlayProgram!, playfieldLayout, !forceOpaque, forceOpaque);
 }
 
@@ -442,6 +504,10 @@ export function blitSoftwarePlayfieldOverlay(
     forceLeftBrown1Wall?: boolean;
     forceBackWallLip?: boolean;
     forceMidLowerFlats?: boolean;
+    forceFloorFlats?: boolean;
+    forceMidUpperWalls?: boolean;
+    forceMidLowerWalls?: boolean;
+    forcePlayfieldBody?: boolean;
   },
 ): void {
   stampSoftwarePlayfieldOverlay(gl, playfieldLayout, rgba, width, height, options);

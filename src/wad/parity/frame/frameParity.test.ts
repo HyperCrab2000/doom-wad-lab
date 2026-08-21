@@ -4,6 +4,9 @@ import { colormapBandV, sectorColormapBand, buildColormapLutRgba } from '@/wad/p
 import {
   doomVerticalFovDegrees,
   readFrameParityModeFromSearch,
+  readHonestParityModeFromSearch,
+  readOraclePatchModeFromLocation,
+  readSoftwareParityModeFromSearch,
   resolvePlayfieldLayout,
 } from '@/wad/parity/frame/frameParity';
 import {
@@ -20,6 +23,15 @@ describe('frameParity', () => {
   it('detects frameParity=1 in query string', () => {
     expect(readFrameParityModeFromSearch('?renderer=classic&frameParity=1')).toBe(true);
     expect(readFrameParityModeFromSearch('?renderer=classic')).toBe(false);
+  });
+
+  it('honestParity enables capture layout but disables oracle patches', () => {
+    expect(readHonestParityModeFromSearch('?honestParity=1')).toBe(true);
+    expect(readFrameParityModeFromSearch('?honestParity=1')).toBe(true);
+    expect(readSoftwareParityModeFromSearch('?honestParity=1')).toBe(false);
+    expect(readSoftwareParityModeFromSearch('?honestParity=1&softwareParity=1')).toBe(true);
+    expect(readOraclePatchModeFromLocation({ search: '?honestParity=1' })).toBe(false);
+    expect(readOraclePatchModeFromLocation({ search: '?spawnLock=1&frameParity=1' })).toBe(true);
   });
 
   it('uses GZDoom parity layout at 640×480 (403px view height)', () => {
