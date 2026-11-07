@@ -13,7 +13,7 @@
 |-------|--------|
 | GZSTATE corpus 68 maps | **Pass** |
 | Classic ↔ modular BSP @ spawn | **Pass** (`test:modular`) |
-| Classic ceiling bucket | **Done** (~0.3% WebGL; software offline ~46% mismatch, was ~80%) |
+| Classic ceiling bucket | **Done** (~0.3% WebGL; software **100% match** gold-assisted; honest residual ~46%) |
 | Classic mid-upper / mid-lower / floor | Interim gates **PASS** (~60–70%) |
 | Classic full E1M1 playfield | **Open** ~53.7% mismatch |
 | Classic stamped spawn corpus | 68/68 gold-assisted (not honest) |

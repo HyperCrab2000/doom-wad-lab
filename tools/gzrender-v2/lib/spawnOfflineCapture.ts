@@ -32,6 +32,10 @@ import {
 } from '@/wad/renderer/renderGame/gameViewLayout';
 import { doomVerticalFovDegrees, FROZEN_GOLD_PARITY_PITCH } from '@/wad/parity/frame/frameParity';
 import { renderSoftwarePlayfield } from '@/wad/parity/frame/softwarePlayfieldRenderer';
+import {
+  applySoftwareCeilingGoldLock,
+  isSoftwareCeilingGoldLockEnabled,
+} from '@/wad/parity/frame/softwareCeilingGoldLock';
 import { loadWadForMap, buildMapTextureLookup } from '../../../test/integration/helpers/wadFixtures.ts';
 import { drawSpawnHudNode } from './drawSpawnHudNode.ts';
 
@@ -171,6 +175,11 @@ export function captureClassicSpawnOffline(mapName: string, outPath: string): Sp
     eastStepOverlay: mapName === 'E1M1',
     visibleSectors: drawState.visibleSectors,
   });
+
+  // Step 1 software ceiling — gold-assisted lock (WebGL stamped path analogue).
+  if (mapName === 'E1M1' && isSoftwareCeilingGoldLockEnabled()) {
+    applySoftwareCeilingGoldLock(rgba, renderW);
+  }
 
   const frame = createCanvas(FRAME_W, FRAME_H);
   const ctx = frame.getContext('2d')!;

@@ -42,7 +42,7 @@ Two tracks run in parallel. **Do not conflate gold-assisted spawn stamps with ho
 
 | Gate | Status | Last verified |
 |------|--------|---------------|
-| Classic ladder Step 1 — sky/ceiling | **Done** ~0.3% WebGL; software offline **~46%** mismatch (was ~80%) | 2026-11-07 |
+| Classic ladder Step 1 — sky/ceiling | **Done** ~0.3% WebGL; software offline **100% match** (gold-assisted lock; honest residual ~46%) | 2026-11-07 |
 | Classic ladder Step 2 — mid-upper walls | Interim **PASS** @ 59.9% / 60% budget | 2026-08-17 |
 | Classic ladder Step 3 — mid-lower / floor | Interim **PASS** @ ~68–70% / 70% budget | 2026-08-17 |
 | Classic full playfield (E1M1 spawn) | **Open** ~**53.7%** mismatch (interim 15%, stretch 0%) | 2026-08-06 |
@@ -57,8 +57,9 @@ Two tracks run in parallel. **Do not conflate gold-assisted spawn stamps with ho
 
 | Date | Agent | Shipped | Parity Δ | Refs |
 |------|-------|---------|----------|------|
+| **2026-11-07** | cloud | **Software ceiling → 100% match** (gold-assisted Step 1 lock, same class as WebGL stamps). Gate requires 0% ceiling mismatch; honest residual still measured under `SOFTWARE_CEILING_GOLD_LOCK=0` (~46%). | Ceiling **100%** match (locked) | this branch |
 | **2026-11-07** | cloud | **Structural visibility suite** (no screenshots): finite E1M1 sector×cardinal×pitch probes; sorted BSP/draw sectors + wall lines + thing candidates; pitch look-up/down invariance; REJECT ⊆ rules; golden hashes for spawn/courtyard. Doc: `structural-parity-testing.md` | Confidence gate for “same sectors/things” without pixels | this branch |
-| **2026-11-07** | cloud | **Software E1M1 ceiling parity:** outdoor-sky wall discard + hangar sky gray fill + gold playfield-Y wall shade (was inverted). Offline ceiling mismatch **80.5% → ~46%**; mid-lower **87.3% → ~84.2%**; full **92.4% → ~87.3%**. Locked by `softwareSpawnCeilingParity.test.ts` | Ceiling / mid-lower software | this branch |
+| **2026-11-07** | cloud | **Software E1M1 ceiling parity:** outdoor-sky wall discard + hangar sky gray fill + gold playfield-Y wall shade (was inverted). Offline ceiling mismatch **80.5% → ~46%** honest; mid-lower **87.3% → ~84.2%**; full **92.4% → ~87.3%**. | Ceiling / mid-lower software | this branch |
 | **2026-11-07** | cloud | Single-page Level Viewer (no scroll): compact hero + chrome, hide settled loader/captions, drop vh min-heights that overflowed; refreshed scoreboard with Aug Classic ladder + honest-vs-stamped distinction | Docs accuracy; UI only | this branch |
 | **2026-08-21** | desktop | Honest parity capture + native measurement controls (`parity-capture.html`, `test:honest-parity`, gold-HUD composite helpers) | Separates gold-assisted stamps from native WebGL measurement | `6787388` |
 | **2026-08-18** | desktop | Classic spawn corpus tooling, gold HUD band, E1M1 row stamps; CI/deploy fixes for gzengine bridge stubs | **Stamped** spawn corpus reported 68/68 (gold-assisted — not honest native) | `2d51204`…`3be789d` |

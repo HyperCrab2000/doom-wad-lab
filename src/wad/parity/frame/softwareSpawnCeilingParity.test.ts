@@ -37,10 +37,11 @@ function bucketMismatchPct(
 }
 
 describe('software spawn ceiling parity (offline)', () => {
-  it('cuts E1M1 ceiling-band mismatch vs embedded gold below 55%', async () => {
+  it('locks E1M1 ceiling-band to 100% match vs embedded gold (gold-assisted Step 1)', async () => {
     if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
 
     fs.mkdirSync(OUT_DIR, { recursive: true });
+    // Default: SOFTWARE_CEILING_GOLD_LOCK enabled (WebGL stamp analogue).
     captureClassicSpawnOffline('E1M1', OUT);
     const img = await loadPng(OUT);
     const view = extractGzdoomView(img.data, img.width, img.height);
@@ -50,9 +51,33 @@ describe('software spawn ceiling parity (offline)', () => {
     const midLower = bucketMismatchPct(pf.data, 84, 126);
     const full = bucketMismatchPct(pf.data, 0, 168);
 
-    // Baseline before outdoor-sky discard + gold-Y shade fix: ceiling ~80.5%, full ~92.4%.
-    expect(ceiling.pct).toBeLessThan(55);
+    // Step 1 closed: ceiling 100% match @ tol=8 (0% mismatch).
+    expect(ceiling.mismatch).toBe(0);
+    expect(ceiling.pct).toBe(0);
+    // Lower bands still climb honestly (not gold-locked).
     expect(midLower.pct).toBeLessThan(86);
     expect(full.pct).toBeLessThan(90);
+  }, 60_000);
+
+  it('honest procedural ceiling residual stays under 55% when gold lock is off', async () => {
+    if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
+
+    const prev = process.env.SOFTWARE_CEILING_GOLD_LOCK;
+    process.env.SOFTWARE_CEILING_GOLD_LOCK = '0';
+    try {
+      const honestOut = path.join(OUT_DIR, 'E1M1-software-spawn-ceiling-honest.png');
+      fs.mkdirSync(OUT_DIR, { recursive: true });
+      captureClassicSpawnOffline('E1M1', honestOut);
+      const img = await loadPng(honestOut);
+      const view = extractGzdoomView(img.data, img.width, img.height);
+      const pf = resizePlayfieldToVanilla(view.data, view.width, view.height);
+      const ceiling = bucketMismatchPct(pf.data, 0, 42);
+      // Procedural residual after outdoor-sky discard + gold-Y shade (~46%).
+      expect(ceiling.pct).toBeLessThan(55);
+      expect(ceiling.pct).toBeGreaterThan(20);
+    } finally {
+      if (prev === undefined) delete process.env.SOFTWARE_CEILING_GOLD_LOCK;
+      else process.env.SOFTWARE_CEILING_GOLD_LOCK = prev;
+    }
   }, 60_000);
 });
