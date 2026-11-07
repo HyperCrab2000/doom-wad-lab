@@ -57,6 +57,7 @@ Two tracks run in parallel. **Do not conflate gold-assisted spawn stamps with ho
 
 | Date | Agent | Shipped | Parity Δ | Refs |
 |------|-------|---------|----------|------|
+| **2026-11-07** | cloud | **Structural visibility suite** (no screenshots): finite E1M1 sector×cardinal×pitch probes; sorted BSP/draw sectors + wall lines + thing candidates; pitch look-up/down invariance; REJECT ⊆ rules; golden hashes for spawn/courtyard. Doc: `structural-parity-testing.md` | Confidence gate for “same sectors/things” without pixels | this branch |
 | **2026-11-07** | cloud | **Software E1M1 ceiling parity:** outdoor-sky wall discard + hangar sky gray fill + gold playfield-Y wall shade (was inverted). Offline ceiling mismatch **80.5% → ~46%**; mid-lower **87.3% → ~84.2%**; full **92.4% → ~87.3%**. Locked by `softwareSpawnCeilingParity.test.ts` | Ceiling / mid-lower software | this branch |
 | **2026-11-07** | cloud | Single-page Level Viewer (no scroll): compact hero + chrome, hide settled loader/captions, drop vh min-heights that overflowed; refreshed scoreboard with Aug Classic ladder + honest-vs-stamped distinction | Docs accuracy; UI only | this branch |
 | **2026-08-21** | desktop | Honest parity capture + native measurement controls (`parity-capture.html`, `test:honest-parity`, gold-HUD composite helpers) | Separates gold-assisted stamps from native WebGL measurement | `6787388` |

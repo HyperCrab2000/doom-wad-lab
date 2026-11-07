@@ -101,4 +101,6 @@ These probes feed:
 
 `vanillaBspParity.test.ts` already exercises `enumerateSectorProbes()` × `CARDINAL_YAWS` against classic BSP trace and GZDoom draw-state invariants. The view-probe grid formalizes that enumeration for corpus artifacts and GZDRAW naming.
 
+**Pitch is not part of this grid.** Classic BSP visibility is pitch-invariant; look-up/down membership is asserted in [structural-parity-testing.md](./structural-parity-testing.md) (`structuralVisibilityParity.test.ts`) as equality of sorted sector/wall/thing sets across three pitch samples — without expanding PNG / GZDRAW corpus size.
+
 Spawn-only PNG gold (`ref.png` @ player start) remains the **Step 2 frame gate** until the multi-probe frame corpus is explicitly enabled.

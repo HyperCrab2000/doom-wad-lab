@@ -8,11 +8,12 @@ Every bug becomes a regression test. Run tests often. Do not build a large rende
 
 1. Unit tests
 2. Golden fixture tests
-3. GZDoom-vs-Node state parity tests
-4. Import/render frame parity tests
-5. Event timeline parity tests
-6. Corpus tests
-7. WASM/WebGL2 smoke tests later
+3. **Structural visibility** (sorted sectors / walls / things from finite probes — no screenshots; see [structural-parity-testing.md](./structural-parity-testing.md))
+4. GZDoom-vs-Node state parity tests
+5. Import/render frame parity tests
+6. Event timeline parity tests
+7. Corpus tests
+8. WASM/WebGL2 smoke tests later
 
 ## Required Unit Coverage Areas
 

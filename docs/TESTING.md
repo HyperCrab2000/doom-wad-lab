@@ -104,8 +104,11 @@ import { parallelMap, batchItems, defaultInTestParallelism } from '../../test/pa
 | `src/wad/renderer/modular/modularStageParity.test.ts` | Draw-state stages | IWADs in `public/wads/` |
 | `src/wad/renderer/bsp/vanilla/vanillaBspParity.test.ts` | BSP invariants | IWADs |
 | `src/wad/parity/frame/e1m1FrameParity.test.ts` | Frame pixels | Capture artifacts |
+| `src/wad/parity/structural/structuralVisibilityParity.test.ts` | Declarative sectors/walls/things × pitch (no pixels) | IWAD |
 | `src/wad/mod/modStackParity.test.ts` | Mod WAD merge | Mod fixtures optional |
 | `gzstate/**/*.test.ts` | GZSTATE codec | — |
+
+Structural confidence model (finite probes, no screenshots): [`gzrender-v2/structural-parity-testing.md`](./gzrender-v2/structural-parity-testing.md).
 
 Module docs: [`src/wad/parity/README.md`](../src/wad/parity/README.md).
 

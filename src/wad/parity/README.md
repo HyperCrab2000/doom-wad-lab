@@ -39,6 +39,7 @@ const result = runFullParity(wadLabDoc, gzdoomDoc);
 - `src/wad/parity/raster/raster.test.ts` — palette raster unit tests
 - `src/wad/renderer/modular/modularStageParity.test.ts` — modular stages (`npm run test:modular`)
 - `src/wad/renderer/bsp/vanilla/vanillaBspParity.test.ts` — BSP invariants
+- `src/wad/parity/structural/structuralVisibilityParity.test.ts` — declarative sectors/walls/things × pitch (no pixels); see [structural-parity-testing.md](../../docs/gzrender-v2/structural-parity-testing.md)
 
 Full reference: [docs/TESTING.md](../../docs/TESTING.md)
 

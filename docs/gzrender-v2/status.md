@@ -18,14 +18,16 @@
 | Classic full E1M1 playfield | **Open** ~53.7% mismatch |
 | Classic stamped spawn corpus | 68/68 gold-assisted (not honest) |
 | Honest native measurement | Harness live (`test:honest-parity`) |
+| Structural visibility (sectors/things, no pixels) | **Ship** E1M1 finite probes + pitch invariance (`structuralVisibilityParity`) |
 | GZDoom WASM frames vs gold | **Open** 21/68 strict |
 | Step 3 strip fork | **Blocked** on 2c |
 
 ## Next Actions
 
 1. Climb Classic ladder: mid-upper structural → flats → colormap → sprites → full playfield.
-2. Measure with `npm run test:honest-parity:native` / bucket gates — not stamp composites.
-3. On desktop with WASM built: `npm run fix:2c:a -- --recapture` for WASM micro colormap.
+2. Keep structural S0–S4 green ([structural-parity-testing.md](./structural-parity-testing.md)); extend golden hashes beyond E1M1 when needed.
+3. Measure with `npm run test:honest-parity:native` / bucket gates — not stamp composites.
+4. On desktop with WASM built: `npm run fix:2c:a -- --recapture` for WASM micro colormap.
 
 ## Commands
 
