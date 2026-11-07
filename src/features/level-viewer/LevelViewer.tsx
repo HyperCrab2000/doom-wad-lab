@@ -1043,15 +1043,16 @@ export const LevelViewer: React.FC<{
       </nav>
       ) : null}
 
-      <header className="level-chrome">
+      <header className="level-chrome level-chrome--compact">
         <div className="level-chrome__row">
           <div className="level-chrome__selects">
             <label className="control-field">
-              <span className="control-field__label">IWAD</span>
+              <span className="control-field__label">WAD</span>
               <select
                 className="control-field__input"
                 value={wadPath ?? ''}
                 onChange={(e) => setWadPath(e.target.value || null)}
+                aria-label="IWAD"
               >
                 <option value="" disabled>
                   Select WAD
@@ -1071,6 +1072,7 @@ export const LevelViewer: React.FC<{
                 value={selectedMap}
                 onChange={(e) => setSelectedMap(e.target.value)}
                 disabled={mapNames.length === 0}
+                aria-label="Map"
               >
                 {mapNames.length === 0 ? (
                   <option value="">—</option>
@@ -1085,35 +1087,37 @@ export const LevelViewer: React.FC<{
             </label>
 
             <label className="control-field">
-              <span className="control-field__label">Renderer</span>
+              <span className="control-field__label">Engine</span>
               <select
                 className="control-field__input control-field__input--engine"
                 value={renderBackend}
                 onChange={(e) => handleRenderBackendChange(e.target.value as RenderBackend)}
+                aria-label="Renderer"
               >
                 <optgroup label="Play (Node + WebGL2)">
                   <option value="classic">Classic WebGL</option>
-                  <option value="wasm-federated">Classic · GZSTATE geometry</option>
-                  <option value="pathtrace">Path trace (debug)</option>
+                  <option value="wasm-federated">Classic · GZSTATE</option>
+                  <option value="pathtrace">Path trace</option>
                 </optgroup>
-                <optgroup label="Oracle (GZDoom GLES in WASM — not play)">
-                  <option value="gzdoom-wasm">GZDoom gold (Emscripten)</option>
-                  <option value="gzdoom-s-wasm">GZDoom modular (s)</option>
+                <optgroup label="Oracle (not play)">
+                  <option value="gzdoom-wasm">GZDoom gold</option>
+                  <option value="gzdoom-s-wasm">GZDoom modular</option>
                 </optgroup>
               </select>
             </label>
 
             {isPlayRenderBackend(renderBackend) ? (
-              <label className="control-field">
-                <span className="control-field__label">Simulation</span>
+              <label className="control-field control-field--advanced">
+                <span className="control-field__label">Sim</span>
                 <select
                   className="control-field__input control-field__input--engine"
                   value={simulationEngine}
                   onChange={(e) => handleSimulationEngineChange(e.target.value as FederatedEngineMode)}
-                  title="Game tick backend — pure WASM when built (no Emscripten); renderer stays WebGL"
+                  title="Game tick backend — pure WASM when built; renderer stays WebGL"
+                  aria-label="Simulation engine"
                 >
-                  <option value="typescript">TypeScript (default)</option>
-                  <option value="wasm">Pure WASM engine</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="wasm">WASM</option>
                 </select>
               </label>
             ) : null}
@@ -1140,16 +1144,21 @@ export const LevelViewer: React.FC<{
                 </button>
               </div>
             ) : null}
-            <button type="button" className="chrome-btn" onClick={refreshWad} disabled={!wadPath}>
-              Refresh
+            <button type="button" className="chrome-btn" onClick={refreshWad} disabled={!wadPath} title="Reload WAD">
+              Reload
             </button>
-            <button type="button" className="chrome-btn chrome-btn--ghost" onClick={clearCache}>
-              Clear cache
+            <button
+              type="button"
+              className="chrome-btn chrome-btn--ghost"
+              onClick={clearCache}
+              title="Clear map cache"
+            >
+              Cache
             </button>
           </div>
 
           <div className="level-chrome__audio">
-            <div className="audio-chip" title="Sound effects">
+            <div className="audio-chip audio-chip--compact" title="Sound effects">
               <button
                 type="button"
                 className={`audio-chip__btn ${!(renderBackend === 'classic' ? classicSfxMuted : sfx.muted) ? 'active' : ''}`}
@@ -1177,19 +1186,8 @@ export const LevelViewer: React.FC<{
                 <MuteIcon muted={renderBackend === 'classic' ? classicSfxMuted : sfx.muted} />
               </button>
               <span className="audio-chip__label">SFX</span>
-              <span className="audio-chip__status">
-                {renderBackend === 'classic'
-                  ? classicSfxMuted
-                    ? 'Off'
-                    : 'On'
-                  : !isGzdoomWasmFamily(renderBackend)
-                    ? '—'
-                    : sfx.muted
-                      ? 'Off'
-                      : 'On'}
-              </span>
             </div>
-            <div className="audio-chip" title={music.currentLump ?? 'Level music'}>
+            <div className="audio-chip audio-chip--compact" title={music.currentLump ?? 'Level music'}>
               <MusicVisualizer active={music.enabled && music.playing} />
               <button
                 type="button"
@@ -1201,8 +1199,7 @@ export const LevelViewer: React.FC<{
               >
                 <MuteIcon muted={!music.enabled} />
               </button>
-              <span className="audio-chip__label">Music</span>
-              <span className="audio-chip__status">{music.status}</span>
+              <span className="audio-chip__label">MUS</span>
             </div>
           </div>
         </div>
@@ -1232,22 +1229,30 @@ export const LevelViewer: React.FC<{
 
       <div className="game-stage">
         <figure className={`canvas-card game-card ${hideGameCanvas ? 'game-card--hidden' : ''}`}>
-          <figcaption className="game-card__caption">
+          <figcaption className="game-card__caption sr-only">
             {renderBackend === 'pathtrace'
-              ? 'GPU preview · ~10 fps cap · switch to Classic WebGL to play'
+              ? 'Path trace preview. Switch to Classic WebGL to play.'
               : renderBackend === 'wasm-federated'
-                ? 'Play · Node GZSTATE + pure WebGL2 draw · simulation via ?engine='
+                ? 'Classic play with GZSTATE geometry. Esc menu, M pause.'
                 : renderBackend === 'classic'
-                  ? 'Play · Node WAD parse + pure WebGL2 · Esc menu · M pause · simulation via ?engine='
+                  ? 'Classic WebGL play. Esc menu, M pause, Tab automap, click or E to use.'
                 : renderBackend === 'gzdoom-s-wasm'
-                  ? 'GZDoom (s) WASM · Node GZSTATE map load · full engine + renderer'
+                  ? 'GZDoom modular WASM play.'
                 : renderBackend === 'gzdoom-wasm'
                   ? gzdoomSubView === 'play'
-                    ? 'GZDoom in WASM · full game · click to play · WASD + mouse · Space = use/open'
-                    : 'GZDoom WASM · Phase 2 gold renderer · spawn view vs ref.png'
-                  : 'Classic HW · BSP submit · Esc menu · M pause · Tab automap · V BSP debug · L label grid'}
+                    ? 'GZDoom WASM play. Click to capture mouse. WASD move, Space use.'
+                    : 'GZDoom WASM gold spawn frame.'
+                  : 'Classic WebGL play.'}
           </figcaption>
-          <div className="game-card__viewport" ref={viewportRef}>
+          <div
+            className="game-card__viewport"
+            ref={viewportRef}
+            title={
+              renderBackend === 'classic'
+                ? 'Esc menu · M pause · Tab automap · Click/E use'
+                : undefined
+            }
+          >
             <canvas
               ref={gameCanvasRef}
               className={`game-canvas ${automapActive ? 'game-canvas--automap' : ''} ${bspDebugActive ? 'game-canvas--bsp-debug' : ''} ${hideGameCanvas ? 'game-canvas--hidden' : ''}`}

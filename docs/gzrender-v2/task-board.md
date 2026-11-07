@@ -1,34 +1,40 @@
 # GZRender-V2 Task Board
 
-**Last updated:** 2026-07-06 — scoreboard canonical in [RELEASES.md](../RELEASES.md)
+**Last updated:** 2026-11-07 — scoreboard canonical in [RELEASES.md](../RELEASES.md)
 
-## Active gate — Step 2 (GZDoom WASM ≡ gold)
+## Active — Classic WebGL ladder (play path)
 
-**2c frame corpus:** **21/68 strict** (2026-06-24 recapture; see [phase-2c-breakdown.md](./phase-2c-breakdown.md))
+See [classic-parity-ladder.md](./classic-parity-ladder.md).
 
-| Sub | Maps | Target strict | Status |
-|-----|------|---------------|--------|
-| **2c-0** Infra | 68 | capture + eval | [x] Done |
-| **2c-a** Micro colormap | 8 | 40/68 | [ ] Open |
-| **2c-b** Edge pixels | 14 | 54/68 | [ ] Open |
-| **2c-c** Horizon | 8 | 62/68 | [ ] Open |
-| **2c-d** Outdoor | 6 | 68/68 | [ ] Open |
-| **2c-z** Full gate | 68 | `gzdoom-wasm:corpus:all:strict` | [ ] Blocked |
+| Step | Region | Status |
+|------|--------|--------|
+| 0 Infra / measurement | buckets + honest capture | [x] Done |
+| 1 Sky / ceiling | ceiling bucket | [x] Done (~0.3%) |
+| 2 Walls / visibility | mid-upper | [ ] Interim PASS @ 60%; tighten |
+| 3 Flats | mid-lower + floor | [ ] Interim PASS @ 70%; tighten |
+| 4 Lighting / colormap | heatmap yellow | [ ] Open |
+| 5 Sprites / psprite | floor band | [ ] Open |
+| 6 Full playfield | 320×168 spawn | [ ] Open ~53.7% |
+| 7 Menu | gameplay smoke | [x] Partial |
+| 8 HUD | layout math | [x] Partial |
 
-- [x] **2d — GZDRAW spawn 68/68** — `gzdraw-corpus:spawn:eval`; full multi-probe grid optional
-- [x] **2e — Level Viewer GZDoom WASM** — Play + Gold, MEMFS capture
+## Parallel — Step 2 (GZDoom WASM ≡ gold)
 
-## Done — Step 2 headless / oracle
+**2c frame corpus:** **21/68 strict** (2026-06-24)
 
-- [x] GZDoom WASM build + pk3s (`npm run build:gzdoom-wasm`)
-- [x] `gzdoom-oracle.html` + Puppeteer capture
-- [x] `verify:gzdraw-wasm` (E1M1 spawn native ≡ WASM GZDRAW)
-- [x] Gold-standard tree (68 × `gzdoom.gzstate` + `ref.png`)
+| Sub | Status |
+|-----|--------|
+| 2c-0 Infra | [x] Done |
+| 2c-a Micro colormap (8) | [ ] Open |
+| 2c-b Edge pixels (14) | [ ] Open |
+| 2c-c Horizon (8) | [ ] Open |
+| 2c-d Outdoor (6) | [ ] Open |
+| 2c-z Full gate 68/68 | [ ] Blocked |
+| 2d GZDRAW spawn | [x] Done 68/68 |
+| 2e Level Viewer gold host | [x] Done |
+
+## Done — oracle / data
+
+- [x] GZSTATE + WAD data 68/68
 - [x] Native import oracle 68/68
-
-## Legacy (not Step 2 gates)
-
-- [x] WASM Federated UI option — **debug only**; TS WebGL draw, not GZDoom WASM
-- [x] Modular stage snapshots Classic↔WASM BSP (`npm run test:modular`) — compares TS paths, not gold
-
-See [RETRACE.md](./RETRACE.md) for prompt order recovery.
+- [x] Honest vs stamped capture separation (2026-08-21)
