@@ -75,6 +75,19 @@ function playfieldGlobVis(width: number, height: number) {
 }
 
 
+/**
+ * Gold playfield Y (0=top) outdoor sky voids — mirrors colormapParity.glsl
+ * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard`.
+ */
+function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
+  if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
+  if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
 function putPixel(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -336,7 +349,19 @@ function drawSegBandColumns(
       if (lineIndex === 53 && xi >= 67 && xi <= 79 && yi >= 44 && yi < 53) {
         continue;
       }
-      const pfY = height - 1 - yi;
+      // Match GLSL paritySpawnHangarLipMidDiscard / parityOutdoorSkyCeilingDiscard:
+      // leave outdoor sky voids unpainted so the sky fill shows through (gold mid-upper).
+      // Skip for CPU overlay lines (53 / BROWN1 / back / right lip) — those own the lip stamps.
+      const cpuOverlayLine =
+        isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
+        isE1M1SpawnRightLipWallLine(lineIndex) ||
+        isE1M1SpawnBrown1LipWallLine(lineIndex) ||
+        isE1M1SpawnBackWallLipWallLine(lineIndex);
+      if (eastStepOverlay && !cpuOverlayLine && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
+        continue;
+      }
+      // Gold playfield Y (0=top) — same convention as GLSL parityPlayfieldY / flatShadeOffsetBands.
+      const pfY = yi;
       let v: number;
       if (lineIndex === 53 && pitchSpawnWallOverlay) {
         const worldH = eye + ((vp.centerY - yi - pitchY) * sz) / vp.invZtoScale;
@@ -369,16 +394,16 @@ function drawSegBandColumns(
       const useLine53LipSearch =
         lineIndex === 53 &&
         eastOverlayLine &&
-        pfY >= 106 &&
-        pfY < 126 &&
-        !(xi >= 68 && xi <= 79 && pfY >= 122 && pfY < 125);
+        pfY >= 42 &&
+        pfY < 62 &&
+        !(xi >= 68 && xi <= 79 && pfY >= 42 && pfY < 46);
       const useBackWallSpawnSearch =
         isE1M1SpawnBackWallLipWallLine(lineIndex) &&
         eastOverlayLine &&
         xi >= 108 &&
         xi < 121 &&
-        pfY >= 115 &&
-        pfY < 125;
+        pfY >= 42 &&
+        pfY < 53;
       const rgb = useLine53LipSearch
           ? shadeLine53SpawnLipPixel(
               wad,
@@ -845,6 +870,30 @@ function drawSprites(
   }
 }
 
+/** Gold hangar courtyard sky gray — mirrors skyBox.frag hangarCourtyardSkyColor. */
+function hangarCourtyardSkyRgb(goldY: number): [number, number, number] {
+  if (goldY < 42) {
+    const horizonT = Math.min(1, Math.max(0, goldY / 41));
+    const skyGray = 27 + (19 - 27) * horizonT + 1.5;
+    return [skyGray, skyGray, skyGray];
+  }
+  if (goldY >= 51) return [27, 27, 27];
+  return [39, 39, 39];
+}
+
+function hangarOutdoorSkyOverride(
+  pfX: number,
+  goldY: number,
+): [number, number, number] | null {
+  if (goldY < 42) return hangarCourtyardSkyRgb(goldY);
+  if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
+  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return hangarCourtyardSkyRgb(goldY);
+  if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return [27, 27, 27];
+  if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return hangarCourtyardSkyRgb(goldY);
+  return null;
+}
+
 function drawSkyFill(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -865,10 +914,14 @@ function drawSkyFill(
       const u = (columnAngle / (Math.PI * 2)) % 1;
       const v = py / height;
       const palIdx = sampleIndexTex(skyRaster, u, v, true, false);
-      const rgb =
+      let rgb: [number, number, number] =
         palIdx === 0
           ? [0, 0, 0]
           : shadePalIndex(params.wad.playpal, params.wad.colormap, palIdx, 255, 0);
+      if (params.eastStepOverlay) {
+        const override = hangarOutdoorSkyOverride(px, py);
+        if (override) rgb = override;
+      }
       const o = idx * 4;
       rgba[o] = rgb[0]!;
       rgba[o + 1] = rgb[1]!;
