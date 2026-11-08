@@ -952,7 +952,15 @@ function hangarOutdoorSkyOverride(
   pfX: number,
   goldY: number,
 ): [number, number, number] | null {
-  if (goldY < 42) return hangarCourtyardSkyRgb(goldY);
+  if (goldY < 42) {
+    // Center courtyard ceiling — gold mottles ~35–47; default horizon curve is ~21–28.
+    if (pfX >= 100 && pfX < 180) {
+      const horizonT = Math.min(1, Math.max(0, goldY / 41));
+      const skyGray = 43 - 4 * horizonT; // ~43 → ~39 (tol covers gold ~35–47)
+      return [skyGray, skyGray, skyGray];
+    }
+    return hangarCourtyardSkyRgb(goldY);
+  }
   // Left peripheral mid-upper — gold outdoor sky (~27), not bright SKY1 texels.
   if (goldY >= 42 && goldY < 84 && pfX < 42) return [27, 27, 27];
   // skyBox.frag: pfX < 80 && pfY >= 58 → min sky gray 27
