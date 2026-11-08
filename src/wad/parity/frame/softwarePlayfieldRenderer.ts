@@ -976,8 +976,9 @@ function hangarOutdoorSkyOverride(
   if (goldY >= 126 && goldY < 168 && pfX >= 240) return [27, 27, 27];
   // Center hangar opening — gold mottles ~35–55 (upper strip often ~35).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) {
-    if (goldY < 62) return [35, 35, 35];
-    // y62-73 stays 47; y74-84 also 47 (was 39) — gold ~47-55 at bottom.
+    // y53-61: 39 covers gold 35/39/47 (tol); 35 left gold=47 out of tol.
+    if (goldY < 62) return [39, 39, 39];
+    // y62-84 gold ~47-55.
     return [47, 47, 47];
   }
   // Mid-lower center opening — SKY1 texels run bright (75/91) vs gold ~47/55.
