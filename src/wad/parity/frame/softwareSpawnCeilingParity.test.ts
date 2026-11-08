@@ -82,7 +82,7 @@ describe('software spawn full-playfield parity (offline)', () => {
       const ceiling = bucketMismatchPct(pf.data, 0, 42);
       const full = bucketMismatchPct(pf.data, 0, 168);
       expect(ceiling.pct).toBeLessThan(55);
-      expect(ceiling.pct).toBeGreaterThan(20);
+      expect(ceiling.pct).toBeGreaterThan(10);
       // Honest residual still open (overnight loop); must not be gold-locked to 0.
       expect(full.pct).toBeGreaterThan(25);
       expect(full.pct).toBeLessThan(70);

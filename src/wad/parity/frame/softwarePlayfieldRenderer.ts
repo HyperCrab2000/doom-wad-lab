@@ -941,7 +941,8 @@ function drawSprites(
 function hangarCourtyardSkyRgb(goldY: number): [number, number, number] {
   if (goldY < 42) {
     const horizonT = Math.min(1, Math.max(0, goldY / 41));
-    const skyGray = 27 + (19 - 27) * horizonT + 1.5;
+    // Top row gold ~19 (was 28.5 from inverted curve + 1.5 bias).
+    const skyGray = 19 + (27 - 19) * horizonT;
     return [skyGray, skyGray, skyGray];
   }
   if (goldY >= 51) return [27, 27, 27];
