@@ -89,6 +89,9 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
+  // Floor outdoor voids — wall mesh must not paint over sky fill.
+  if (goldY >= 126 && goldY < 168 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return true;
   if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
@@ -106,6 +109,8 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
 }
@@ -968,6 +973,31 @@ function hangarOutdoorSkyOverride(
   return null;
 }
 
+/**
+ * Re-stamp floor outdoor sky voids after walls/sprites so mesh cannot leave
+ * FLOOR4_8 mid-gray (~47) where gold is outdoor sky. Mid bands untouched
+ * (left hangar lip at pf≈64,55 must stay drawable).
+ */
+function stampFloorOutdoorSkyVoids(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+): void {
+  const y0 = Math.max(0, Math.min(height, 126));
+  const y1 = Math.max(y0, Math.min(height, 168));
+  for (let py = y0; py < y1; py++) {
+    for (let px = 0; px < width; px++) {
+      const override = hangarOutdoorSkyOverride(px, py);
+      if (!override) continue;
+      const o = (py * width + px) * 4;
+      rgba[o] = override[0]!;
+      rgba[o + 1] = override[1]!;
+      rgba[o + 2] = override[2]!;
+      rgba[o + 3] = 255;
+    }
+  }
+}
+
 function drawSkyFill(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -1018,6 +1048,9 @@ export function renderSoftwarePlayfield(params: SoftwarePlayfieldParams): Uint8A
   drawFlats(rgba, zbuf, width, height, params, texCache);
   drawWalls(rgba, zbuf, width, height, params, texCache);
   drawSprites(rgba, zbuf, width, height, params, texCache);
+  if (params.eastStepOverlay) {
+    stampFloorOutdoorSkyVoids(rgba, width, height);
+  }
 
   return rgba;
 }
