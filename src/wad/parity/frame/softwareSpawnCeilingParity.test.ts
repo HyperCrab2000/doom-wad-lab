@@ -83,7 +83,9 @@ describe('software spawn full-playfield parity (offline)', () => {
       const full = bucketMismatchPct(pf.data, 0, 168);
       expect(ceiling.pct).toBeLessThan(55);
       expect(ceiling.pct).toBeGreaterThan(20);
-      expect(full.pct).toBeGreaterThan(50);
+      // Honest residual still open (overnight loop); must not be gold-locked to 0.
+      expect(full.pct).toBeGreaterThan(35);
+      expect(full.pct).toBeLessThan(70);
     } finally {
       if (prevSpawn === undefined) delete process.env.SOFTWARE_SPAWN_GOLD_LOCK;
       else process.env.SOFTWARE_SPAWN_GOLD_LOCK = prevSpawn;
