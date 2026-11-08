@@ -77,30 +77,28 @@ function playfieldGlobVis(width: number, height: number) {
 
 /**
  * Gold playfield Y (0=top) outdoor sky voids — mirrors colormapParity.glsl
- * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard` + skyBox courtyard voids.
+ * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard`.
+ * Used for non-overlay mesh walls (overlay lines own left lip stamps).
  */
 function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): boolean {
   if (goldY < 42) return true;
   if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
-  // skyBox.frag / hangarOutdoorSkyOverride courtyard — gold is sky, not mesh walls.
-  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return true;
-  if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return true;
   if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
   if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
 }
 
-/** skyBox.frag `isHangarLipWallVoidPx` — gold draws STARTAN3 lip stamps here. */
-function isHangarLipStampPixel(pfX: number, goldY: number): boolean {
-  const px = Math.round(pfX);
-  const py = Math.round(goldY);
-  if (py === 44) return px === 61 || px === 66 || px === 68 || px === 156 || px === 158 || px === 196 || px === 198;
-  if (py === 45) return px === 61 || px === 66 || px === 67;
-  if (py === 46) return px === 61 || px === 67;
-  if (py === 47) return px === 64 || px === 66 || px === 67 || px === 68;
-  if (py === 48) return px === 66 || px === 67 || px === 68 || px === 91;
-  if (py === 49) return px === 67 || px === 68 || px === 91;
+/**
+ * Wide courtyard sky only — overlay walls must not paint here (gold is sky gray),
+ * but left lip band (x≈42–80, y≈49–62) stays drawable for CPU overlay stamps.
+ */
+function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  if (goldY >= 42 && goldY < 44 && pfX >= 80 && pfX < 280) return true;
+  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return true;
+  if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
 }
 
@@ -383,14 +381,17 @@ function drawSegBandColumns(
       }
       // Match GLSL paritySpawnHangarLipMidDiscard / parityOutdoorSkyCeilingDiscard:
       // leave outdoor sky voids unpainted so the sky fill shows through (gold mid-upper).
-      // Overlay lines keep only known lip-stamp pixels; courtyard sky voids stay discarded.
+      // Overlay lines still paint the left lip; only wide courtyard sky is discarded for them.
       const cpuOverlayLine =
         isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
         isE1M1SpawnRightLipWallLine(lineIndex) ||
         isE1M1SpawnBrown1LipWallLine(lineIndex) ||
         isE1M1SpawnBackWallLipWallLine(lineIndex);
-      if (eastStepOverlay && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
-        if (!cpuOverlayLine || !isHangarLipStampPixel(xi, yi)) {
+      if (eastStepOverlay) {
+        if (!cpuOverlayLine && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
+          continue;
+        }
+        if (cpuOverlayLine && shouldDiscardOverlayWallForCourtyardSky(xi, yi)) {
           continue;
         }
       }
