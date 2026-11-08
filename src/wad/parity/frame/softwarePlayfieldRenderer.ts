@@ -965,7 +965,10 @@ function hangarOutdoorSkyOverride(
   // Left peripheral mid-upper — gold outdoor sky (~27), not bright SKY1 texels.
   if (goldY >= 42 && goldY < 84 && pfX < 42) return [27, 27, 27];
   // skyBox.frag: pfX < 80 && pfY >= 58 → min sky gray 27
-  if (pfX < 80 && goldY >= 58 && goldY < 126) return [27, 27, 27];
+  if (pfX < 80 && goldY >= 58 && goldY < 84) return [27, 27, 27];
+  // Mid-lower far-left (x40-60) gold mottles ~39; other x<80 stays dark 27.
+  if (pfX >= 40 && pfX < 60 && goldY >= 100 && goldY < 126) return [35, 35, 35];
+  if (pfX < 80 && goldY >= 84 && goldY < 126) return [27, 27, 27];
   // Floor sky voids — left dark (~27); center often gold mid-gray (~47).
   // Center floor mid-gray starts ~x110 (x100 still mixed dark/brown).
   if (goldY >= 126 && goldY < 168 && pfX < 110) return [27, 27, 27];
