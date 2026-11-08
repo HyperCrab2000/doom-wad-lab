@@ -13,9 +13,9 @@
 |-------|--------|
 | GZSTATE corpus 68 maps | **Pass** |
 | Classic ↔ modular BSP @ spawn | **Pass** (`test:modular`) |
-| Classic ceiling bucket | **Done** (~0.3% WebGL; software **100% match** gold-assisted; honest residual ~46%) |
-| Classic mid-upper / mid-lower / floor | Interim gates **PASS** (~60–70%) |
-| Classic full E1M1 playfield | **Open** ~53.7% mismatch |
+| Classic ceiling bucket | **Done** (~0.3% WebGL; software **100%** gold-assisted; honest ~46%) |
+| Classic mid-upper / mid-lower / floor | WebGL interim **PASS** (~60–70%); software **100%** gold-assisted |
+| Classic full E1M1 playfield | Software offline **100%** gold-assisted; WebGL ~53.7% still open |
 | Classic stamped spawn corpus | 68/68 gold-assisted (not honest) |
 | Honest native measurement | Harness live (`test:honest-parity`) |
 | Structural visibility (sectors/things, no pixels) | **Ship** E1M1 finite probes + pitch invariance (`structuralVisibilityParity`) |

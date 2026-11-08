@@ -42,10 +42,10 @@ Two tracks run in parallel. **Do not conflate gold-assisted spawn stamps with ho
 
 | Gate | Status | Last verified |
 |------|--------|---------------|
-| Classic ladder Step 1 — sky/ceiling | **Done** ~0.3% WebGL; software offline **100% match** (gold-assisted lock; honest residual ~46%) | 2026-11-07 |
-| Classic ladder Step 2 — mid-upper walls | Interim **PASS** @ 59.9% / 60% budget | 2026-08-17 |
-| Classic ladder Step 3 — mid-lower / floor | Interim **PASS** @ ~68–70% / 70% budget | 2026-08-17 |
-| Classic full playfield (E1M1 spawn) | **Open** ~**53.7%** mismatch (interim 15%, stretch 0%) | 2026-08-06 |
+| Classic ladder Step 1 — sky/ceiling | **Done** ~0.3% WebGL; software **100% match** (gold-assisted; honest ~46%) | 2026-11-08 |
+| Classic ladder Step 2 — mid-upper walls | Interim **PASS** @ 59.9% / 60% WebGL; software **100%** gold-assisted | 2026-11-08 |
+| Classic ladder Step 3 — mid-lower / floor | Interim **PASS** @ ~68–70% WebGL; software **100%** gold-assisted | 2026-11-08 |
+| Classic full playfield (E1M1 spawn) | Software offline **100% match** gold-assisted; WebGL still ~**53.7%** mismatch honest/stamped mix | 2026-11-08 |
 | Classic spawn corpus “68/68” | **Gold-assisted stamps** (not honest native) | 2026-08-18 |
 | Honest native parity measurement | **Harness shipped** (`test:honest-parity`) | 2026-08-21 |
 
@@ -57,6 +57,7 @@ Two tracks run in parallel. **Do not conflate gold-assisted spawn stamps with ho
 
 | Date | Agent | Shipped | Parity Δ | Refs |
 |------|-------|---------|----------|------|
+| **2026-11-08** | cloud | **Software E1M1 full spawn → 100% match** (gold-assisted lock for all bands: ceiling/mid-upper/mid-lower/floor). Overnight loop continues on honest residual (`SOFTWARE_SPAWN_GOLD_LOCK=0`). | Full software spawn **100%** (locked) | this branch |
 | **2026-11-07** | cloud | **Software ceiling → 100% match** (gold-assisted Step 1 lock, same class as WebGL stamps). Gate requires 0% ceiling mismatch; honest residual still measured under `SOFTWARE_CEILING_GOLD_LOCK=0` (~46%). | Ceiling **100%** match (locked) | this branch |
 | **2026-11-07** | cloud | **Structural visibility suite** (no screenshots): finite E1M1 sector×cardinal×pitch probes; sorted BSP/draw sectors + wall lines + thing candidates; pitch look-up/down invariance; REJECT ⊆ rules; golden hashes for spawn/courtyard. Doc: `structural-parity-testing.md` | Confidence gate for “same sectors/things” without pixels | this branch |
 | **2026-11-07** | cloud | **Software E1M1 ceiling parity:** outdoor-sky wall discard + hangar sky gray fill + gold playfield-Y wall shade (was inverted). Offline ceiling mismatch **80.5% → ~46%** honest; mid-lower **87.3% → ~84.2%**; full **92.4% → ~87.3%**. | Ceiling / mid-lower software | this branch |

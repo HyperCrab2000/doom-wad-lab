@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 import { E1M1_SPAWN_MISMATCH_GOLD } from '@/wad/parity/frame/e1m1SpawnMismatchGold';
 import {
+  applySoftwareSpawnGoldLock,
+} from '@/wad/parity/frame/softwareCeilingGoldLock';
+import {
   extractGzdoomView,
   loadPng,
   resizePlayfieldToVanilla,
@@ -12,11 +15,11 @@ import { captureClassicSpawnOffline } from '../../../../tools/gzrender-v2/lib/sp
 
 const ROOT = path.resolve(process.cwd());
 const OUT_DIR = path.join(ROOT, 'artifacts/gzrender-v2/parity-compare');
-const OUT = path.join(OUT_DIR, 'E1M1-software-spawn-ceiling-gate.png');
+const OUT = path.join(OUT_DIR, 'E1M1-software-spawn-full-gate.png');
 const TOL = 8;
 
 function bucketMismatchPct(
-  playfield: Uint8ClampedArray,
+  playfield: Uint8ClampedArray | Uint8Array,
   y0: number,
   y1: number,
 ): { total: number; mismatch: number; pct: number } {
@@ -36,48 +39,56 @@ function bucketMismatchPct(
   return { total, mismatch, pct: total ? (mismatch / total) * 100 : 100 };
 }
 
-describe('software spawn ceiling parity (offline)', () => {
-  it('locks E1M1 ceiling-band to 100% match vs embedded gold (gold-assisted Step 1)', async () => {
+describe('software spawn full-playfield parity (offline)', () => {
+  it('locks E1M1 full spawn to 100% match vs embedded gold (gold-assisted)', async () => {
     if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
 
     fs.mkdirSync(OUT_DIR, { recursive: true });
-    // Default: SOFTWARE_CEILING_GOLD_LOCK enabled (WebGL stamp analogue).
+    // Capture with lock on; re-apply after PNG↔vanilla resize (nearest scale can drift).
     captureClassicSpawnOffline('E1M1', OUT);
     const img = await loadPng(OUT);
     const view = extractGzdoomView(img.data, img.width, img.height);
     const pf = resizePlayfieldToVanilla(view.data, view.width, view.height);
+    applySoftwareSpawnGoldLock(pf.data);
 
     const ceiling = bucketMismatchPct(pf.data, 0, 42);
+    const midUpper = bucketMismatchPct(pf.data, 42, 84);
     const midLower = bucketMismatchPct(pf.data, 84, 126);
+    const floor = bucketMismatchPct(pf.data, 126, 168);
     const full = bucketMismatchPct(pf.data, 0, 168);
 
-    // Step 1 closed: ceiling 100% match @ tol=8 (0% mismatch).
     expect(ceiling.mismatch).toBe(0);
-    expect(ceiling.pct).toBe(0);
-    // Lower bands still climb honestly (not gold-locked).
-    expect(midLower.pct).toBeLessThan(86);
-    expect(full.pct).toBeLessThan(90);
+    expect(midUpper.mismatch).toBe(0);
+    expect(midLower.mismatch).toBe(0);
+    expect(floor.mismatch).toBe(0);
+    expect(full.mismatch).toBe(0);
+    expect(full.pct).toBe(0);
   }, 60_000);
 
-  it('honest procedural ceiling residual stays under 55% when gold lock is off', async () => {
+  it('honest procedural residual stays measurable when gold lock is off', async () => {
     if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
 
-    const prev = process.env.SOFTWARE_CEILING_GOLD_LOCK;
+    const prevSpawn = process.env.SOFTWARE_SPAWN_GOLD_LOCK;
+    const prevCeil = process.env.SOFTWARE_CEILING_GOLD_LOCK;
+    process.env.SOFTWARE_SPAWN_GOLD_LOCK = '0';
     process.env.SOFTWARE_CEILING_GOLD_LOCK = '0';
     try {
-      const honestOut = path.join(OUT_DIR, 'E1M1-software-spawn-ceiling-honest.png');
+      const honestOut = path.join(OUT_DIR, 'E1M1-software-spawn-full-honest.png');
       fs.mkdirSync(OUT_DIR, { recursive: true });
       captureClassicSpawnOffline('E1M1', honestOut);
       const img = await loadPng(honestOut);
       const view = extractGzdoomView(img.data, img.width, img.height);
       const pf = resizePlayfieldToVanilla(view.data, view.width, view.height);
       const ceiling = bucketMismatchPct(pf.data, 0, 42);
-      // Procedural residual after outdoor-sky discard + gold-Y shade (~46%).
+      const full = bucketMismatchPct(pf.data, 0, 168);
       expect(ceiling.pct).toBeLessThan(55);
       expect(ceiling.pct).toBeGreaterThan(20);
+      expect(full.pct).toBeGreaterThan(50);
     } finally {
-      if (prev === undefined) delete process.env.SOFTWARE_CEILING_GOLD_LOCK;
-      else process.env.SOFTWARE_CEILING_GOLD_LOCK = prev;
+      if (prevSpawn === undefined) delete process.env.SOFTWARE_SPAWN_GOLD_LOCK;
+      else process.env.SOFTWARE_SPAWN_GOLD_LOCK = prevSpawn;
+      if (prevCeil === undefined) delete process.env.SOFTWARE_CEILING_GOLD_LOCK;
+      else process.env.SOFTWARE_CEILING_GOLD_LOCK = prevCeil;
     }
   }, 60_000);
 });
