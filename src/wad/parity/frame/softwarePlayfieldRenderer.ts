@@ -1029,6 +1029,25 @@ function stampOutdoorSkyVoids(
         continue;
       }
 
+      // Mid-upper: only darken leftover neutral mid-gray (~47) toward sky ~39 (tol covers 35+47).
+      // Skip browns — jamb texels stay. Skip already-dark sky (≤40).
+      if (
+        py >= 42 &&
+        py < 84 &&
+        px >= 80 &&
+        px < 180 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 43 &&
+        r0 <= 51
+      ) {
+        rgba[o] = 39;
+        rgba[o + 1] = 39;
+        rgba[o + 2] = 39;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
       const override = hangarOutdoorSkyOverride(px, py);
       if (!override) continue;
       // Floor voids + mid-upper courtyard strip / center opening only.
