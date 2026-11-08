@@ -86,6 +86,9 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 42 && goldY < 84 && pfX < 42) return true;
   if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
   if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
+  // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
   if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
@@ -101,6 +104,8 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 42 && goldY < 44 && pfX >= 80 && pfX < 280) return true;
   if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return true;
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
 }
@@ -114,10 +119,12 @@ function shouldDiscardCeilingFlatForOutdoorSky(pfX: number, goldY: number): bool
   return false;
 }
 
-/** colormapParity.glsl `parityOutdoorSkyFloorDiscard`. */
+/** colormapParity.glsl `parityOutdoorSkyFloorDiscard` + left floor sky void. */
 function shouldDiscardFloorFlatForOutdoorSky(pfX: number, goldY: number): boolean {
   if (goldY >= 84 && goldY < 126 && pfX > 260) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  // Left floor band — gold outdoor sky gray (~27), not FLOOR4_8 mid-gray (~47).
+  if (goldY >= 126 && goldY < 168 && pfX < 120) return true;
   return false;
 }
 
@@ -943,6 +950,11 @@ function hangarOutdoorSkyOverride(
   if (goldY >= 42 && goldY < 84 && pfX < 42) return [27, 27, 27];
   // skyBox.frag: pfX < 80 && pfY >= 58 → min sky gray 27
   if (pfX < 80 && goldY >= 58 && goldY < 126) return [27, 27, 27];
+  // Left / right floor sky voids (gold ~27, not floor mid-gray ~47).
+  if (goldY >= 126 && goldY < 168 && pfX < 120) return [27, 27, 27];
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return [27, 27, 27];
+  // Center hangar opening — discard leaves sky; force gold outdoor gray.
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return [27, 27, 27];
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
