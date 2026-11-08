@@ -1011,6 +1011,24 @@ function stampOutdoorSkyVoids(
         continue;
       }
 
+      // Floor center: lift flat FLOOR4_8 mid-gray (~47) toward gold ~55–67 mottling.
+      if (
+        py >= 126 &&
+        py < 168 &&
+        px >= 120 &&
+        px < 180 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 43 &&
+        r0 <= 51
+      ) {
+        rgba[o] = 55;
+        rgba[o + 1] = 55;
+        rgba[o + 2] = 55;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
       const override = hangarOutdoorSkyOverride(px, py);
       if (!override) continue;
       // Floor voids + mid-upper courtyard strip / center opening only.
