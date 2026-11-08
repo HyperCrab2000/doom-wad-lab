@@ -1044,7 +1044,8 @@ function stampOutdoorSkyVoids(
         r0 >= 43 &&
         r0 <= 51
       ) {
-        const g = py >= 148 ? 63 : 55;
+        // Upper center gold ~47-55 (55 overshot gold=39); lower rows gold ~67.
+        const g = py >= 148 ? 63 : 47;
         rgba[o] = g;
         rgba[o + 1] = g;
         rgba[o + 2] = g;
