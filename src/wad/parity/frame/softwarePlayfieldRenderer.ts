@@ -1020,7 +1020,9 @@ function stampOutdoorSkyVoids(
       // y>=110 keeps BROWN1 walls. Opening x100-120 stamps to mid-gray ~39.
       if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
         if (px < 100 && py >= 110) continue;
-        const g = px >= 100 ? 39 : 19;
+        // Opening: brighter mesh browns sit under gold ~55; muted under ~39.
+        let g = 19;
+        if (px >= 100) g = r0 >= 70 ? 47 : 39;
         rgba[o] = g;
         rgba[o + 1] = g;
         rgba[o + 2] = g;
