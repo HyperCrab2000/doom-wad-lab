@@ -1020,7 +1020,8 @@ function stampOutdoorSkyVoids(
         continue;
       }
 
-      // Floor center: lift flat FLOOR4_8 mid-gray (~47) toward gold ~55–67 mottling.
+      // Floor center: lift flat FLOOR4_8 mid-gray (~47) toward gold mottling.
+      // Upper center ~55; lower rows often gold ~67 — use 63 (tol covers 55–71).
       if (
         py >= 126 &&
         py < 168 &&
@@ -1031,9 +1032,10 @@ function stampOutdoorSkyVoids(
         r0 >= 43 &&
         r0 <= 51
       ) {
-        rgba[o] = 55;
-        rgba[o + 1] = 55;
-        rgba[o + 2] = 55;
+        const g = py >= 148 ? 63 : 55;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
         rgba[o + 3] = 255;
         continue;
       }
