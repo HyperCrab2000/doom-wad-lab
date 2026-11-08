@@ -977,7 +977,8 @@ function hangarOutdoorSkyOverride(
   // Center hangar opening — gold mottles ~35–55 (upper strip often ~35).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) {
     if (goldY < 62) return [35, 35, 35];
-    return goldY < 74 ? [47, 47, 47] : [39, 39, 39];
+    // y62-73 stays 47; y74-84 also 47 (was 39) — gold ~47-55 at bottom.
+    return [47, 47, 47];
   }
   // Mid-lower center opening — SKY1 texels run bright (75/91) vs gold ~47/55.
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [47, 47, 47];
@@ -1050,8 +1051,7 @@ function stampOutdoorSkyVoids(
         continue;
       }
 
-      // Mid-upper: only darken leftover neutral mid-gray (~47) toward sky ~39 (tol covers 35+47).
-      // Skip browns — jamb texels stay. Skip already-dark sky (≤40).
+      // Mid-upper: leftover mid-gray. Center y>=74 gold ~47-55; else ~39.
       if (
         py >= 42 &&
         py < 84 &&
@@ -1062,9 +1062,10 @@ function stampOutdoorSkyVoids(
         r0 >= 43 &&
         r0 <= 51
       ) {
-        rgba[o] = 39;
-        rgba[o + 1] = 39;
-        rgba[o + 2] = 39;
+        const g = px >= 108 && py >= 74 ? 47 : 39;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
         rgba[o + 3] = 255;
         continue;
       }
