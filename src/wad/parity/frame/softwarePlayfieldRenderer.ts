@@ -977,10 +977,16 @@ function hangarOutdoorSkyOverride(
   return null;
 }
 
+/** Bright warm wall brown (e.g. 71/51/35, 79/59/43) — not neutral sky gray. */
+function isBrightWarmBrown(r: number, g: number, b: number): boolean {
+  return r >= 55 && r - b >= 20 && r - g >= 8;
+}
+
 /**
  * Re-stamp outdoor sky voids after walls/sprites so mesh cannot leave
  * FLOOR4_8 mid-gray (~47) where gold is outdoor sky.
  * Floor band + mid-upper strip x≥80 (left lip x≈64 stays drawable).
+ * Mid-lower x60–120: chroma-gate only (bright browns → sky), keep gold brown walls.
  */
 function stampOutdoorSkyVoids(
   rgba: Uint8Array,
@@ -991,6 +997,20 @@ function stampOutdoorSkyVoids(
     for (let px = 0; px < width; px++) {
       // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
       if (px < 80 && py >= 42 && py < 84) continue;
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+
+      // Mid-lower courtyard mixed band: only replace bright brown mesh with dark sky.
+      if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
       const override = hangarOutdoorSkyOverride(px, py);
       if (!override) continue;
       // Floor voids + mid-upper courtyard strip / center opening only.
@@ -998,7 +1018,6 @@ function stampOutdoorSkyVoids(
       const midUpperStrip = py >= 42 && py < 84 && px >= 80;
       const midLowerOpening = py >= 84 && py < 126 && px >= 120 && px < 180;
       if (!floorVoid && !midUpperStrip && !midLowerOpening) continue;
-      const o = (py * width + px) * 4;
       rgba[o] = override[0]!;
       rgba[o + 1] = override[1]!;
       rgba[o + 2] = override[2]!;
