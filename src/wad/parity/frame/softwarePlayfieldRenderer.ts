@@ -988,7 +988,8 @@ function hangarOutdoorSkyOverride(
 
 /** Bright warm wall brown (e.g. 71/51/35, 79/59/43) — not neutral sky gray. */
 function isBrightWarmBrown(r: number, g: number, b: number): boolean {
-  return r >= 55 && r - b >= 20 && r - g >= 8;
+  // Include muted BROWN1 (51/43/19) left in mid-lower opening.
+  return r >= 51 && r - b >= 20 && r - g >= 8;
 }
 
 /**
