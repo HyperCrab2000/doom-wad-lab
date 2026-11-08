@@ -77,13 +77,45 @@ function playfieldGlobVis(width: number, height: number) {
 
 /**
  * Gold playfield Y (0=top) outdoor sky voids — mirrors colormapParity.glsl
- * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard`.
+ * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard` + skyBox courtyard voids.
  */
 function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): boolean {
   if (goldY < 42) return true;
   if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
+  // skyBox.frag / hangarOutdoorSkyOverride courtyard — gold is sky, not mesh walls.
+  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return true;
+  if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return true;
   if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
   if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
+/** skyBox.frag `isHangarLipWallVoidPx` — gold draws STARTAN3 lip stamps here. */
+function isHangarLipStampPixel(pfX: number, goldY: number): boolean {
+  const px = Math.round(pfX);
+  const py = Math.round(goldY);
+  if (py === 44) return px === 61 || px === 66 || px === 68 || px === 156 || px === 158 || px === 196 || px === 198;
+  if (py === 45) return px === 61 || px === 66 || px === 67;
+  if (py === 46) return px === 61 || px === 67;
+  if (py === 47) return px === 64 || px === 66 || px === 67 || px === 68;
+  if (py === 48) return px === 66 || px === 67 || px === 68 || px === 91;
+  if (py === 49) return px === 67 || px === 68 || px === 91;
+  return false;
+}
+
+/** colormapParity.glsl `parityOutdoorSkyCeilingFlatDiscard` (ceiling flats only). */
+function shouldDiscardCeilingFlatForOutdoorSky(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  if (goldY >= 42 && goldY < 58 && pfX >= 48 && pfX < 280) return true;
+  if (goldY >= 42 && goldY < 44 && pfX < 48) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
+/** colormapParity.glsl `parityOutdoorSkyFloorDiscard`. */
+function shouldDiscardFloorFlatForOutdoorSky(pfX: number, goldY: number): boolean {
+  if (goldY >= 84 && goldY < 126 && pfX > 260) return true;
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
   return false;
 }
@@ -351,14 +383,16 @@ function drawSegBandColumns(
       }
       // Match GLSL paritySpawnHangarLipMidDiscard / parityOutdoorSkyCeilingDiscard:
       // leave outdoor sky voids unpainted so the sky fill shows through (gold mid-upper).
-      // Skip for CPU overlay lines (53 / BROWN1 / back / right lip) — those own the lip stamps.
+      // Overlay lines keep only known lip-stamp pixels; courtyard sky voids stay discarded.
       const cpuOverlayLine =
         isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
         isE1M1SpawnRightLipWallLine(lineIndex) ||
         isE1M1SpawnBrown1LipWallLine(lineIndex) ||
         isE1M1SpawnBackWallLipWallLine(lineIndex);
-      if (eastStepOverlay && !cpuOverlayLine && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
-        continue;
+      if (eastStepOverlay && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
+        if (!cpuOverlayLine || !isHangarLipStampPixel(xi, yi)) {
+          continue;
+        }
       }
       // Gold playfield Y (0=top) — same convention as GLSL parityPlayfieldY / flatShadeOffsetBands.
       const pfY = yi;
@@ -613,6 +647,7 @@ function rasterizeFlatTriangle(
   viewYaw: number,
   floorGlobVis: number,
   isFloor: boolean,
+  eastStepOverlay = false,
 ): void {
   if (!raster) return;
   const minY = Math.max(0, Math.ceil(Math.min(ay, by, cy)));
@@ -630,6 +665,10 @@ function rasterizeFlatTriangle(
     const distance = gzdoomPlaneDepth(py, planeH, vp);
     const planeVis = flatPlaneVisibility(planeH, py, centerY, floorGlobVis);
     for (let px = xStart; px <= xEnd; px++) {
+      if (eastStepOverlay) {
+        if (!isFloor && shouldDiscardCeilingFlatForOutdoorSky(px, py)) continue;
+        if (isFloor && shouldDiscardFloorFlatForOutdoorSky(px, py)) continue;
+      }
       const { doomX, doomY } = gzdoomScreenToDoom(px, distance, viewX, viewY, vp);
       const sz = gzdoomScreenZ(doomX, doomY, viewX, viewY, viewYaw);
       const depth = 1 / Math.max(sz, 1e-3);
@@ -651,7 +690,16 @@ function drawSubsectorFlats(
   params: SoftwarePlayfieldParams,
   texCache: SoftwareTextureCache,
 ): void {
-  const { wad, map, buffers, drawState, timeSeconds, animateFlatIndex, cameraPos, viewYaw } = params;
+  const {
+    wad,
+    buffers,
+    drawState,
+    timeSeconds,
+    animateFlatIndex,
+    cameraPos,
+    viewYaw,
+    eastStepOverlay = false,
+  } = params;
   if (buffers.subsectorFlats.length === 0) return;
 
   const vp = gzdoomViewport(width, height, viewYaw);
@@ -710,6 +758,7 @@ function drawSubsectorFlats(
         viewYaw,
         floorGlobVis,
         isFloor,
+        eastStepOverlay,
       );
     }
   };
