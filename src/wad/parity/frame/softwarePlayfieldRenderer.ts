@@ -1011,11 +1011,14 @@ function stampOutdoorSkyVoids(
       const g0 = rgba[o + 1]!;
       const b0 = rgba[o + 2]!;
 
-      // Mid-lower courtyard mixed band: only replace bright brown mesh with dark sky.
+      // Mid-lower: bright brown -> sky. Left x60-100 gold ~19 (upper);
+      // y>=110 keeps BROWN1 walls. Opening x100-120 stamps to mid-gray ~39.
       if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
-        rgba[o] = 19;
-        rgba[o + 1] = 19;
-        rgba[o + 2] = 19;
+        if (px < 100 && py >= 110) continue;
+        const g = px >= 100 ? 39 : 19;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
         rgba[o + 3] = 255;
         continue;
       }
