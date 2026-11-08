@@ -954,10 +954,12 @@ function hangarOutdoorSkyOverride(
   if (goldY >= 126 && goldY < 168 && pfX < 120) return [27, 27, 27];
   if (goldY >= 126 && goldY < 168 && pfX >= 120 && pfX < 180) return [47, 47, 47];
   if (goldY >= 126 && goldY < 168 && pfX >= 240) return [27, 27, 27];
-  // Center hangar opening — discard leaves sky; force gold outdoor gray.
-  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return [27, 27, 27];
+  // Center hangar opening — gold mottles ~39–55 (not flat 27).
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) {
+    return goldY < 68 ? [47, 47, 47] : [39, 39, 39];
+  }
   // Mid-lower center opening — SKY1 texels run bright (75/91) vs gold ~47/55.
-  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [51, 51, 51];
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [47, 47, 47];
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
