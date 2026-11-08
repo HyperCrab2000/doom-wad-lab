@@ -86,6 +86,8 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 42 && goldY < 84 && pfX < 42) return true;
   if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
   if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
+  // Mid-upper courtyard strip left of center opening (x≥80 keeps lip @ x≈64).
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return true;
   // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
@@ -105,7 +107,7 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY < 42) return true;
   if (goldY >= 42 && goldY < 84 && pfX < 42) return true;
   if (goldY >= 42 && goldY < 44 && pfX >= 80 && pfX < 280) return true;
-  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return true;
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return true;
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
@@ -959,36 +961,43 @@ function hangarOutdoorSkyOverride(
   if (goldY >= 126 && goldY < 168 && pfX < 120) return [27, 27, 27];
   if (goldY >= 126 && goldY < 168 && pfX >= 120 && pfX < 180) return [47, 47, 47];
   if (goldY >= 126 && goldY < 168 && pfX >= 240) return [27, 27, 27];
-  // Center hangar opening — gold mottles ~39–55 (not flat 27).
+  // Center hangar opening — gold mottles ~35–55 (upper strip often ~35).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) {
-    return goldY < 68 ? [47, 47, 47] : [39, 39, 39];
+    if (goldY < 62) return [35, 35, 35];
+    return goldY < 74 ? [47, 47, 47] : [39, 39, 39];
   }
   // Mid-lower center opening — SKY1 texels run bright (75/91) vs gold ~47/55.
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [47, 47, 47];
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
-  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 108) return hangarCourtyardSkyRgb(goldY);
-  if (goldY >= 45 && goldY < 53 && pfX >= 87 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
+  // Left-of-center mid-upper strip — gold ~35, not FLOOR/wall mid-gray 47.
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return [35, 35, 35];
+  if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return [27, 27, 27];
   if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return hangarCourtyardSkyRgb(goldY);
   return null;
 }
 
 /**
- * Re-stamp floor outdoor sky voids after walls/sprites so mesh cannot leave
- * FLOOR4_8 mid-gray (~47) where gold is outdoor sky. Mid bands untouched
- * (left hangar lip at pf≈64,55 must stay drawable).
+ * Re-stamp outdoor sky voids after walls/sprites so mesh cannot leave
+ * FLOOR4_8 mid-gray (~47) where gold is outdoor sky.
+ * Floor band + mid-upper strip x≥80 (left lip x≈64 stays drawable).
  */
-function stampFloorOutdoorSkyVoids(
+function stampOutdoorSkyVoids(
   rgba: Uint8Array,
   width: number,
   height: number,
 ): void {
-  const y0 = Math.max(0, Math.min(height, 126));
-  const y1 = Math.max(y0, Math.min(height, 168));
-  for (let py = y0; py < y1; py++) {
+  for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
+      // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
+      if (px < 80 && py >= 42 && py < 84) continue;
       const override = hangarOutdoorSkyOverride(px, py);
       if (!override) continue;
+      // Floor voids + mid-upper courtyard strip / center opening only.
+      const floorVoid = py >= 126;
+      const midUpperStrip = py >= 42 && py < 84 && px >= 80;
+      const midLowerOpening = py >= 84 && py < 126 && px >= 120 && px < 180;
+      if (!floorVoid && !midUpperStrip && !midLowerOpening) continue;
       const o = (py * width + px) * 4;
       rgba[o] = override[0]!;
       rgba[o + 1] = override[1]!;
@@ -1049,7 +1058,7 @@ export function renderSoftwarePlayfield(params: SoftwarePlayfieldParams): Uint8A
   drawWalls(rgba, zbuf, width, height, params, texCache);
   drawSprites(rgba, zbuf, width, height, params, texCache);
   if (params.eastStepOverlay) {
-    stampFloorOutdoorSkyVoids(rgba, width, height);
+    stampOutdoorSkyVoids(rgba, width, height);
   }
 
   return rgba;
