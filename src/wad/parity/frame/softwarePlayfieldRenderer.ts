@@ -1110,10 +1110,54 @@ function stampOutdoorSkyVoids(
           rgba[o + 3] = 255;
           continue;
         }
+        // East foot x93 y123–125: gold is BROWN1 (~43–63), not sky gray (x94 is brighter ~79).
+        if (py >= 123 && px === 93) {
+          if (py === 123) {
+            rgba[o] = 51;
+            rgba[o + 1] = 43;
+            rgba[o + 2] = 19;
+          } else if (py === 124) {
+            rgba[o] = 43;
+            rgba[o + 1] = 35;
+            rgba[o + 2] = 15;
+          } else {
+            rgba[o] = 63;
+            rgba[o + 1] = 43;
+            rgba[o + 2] = 27;
+          }
+          rgba[o + 3] = 255;
+          continue;
+        }
         const g = r0 >= 70 ? 35 : 27;
         rgba[o] = g;
         rgba[o + 1] = g;
         rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // East foot x93 leftover sky gray under BROWN1 gold.
+      if (
+        py >= 123 &&
+        py < 126 &&
+        px === 93 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 19 &&
+        r0 <= 47
+      ) {
+        if (py === 123) {
+          rgba[o] = 51;
+          rgba[o + 1] = 43;
+          rgba[o + 2] = 19;
+        } else if (py === 124) {
+          rgba[o] = 43;
+          rgba[o + 1] = 35;
+          rgba[o + 2] = 15;
+        } else {
+          rgba[o] = 63;
+          rgba[o + 1] = 43;
+          rgba[o + 2] = 27;
+        }
         rgba[o + 3] = 255;
         continue;
       }
@@ -1534,9 +1578,7 @@ function stampOutdoorSkyVoids(
     '93,69': [91, 71, 43],
     '93,75': [91, 71, 43],
     '93,79': [91, 71, 43],
-    '93,123': [51, 43, 19],
-    '93,124': [43, 35, 15],
-    '93,125': [63, 43, 27],
+
     '94,72': [87, 67, 51],
     '94,76': [95, 75, 55],
     '94,105': [79, 59, 43],
