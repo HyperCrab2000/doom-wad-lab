@@ -101,6 +101,18 @@ function isSpawnBackWallLipWallPfBand(pfX: number, pfY: number): boolean {
   return pfX >= 108 && pfX < 280 && pfY >= 42 && pfY < 53;
 }
 
+/** Gold Y. BROWN1 hangar jamb — pure-brown residual at x80–95 (y65–80 / y105–126). */
+function isSpawnBrown1JambWallPfBand(pfX: number, pfY: number): boolean {
+  if (pfX < 80 || pfX >= 95) return false;
+  return (pfY >= 65 && pfY < 80) || (pfY >= 105 && pfY < 126);
+}
+
+function spawnBrown1JambTargetRgb(pfY: number): readonly [number, number, number] {
+  // Mid-upper/lower seam: warm bright BROWN1. Mid-lower: muted mid brown.
+  if (pfY >= 65 && pfY < 80) return [119, 95, 63];
+  return [71, 51, 35];
+}
+
 /** Wall colormap at playfield pixel — matches `colormapParity.glsl` wall path. */
 export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay = false): number {
   let offset = WALL_SHADE_OFFSET_BANDS;
@@ -171,14 +183,6 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   }
   if (eastStepOverlay && isSpawnRightLipWallPfBand(pfX, pfY)) {
     offset += 2.5;
-  }
-  // BROWN1 jamb x80–95 mid-lower runs dark vs gold (~51 got vs ~79 gold).
-  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 105 && pfY < 126) {
-    offset -= 6.0;
-  }
-  // BROWN1 jamb mid-upper/lower seam — gold brighter warm browns (~111–123).
-  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 65 && pfY < 80) {
-    offset -= 4.0;
   }
   return offset;
 }
@@ -352,6 +356,19 @@ export function shadePalIndexWall(
       offset,
       pfX,
       pfY,
+    );
+  }
+  if (eastStepOverlay && isSpawnBrown1JambWallPfBand(pfX, pfY)) {
+    offset += spawnGoldBandExtra(
+      spawnBrown1JambTargetRgb(pfY),
+      playpal,
+      colormap,
+      palIndex,
+      lightlevel,
+      globOverZ,
+      offset,
+      -12,
+      14,
     );
   }
   return shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
