@@ -14,8 +14,8 @@ export const App = () => {
   const [mode, setMode] = useState<AppMode>('levels');
 
   return (
-    <div className="app-shell">
-      <header className="hero">
+    <div className="app-shell app-shell--single-page">
+      <header className="hero hero--compact">
         <DoomHeaderLogo />
 
         <nav className="mode-tabs" aria-label="Viewer mode">
@@ -24,14 +24,14 @@ export const App = () => {
             className={mode === 'levels' ? 'active' : ''}
             onClick={() => setMode('levels')}
           >
-            Level Viewer
+            Levels
           </button>
           <button
             type="button"
             className={mode === 'voxels' ? 'active' : ''}
             onClick={() => setMode('voxels')}
           >
-            Voxel Viewer
+            Voxels
           </button>
         </nav>
       </header>
@@ -46,10 +46,10 @@ export const App = () => {
         )}
       </main>
 
-      <div id="fps-counter" className="fps-counter">
+      <div id="fps-counter" className="fps-counter" aria-hidden="true">
         FPS: ...
       </div>
-      <div id="voxel-counter" className="voxel-counter">
+      <div id="voxel-counter" className="voxel-counter" aria-hidden="true">
         VOXELS: ...
       </div>
     </div>

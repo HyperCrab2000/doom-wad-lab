@@ -5,6 +5,10 @@ import {
   hudScreenToCanvas,
   VANILLA_HUD,
 } from '@/features/level-viewer/doomStatusBarFonts';
+import {
+  VANILLA_3D_HEIGHT,
+  VANILLA_SCREEN_HEIGHT,
+} from '@/wad/renderer/renderGame/gameViewLayout';
 
 export interface SpawnHudPatchImage {
   width: number;
@@ -103,10 +107,14 @@ export function drawSpawnHudAtBottom(
   const layout = computeHudLayout(frameWidth, frameHeight);
   const { barLeft, barY, scale } = layout;
   const hudTop = frameHeight - layout.canvasHeight;
+  // 3D playfield occupies top 168/200 — never fill face-rise over it (wipes outdoor sky voids).
+  const playfieldBottom = Math.round(
+    (frameHeight * VANILLA_3D_HEIGHT) / VANILLA_SCREEN_HEIGHT,
+  );
 
-  /** Fill face-rise + status band before ST* patches (transparent edges show through otherwise). */
+  /** Status band only — face-rise lets playfield (sky/floor) show through transparent patch edges. */
   ctx.fillStyle = 'rgb(47, 47, 47)';
-  ctx.fillRect(0, hudTop, frameWidth, layout.canvasHeight);
+  ctx.fillRect(0, playfieldBottom, frameWidth, frameHeight - playfieldBottom);
 
   ctx.save();
   ctx.translate(0, hudTop);

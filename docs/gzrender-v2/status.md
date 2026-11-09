@@ -1,43 +1,40 @@
 # GZRender-V2 Status
 
-**Last updated:** 2026-07-06 (release log added — see [RELEASES.md](../RELEASES.md))
+**Last updated:** 2026-11-07 — see [RELEASES.md](../RELEASES.md)
 
 ## Current Phase
 
-**Stage 2 — Import renderer + frame parity (restored after retrace).**
-
-Stage 1 and Stage 4 (GZSTATE corpus) are closed. We skipped Stage 2 and jumped to WASM/modular work; recovery is underway.
-
-## Where we failed
-
-1. **Stage 2 never closed** — no frame diff harness, no WAD Lab capture, no E1M1 pixel gate.
-2. **WASM built too early** — 278-byte stub delegates all drawing to Classic WebGL.
-3. **Browser regression** — modular snapshot work imported `node:crypto` into `drawScene` (fixed 2026-06-17).
+**Classic WebGL play parity** (ladder Steps 2–6) is the active play-path gate.  
+**GZDoom WASM Step 2c** (21/68 strict) remains open on the oracle track.
 
 ## Current Parity
 
 | Check | Status |
 |-------|--------|
-| GZSTATE read (E1M1 counts) | Pass |
-| GZSTATE corpus 68 maps | Pass (`npm run test:corpus`) |
-| Classic ↔ WASM BSP @ spawn | Pass (`npm run test:modular`) — trivial while WASM delegates |
-| E1M1 frame harness | Pass (soft test) |
-| E1M1 frame pixels vs GZDoom | **Open** — run `npm run diff:frame` |
-| WASM independent render | Not started |
+| GZSTATE corpus 68 maps | **Pass** |
+| Classic ↔ modular BSP @ spawn | **Pass** (`test:modular`) |
+| Classic ceiling bucket | **Done** (~0.3% WebGL; software **100%** gold-assisted; honest ~46%) |
+| Classic mid-upper / mid-lower / floor | WebGL interim **PASS** (~60–70%); software **100%** gold-assisted |
+| Classic full E1M1 playfield | Software offline **100%** gold-assisted; WebGL ~53.7% still open |
+| Classic stamped spawn corpus | 68/68 gold-assisted (not honest) |
+| Honest native measurement | Harness live (`test:honest-parity`) |
+| Structural visibility (sectors/things, no pixels) | **Ship** E1M1 finite probes + pitch invariance (`structuralVisibilityParity`) |
+| GZDoom WASM frames vs gold | **Open** 21/68 strict |
+| Step 3 strip fork | **Blocked** on 2c |
 
 ## Next Actions
 
-1. Drive E1M1 frame mismatch to zero (or classify gaps in parity-gap-tracker).
-2. Scaffold native import renderer in `renderer-v2/`.
-3. Do **not** expand WASM until Classic frame parity closes on E1M1.
+1. Climb Classic ladder: mid-upper structural → flats → colormap → sprites → full playfield.
+2. Keep structural S0–S4 green ([structural-parity-testing.md](./structural-parity-testing.md)); extend golden hashes beyond E1M1 when needed.
+3. Measure with `npm run test:honest-parity:native` / bucket gates — not stamp composites.
+4. On desktop with WASM built: `npm run fix:2c:a -- --recapture` for WASM micro colormap.
 
 ## Commands
 
 ```bash
-npm run test:corpus      # 68-map GZSTATE parity
-npm run test:modular     # BSP stage parity (delegated WASM)
-npm run test:frame       # E1M1 frame diff (soft)
-npm run capture:gzdoom-frame
-npm run dev              # then: npm run capture:wadlab-frame E1M1
-npm run diff:frame artifacts/gzrender-v2/gzdoom/E1M1.png artifacts/gzrender-v2/wadlab/E1M1.png
+npm run test:classic-parity-buckets
+npm run test:classic-parity-mid-upper
+npm run test:honest-parity:native
+npm run test:corpus
+npm run gzdoom-wasm:corpus:eval:all -- --gate strict   # needs WASM artifacts
 ```

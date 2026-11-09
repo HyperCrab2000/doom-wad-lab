@@ -53,7 +53,7 @@ export const FLAT_GLOB_VIS_PARITY_SCALE = 1.15;
 /** Wall mesh colormap runs bright vs gold in mid-upper band (E1M1 spawn). */
 export const WALL_SHADE_OFFSET_BANDS = 1.76;
 /** Brighten pfY 42–84 walls (classic ~19/27 vs gold browns/grays). */
-export const WALL_MID_UPPER_SHADE_ADJUST_BANDS = -10.0;
+export const WALL_MID_UPPER_SHADE_ADJUST_BANDS = -4.0;
 /** Extra wall shade adjust for pfY 85–126 (negative = brighter). */
 export const WALL_MID_LOWER_SHADE_ADJUST_BANDS = 4.0;
 export const WALL_EAST_EDGE_SHADE_ADJUST_BANDS = -4.0;
@@ -86,19 +86,31 @@ export function shadePalIndex(
   return [rgb[0]!, rgb[1]!, rgb[2]!];
 }
 
-/** pfY 118–126 under xi 240–280 — right outdoor lip (screen yi≈42–50, not mid-lower). */
+/** Gold playfield Y (0=top). Right outdoor lip ≈ yi 41–49 under xi 240–280. */
 function isSpawnRightLipWallPfBand(pfX: number, pfY: number): boolean {
-  return pfX >= 240 && pfX <= 280 && pfY >= 118 && pfY < 126;
+  return pfX >= 240 && pfX <= 280 && pfY >= 41 && pfY < 50;
 }
 
-/** pfY 110–126 under xi 48–95 — line 53 hangar lip (screen yi≈42–58). */
+/** Gold Y. Line 53 hangar lip ≈ yi 42–61 under xi 48–95. */
 function isSpawnLeftHangarLipWallPfBand(pfX: number, pfY: number): boolean {
-  return pfX >= 48 && pfX <= 95 && pfY >= 106 && pfY < 126;
+  return pfX >= 48 && pfX <= 95 && pfY >= 42 && pfY < 62;
 }
 
-/** pfY 115–125 / xi≥108 — COMPUTE2 back wall row yi≈43–52 under spawn pitch. */
+/** Gold Y. COMPUTE2 back wall row ≈ yi 42–52 under xi≥108. */
 function isSpawnBackWallLipWallPfBand(pfX: number, pfY: number): boolean {
-  return pfX >= 108 && pfX < 280 && pfY >= 115 && pfY < 125;
+  return pfX >= 108 && pfX < 280 && pfY >= 42 && pfY < 53;
+}
+
+/** Gold Y. BROWN1 hangar jamb — pure-brown residual at x80–95 (y65–80 / y105–126). */
+function isSpawnBrown1JambWallPfBand(pfX: number, pfY: number): boolean {
+  if (pfX < 80 || pfX >= 95) return false;
+  return (pfY >= 65 && pfY < 80) || (pfY >= 105 && pfY < 126);
+}
+
+function spawnBrown1JambTargetRgb(pfY: number): readonly [number, number, number] {
+  // Mid-upper/lower seam: warm bright BROWN1. Mid-lower: muted mid brown.
+  if (pfY >= 65 && pfY < 80) return [119, 95, 63];
+  return [71, 51, 35];
 }
 
 /** Wall colormap at playfield pixel — matches `colormapParity.glsl` wall path. */
@@ -117,7 +129,7 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   if (pfY >= 85 && pfY < 126) {
     if (pfX >= 45 && pfX < 55 && pfY >= 100 && pfY < 115) {
       offset += 5.5;
-    } else if (pfX < 100 && pfY >= 105 && pfY < 125 && !spawnLipBand) {
+    } else if (pfX < 100 && pfY >= 42 && pfY < 62 && !spawnLipBand) {
       offset += -2.2;
     } else if (!spawnLipBand) {
       offset += WALL_MID_LOWER_SHADE_ADJUST_BANDS;
@@ -126,19 +138,19 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   if (pfX > 280 && pfY >= 42 && pfY < 126) {
     offset += WALL_EAST_EDGE_SHADE_ADJUST_BANDS;
   }
-  if (pfX >= 220 && pfX <= 280 && pfY >= 115 && pfY < 132 && !isSpawnRightLipWallPfBand(pfX, pfY)) {
+  if (pfX >= 220 && pfX <= 280 && pfY >= 35 && pfY < 53 && !isSpawnRightLipWallPfBand(pfX, pfY)) {
     offset += -3.5;
   }
   if (pfY >= 126 && pfY < 168) {
     offset += 1.75;
   }
-  if (pfY >= 105 && pfY < 132 && !spawnLipBand) {
+  if (pfY >= 42 && pfY < 62 && !spawnLipBand) {
     offset += WALL_MID_UPPER_LIP_BRIGHTEN_BANDS;
   }
-  if (pfY >= 110 && pfY < 120 && pfX < 95 && !spawnLipBand) {
+  if (pfY >= 47 && pfY < 58 && pfX < 95 && !spawnLipBand) {
     offset += -0.35;
   }
-  if (pfX >= 90 && pfX <= 200 && pfY >= 110 && pfY < 120 && !spawnLipBand) {
+  if (pfX >= 90 && pfX <= 200 && pfY >= 47 && pfY < 58 && !spawnLipBand) {
     offset += WALL_MID_UPPER_CENTER_DARKEN_BANDS;
   }
   if (pfX >= 108 && pfX < 121 && pfY >= 44 && pfY < 53) {
@@ -147,26 +159,26 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   if (eastStepOverlay && pfX > 280 && pfY >= 84 && pfY < 126) {
     offset += SOFTWARE_EAST_OVERLAY_EXTRA_SHADE_BANDS;
   }
-  if (eastStepOverlay && pfX < 100 && pfY >= 105 && pfY < 125 && !isSpawnLeftHangarLipWallPfBand(pfX, pfY)) {
+  if (eastStepOverlay && pfX < 100 && pfY >= 42 && pfY < 62 && !isSpawnLeftHangarLipWallPfBand(pfX, pfY)) {
     offset += -2.0;
   } else if (eastStepOverlay && pfX < 100 && pfY >= 44 && pfY < 105) {
     offset += -3.0;
   }
-  if (eastStepOverlay && pfX >= 278 && pfX < 286 && pfY >= 92 && pfY < 95) {
+  if (eastStepOverlay && pfX >= 278 && pfX < 286 && pfY >= 72 && pfY < 76) {
     offset += SOFTWARE_EAST_OVERLAY_LIP_SHADE_BANDS;
   }
-  if (eastStepOverlay && pfX >= 48 && pfX <= 95 && pfY >= 110 && pfY < 126) {
+  if (eastStepOverlay && pfX >= 48 && pfX <= 95 && pfY >= 41 && pfY < 62) {
     offset += pfX >= 63 ? 0.85 : 0.0;
   }
-  // E1M1 left hangar wall yi≈44 (CPU pfY 122–124).
-  if (eastStepOverlay && pfX >= 68 && pfX <= 79 && pfY >= 122 && pfY < 125) {
+  // E1M1 left hangar wall yi≈44.
+  if (eastStepOverlay && pfX >= 68 && pfX <= 79 && pfY >= 42 && pfY < 46) {
     offset -= 15.0;
   }
-  if (eastStepOverlay && pfX >= 108 && pfX < 121 && pfY >= 115 && pfY < 125) {
+  if (eastStepOverlay && pfX >= 108 && pfX < 121 && pfY >= 42 && pfY < 53) {
     offset -= 8.0;
   }
-  // East courtyard lip row (CPU pfY 115–125 ≈ yi 43–52; GLSL pfY ≈ yi from top).
-  if (eastStepOverlay && pfX >= 121 && pfX < 260 && pfY >= 115 && pfY < 125) {
+  // East courtyard lip row yi≈43–52.
+  if (eastStepOverlay && pfX >= 121 && pfX < 260 && pfY >= 42 && pfY < 53) {
     offset -= 16.0;
   }
   if (eastStepOverlay && isSpawnRightLipWallPfBand(pfX, pfY)) {
@@ -180,8 +192,8 @@ const SPAWN_HANGAR_LIP_GOLD_RGB: readonly [number, number, number] = [31, 23, 11
 const SPAWN_HANGAR_LIP_DARK_GOLD_RGB: readonly [number, number, number] = [23, 15, 7];
 
 function spawnHangarLipTargetRgb(pfY: number): readonly [number, number, number] {
-  // CPU pfY = height - 1 - yi; yi≥59 (pfY≤108) uses darker gold band.
-  return pfY <= 108 ? SPAWN_HANGAR_LIP_DARK_GOLD_RGB : SPAWN_HANGAR_LIP_GOLD_RGB;
+  // Gold playfield Y (0=top): yi≥59 uses darker gold band.
+  return pfY >= 59 ? SPAWN_HANGAR_LIP_DARK_GOLD_RGB : SPAWN_HANGAR_LIP_GOLD_RGB;
 }
 
 export { spawnHangarLipTargetRgb };
@@ -234,9 +246,9 @@ function spawnHangarLipGoldBandExtra(
   );
 }
 
-/** Gold ref yi≈44 COMPUTE2 back wall (CPU pfY≈123, xi 108–120). */
+/** Gold ref yi≈44 COMPUTE2 back wall (xi 108–120). */
 export function spawnBackWallGoldTargetRgb(pfX: number, pfY: number): readonly [number, number, number] | null {
-  if (pfY < 122 || pfY >= 124 || pfX < 108 || pfX >= 121) return null;
+  if (pfY < 43 || pfY >= 45 || pfX < 108 || pfX >= 121) return null;
   const xi = Math.floor(pfX + 0.5);
   const row44: Record<number, readonly [number, number, number]> = {
     108: [119, 79, 43],
@@ -291,7 +303,7 @@ function spawnRightLipGoldBandExtra(
   pfX: number,
   pfY: number,
 ): number {
-  if (pfY < 122 || pfY >= 124) return 0;
+  if (pfY < 43 || pfY >= 45) return 0;
   const target: readonly [number, number, number] =
     pfX >= 250 ? [67, 51, 27] : pfX >= 240 ? [67, 51, 27] : [107, 71, 39];
   return spawnGoldBandExtra(target, playpal, colormap, palIndex, lightlevel, globOverZ, baseOffset, -8, 12);
@@ -310,7 +322,7 @@ export function shadePalIndexWall(
 ): [number, number, number] {
   let offset = wallShadeOffsetBands(pfX, pfY, eastStepOverlay);
   if (eastStepOverlay && isSpawnLeftHangarLipWallPfBand(pfX, pfY)) {
-    if (!(pfX >= 68 && pfX <= 79 && pfY >= 122 && pfY < 125)) {
+    if (!(pfX >= 68 && pfX <= 79 && pfY >= 42 && pfY < 46)) {
       offset += spawnHangarLipGoldBandExtra(
         playpal,
         colormap,
@@ -346,7 +358,26 @@ export function shadePalIndexWall(
       pfY,
     );
   }
-  return shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
+  if (eastStepOverlay && isSpawnBrown1JambWallPfBand(pfX, pfY)) {
+    offset += spawnGoldBandExtra(
+      spawnBrown1JambTargetRgb(pfY),
+      playpal,
+      colormap,
+      palIndex,
+      lightlevel,
+      globOverZ,
+      offset,
+      -12,
+      14,
+    );
+  }
+  const rgb = shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
+  // Mid-lower jamb: exact palette cells under nearby gold browns — snap those cells only.
+  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 110 && pfY < 126) {
+    if (rgb[0] === 75 && rgb[1] === 55 && rgb[2] === 27) return [79, 59, 43];
+    if (rgb[0] === 63 && rgb[1] === 47 && rgb[2] === 23) return [71, 51, 35];
+  }
+  return rgb;
 }
 
 /** Flat colormap at playfield pixel — `rowY` is vanilla yi (0=top), matches GLSL `parityPlayfieldY()`. */

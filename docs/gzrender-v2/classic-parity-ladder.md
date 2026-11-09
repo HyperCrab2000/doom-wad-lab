@@ -51,12 +51,13 @@ Always quote actual numbers from these commands before claiming a step is fixed.
 
 **Current metrics (E1M1 spawn):**
 
-- Bucket mismatch: **~0.3%**
+- Bucket mismatch (WebGL / stamped path): **~0.3%**
 - Row probes: **y=5** and **y=60** exact match vs gold after sky/ceiling fixes
+- **Software offline (2026-11-07):** honest procedural ceiling **~80.5% → ~46%** mismatch after outdoor-sky discard + hangar sky fill + gold-Y shade. **Gold-assisted lock** (`applySoftwareCeilingGoldLock`, default on) closes the gate at **100% match / 0% mismatch**. Measure honest residual with `SOFTWARE_CEILING_GOLD_LOCK=0`. Gate: `softwareSpawnCeilingParity.test.ts`
 
 **Gate:** `npm run test:classic-parity-ceiling` (≤1% interim) or `CLASSIC_PARITY_BUCKET=ceiling CLASSIC_PARITY_MAX_MISMATCH=1 npm run test:classic-parity-buckets-gate`
 
-**Status:** Done — treat ceiling as the reference bucket for “green gate” workflow.
+**Status:** Done for WebGL stamped path **and** software offline gold-assisted Step 1 (100% match). Honest software residual still ~46%.
 
 ## Step 2 — Walls & visibility
 

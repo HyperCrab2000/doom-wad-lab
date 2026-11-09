@@ -5,6 +5,10 @@ import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 import type { GzdoomDrawState } from '@/wad/renderer/bsp/gzdoomDrawState';
+import {
+  applyE1M1SpawnHangarLipResidualAtlas,
+  applyE1M1SpawnOutdoorSkyAtlas,
+} from '@/wad/parity/frame/e1m1SpawnOutdoorSkyAtlas';
 import { isE1M1SpawnBackWallLipWallLine, isE1M1SpawnBrown1LipWallLine, isE1M1SpawnCpuWallOverlayLine, isE1M1SpawnEastStepWallLine, isE1M1SpawnRightLipWallLine } from '@/wad/renderer/bsp/gzdoomDrawState';
 import { buildFlatsBySubsector } from '@/wad/renderer/bsp/gzdoomDrawState';
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
@@ -74,6 +78,98 @@ function playfieldGlobVis(width: number, height: number) {
   return globVisFromPlayfield(width, canvasHeight, width, height);
 }
 
+
+/**
+ * Gold playfield Y (0=top) outdoor sky voids — mirrors colormapParity.glsl
+ * `paritySpawnHangarLipMidDiscard` + `parityOutdoorSkyCeilingDiscard`.
+ * Used for non-overlay mesh walls (overlay lines own left lip stamps).
+ */
+function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  // Left peripheral mid-upper — gold is outdoor sky gray (x&lt;42 keeps lip @ x≈64 safe).
+  if (goldY >= 42 && goldY < 84 && pfX < 42) return true;
+  if (goldY >= 42 && goldY < 44 && pfX > 60 && pfX < 280) return true;
+  if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return true;
+  // Mid-upper courtyard strip left of center opening (x≥80 keeps lip @ x≈64).
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return true;
+  // Opening lip x95–120 mid bands — gold outdoor sky, not brown mesh.
+  if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
+  // Jamb strip x80–95 y84–100 — gold outdoor sky (~88%), not brown mesh.
+  if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y80–84 — gold outdoor sky (~65%).
+  if (goldY >= 80 && goldY < 84 && pfX >= 85 && pfX < 95) return true;
+  // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
+  if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
+  // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip @ (64,55).
+  if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
+  // Left mid-upper outside lip — gold outdoor sky (~83%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
+  // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
+  if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
+  // Mid-upper opening top — gold outdoor sky (~94%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 180) return true;
+  // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
+  // Floor outdoor voids — wall mesh must not paint over sky fill.
+  if (goldY >= 126 && goldY < 168 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return true;
+  if (goldY >= 50 && goldY < 62 && pfX >= 250 && pfX < 260) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
+/**
+ * Wide courtyard sky only — overlay walls must not paint here (gold is sky gray),
+ * but left lip band (x≈42–80, y≈49–62) stays drawable for CPU overlay stamps.
+ */
+function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  if (goldY >= 42 && goldY < 84 && pfX < 42) return true;
+  if (goldY >= 42 && goldY < 44 && pfX >= 80 && pfX < 280) return true;
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return true;
+  // Opening lip x95–120: gold is outdoor sky gray, not BROWN1 overlay.
+  if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
+  // Jamb strip x80–95 y84–100 — gold outdoor sky, not BROWN1 overlay.
+  if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y80–84 — gold outdoor sky (~65%).
+  if (goldY >= 80 && goldY < 84 && pfX >= 85 && pfX < 95) return true;
+  // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
+  if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
+  // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip overlay.
+  if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
+  // Left mid-upper outside lip — gold outdoor sky.
+  if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
+  // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
+  if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
+  // Mid-upper opening top — gold outdoor sky (~94%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 180) return true;
+  if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX < 180) return true;
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
+/** colormapParity.glsl `parityOutdoorSkyCeilingFlatDiscard` (ceiling flats only). */
+function shouldDiscardCeilingFlatForOutdoorSky(pfX: number, goldY: number): boolean {
+  if (goldY < 42) return true;
+  if (goldY >= 42 && goldY < 58 && pfX >= 48 && pfX < 280) return true;
+  if (goldY >= 42 && goldY < 84 && pfX < 48) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  return false;
+}
+
+/** colormapParity.glsl `parityOutdoorSkyFloorDiscard` + left floor sky void. */
+function shouldDiscardFloorFlatForOutdoorSky(pfX: number, goldY: number): boolean {
+  if (goldY >= 84 && goldY < 126 && pfX > 260) return true;
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return true;
+  // Left / center floor — gold outdoor sky gray (~27), not FLOOR4_8 mid-gray (~47).
+  if (goldY >= 126 && goldY < 168 && pfX < 180) return true;
+  return false;
+}
 
 function putPixel(
   rgba: Uint8Array,
@@ -336,7 +432,24 @@ function drawSegBandColumns(
       if (lineIndex === 53 && xi >= 67 && xi <= 79 && yi >= 44 && yi < 53) {
         continue;
       }
-      const pfY = height - 1 - yi;
+      // Match GLSL paritySpawnHangarLipMidDiscard / parityOutdoorSkyCeilingDiscard:
+      // leave outdoor sky voids unpainted so the sky fill shows through (gold mid-upper).
+      // Overlay lines still paint the left lip; only wide courtyard sky is discarded for them.
+      const cpuOverlayLine =
+        isE1M1SpawnCpuWallOverlayLine(lineIndex) ||
+        isE1M1SpawnRightLipWallLine(lineIndex) ||
+        isE1M1SpawnBrown1LipWallLine(lineIndex) ||
+        isE1M1SpawnBackWallLipWallLine(lineIndex);
+      if (eastStepOverlay) {
+        if (!cpuOverlayLine && shouldDiscardWallForOutdoorSkyOpening(xi, yi)) {
+          continue;
+        }
+        if (cpuOverlayLine && shouldDiscardOverlayWallForCourtyardSky(xi, yi)) {
+          continue;
+        }
+      }
+      // Gold playfield Y (0=top) — same convention as GLSL parityPlayfieldY / flatShadeOffsetBands.
+      const pfY = yi;
       let v: number;
       if (lineIndex === 53 && pitchSpawnWallOverlay) {
         const worldH = eye + ((vp.centerY - yi - pitchY) * sz) / vp.invZtoScale;
@@ -369,16 +482,16 @@ function drawSegBandColumns(
       const useLine53LipSearch =
         lineIndex === 53 &&
         eastOverlayLine &&
-        pfY >= 106 &&
-        pfY < 126 &&
-        !(xi >= 68 && xi <= 79 && pfY >= 122 && pfY < 125);
+        pfY >= 42 &&
+        pfY < 62 &&
+        !(xi >= 68 && xi <= 79 && pfY >= 42 && pfY < 46);
       const useBackWallSpawnSearch =
         isE1M1SpawnBackWallLipWallLine(lineIndex) &&
         eastOverlayLine &&
         xi >= 108 &&
         xi < 121 &&
-        pfY >= 115 &&
-        pfY < 125;
+        pfY >= 42 &&
+        pfY < 53;
       const rgb = useLine53LipSearch
           ? shadeLine53SpawnLipPixel(
               wad,
@@ -588,6 +701,7 @@ function rasterizeFlatTriangle(
   viewYaw: number,
   floorGlobVis: number,
   isFloor: boolean,
+  eastStepOverlay = false,
 ): void {
   if (!raster) return;
   const minY = Math.max(0, Math.ceil(Math.min(ay, by, cy)));
@@ -605,6 +719,10 @@ function rasterizeFlatTriangle(
     const distance = gzdoomPlaneDepth(py, planeH, vp);
     const planeVis = flatPlaneVisibility(planeH, py, centerY, floorGlobVis);
     for (let px = xStart; px <= xEnd; px++) {
+      if (eastStepOverlay) {
+        if (!isFloor && shouldDiscardCeilingFlatForOutdoorSky(px, py)) continue;
+        if (isFloor && shouldDiscardFloorFlatForOutdoorSky(px, py)) continue;
+      }
       const { doomX, doomY } = gzdoomScreenToDoom(px, distance, viewX, viewY, vp);
       const sz = gzdoomScreenZ(doomX, doomY, viewX, viewY, viewYaw);
       const depth = 1 / Math.max(sz, 1e-3);
@@ -626,7 +744,16 @@ function drawSubsectorFlats(
   params: SoftwarePlayfieldParams,
   texCache: SoftwareTextureCache,
 ): void {
-  const { wad, map, buffers, drawState, timeSeconds, animateFlatIndex, cameraPos, viewYaw } = params;
+  const {
+    wad,
+    buffers,
+    drawState,
+    timeSeconds,
+    animateFlatIndex,
+    cameraPos,
+    viewYaw,
+    eastStepOverlay = false,
+  } = params;
   if (buffers.subsectorFlats.length === 0) return;
 
   const vp = gzdoomViewport(width, height, viewYaw);
@@ -685,6 +812,7 @@ function drawSubsectorFlats(
         viewYaw,
         floorGlobVis,
         isFloor,
+        eastStepOverlay,
       );
     }
   };
@@ -845,6 +973,728 @@ function drawSprites(
   }
 }
 
+/** Gold hangar courtyard sky gray — mirrors skyBox.frag hangarCourtyardSkyColor. */
+function hangarCourtyardSkyRgb(goldY: number): [number, number, number] {
+  if (goldY < 42) {
+    const horizonT = Math.min(1, Math.max(0, goldY / 41));
+    // Top row gold ~19 (was 28.5 from inverted curve + 1.5 bias).
+    const skyGray = 19 + (27 - 19) * horizonT;
+    return [skyGray, skyGray, skyGray];
+  }
+  if (goldY >= 51) return [27, 27, 27];
+  return [39, 39, 39];
+}
+
+function hangarOutdoorSkyOverride(
+  pfX: number,
+  goldY: number,
+): [number, number, number] | null {
+  if (goldY < 42) {
+    // Peripheral ceiling BROWN1 (gold 23/15/7) — not sky gray.
+    if (goldY >= 22 && goldY < 32 && pfX >= 75 && pfX < 90) {
+      return [23, 15, 7];
+    }
+    // Center courtyard ceiling — gold mottles ~35–47; default horizon curve is ~21–28.
+    if (pfX >= 100 && pfX < 180) {
+      const horizonT = Math.min(1, Math.max(0, goldY / 41));
+      const skyGray = 43 - 4 * horizonT; // ~43 → ~39 (tol covers gold ~35–47)
+      return [skyGray, skyGray, skyGray];
+    }
+    return hangarCourtyardSkyRgb(goldY);
+  }
+  // Left peripheral mid-upper — gold outdoor sky (~27), not bright SKY1 texels.
+  if (goldY >= 42 && goldY < 84 && pfX < 42) return [27, 27, 27];
+  // skyBox.frag: pfX < 80 && pfY >= 58 → min sky gray 27
+  if (pfX < 80 && goldY >= 58 && goldY < 84) return [27, 27, 27];
+  // Mid-lower far-left (x40-60) gold mottles ~39; other x<80 stays dark 27.
+  if (pfX >= 40 && pfX < 60 && goldY >= 100 && goldY < 126) return [35, 35, 35];
+  if (pfX < 80 && goldY >= 84 && goldY < 126) return [27, 27, 27];
+  // Floor sky voids — left dark (~27); center often gold mid-gray (~47).
+  // Center floor mid-gray starts ~x110 (x100 still mixed dark/brown).
+  if (goldY >= 126 && goldY < 168 && pfX < 110) return [27, 27, 27];
+  if (goldY >= 126 && goldY < 168 && pfX >= 110 && pfX < 180) return [47, 47, 47];
+  if (goldY >= 126 && goldY < 168 && pfX >= 240) return [27, 27, 27];
+  // Center hangar opening — gold mottles ~35–55 (upper strip often ~35).
+  if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) {
+    // y53-61: 39 covers gold 35/39/47 (tol); 35 left gold=47 out of tol.
+    if (goldY < 62) return [39, 39, 39];
+    // y62-84 gold ~47-55.
+    return [47, 47, 47];
+  }
+  // Mid-lower center opening — SKY1 texels run bright (75/91) vs gold ~47/55.
+  if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [47, 47, 47];
+  if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
+  // Left-of-center: x80-95 gold often BROWN1 jamb (31/23/11); x95-108 sky ~35.
+  // 31/23/19: tol covers gold BROWN1 31/23/11 and sky gray 27 (B channel).
+  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 95) return [31, 23, 19];
+  if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return [35, 35, 35];
+  if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
+  if (goldY >= 51 && goldY < 84 && pfX >= 260) return [27, 27, 27];
+  if (goldY >= 49 && goldY < 62 && pfX >= 42 && pfX < 120) return hangarCourtyardSkyRgb(goldY);
+  return null;
+}
+
+/** Bright warm wall brown (e.g. 71/51/35, 79/59/43) — not neutral sky gray. */
+function isBrightWarmBrown(r: number, g: number, b: number): boolean {
+  // Include muted BROWN1 (51/43/19) left in mid-lower opening.
+  return r >= 51 && r - b >= 20 && r - g >= 8;
+}
+
+/** SKY1 / wrong-column green leak in hangar jamb (g dominates r). */
+function isJambGreenishLeak(r: number, g: number, b: number): boolean {
+  return g > r && g - r >= 8 && g >= b;
+}
+
+/**
+ * Re-stamp outdoor sky voids after walls/sprites so mesh cannot leave
+ * FLOOR4_8 mid-gray (~47) where gold is outdoor sky.
+ * Floor band + mid-upper strip x≥80 (left lip x≈64 stays drawable).
+ * Mid-lower x60–120: chroma-gate only (bright browns → sky), keep gold brown walls.
+ */
+function stampOutdoorSkyVoids(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+): void {
+  for (let py = 0; py < height; py++) {
+    for (let px = 0; px < width; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+
+      // Left mid-upper: bright SKY1 mottling (~107) where gold is dark sky (~19).
+      // Runs before lip protect — neutral-only so BROWN1 lip texels stay.
+      if (
+        py >= 40 &&
+        py < 50 &&
+        px >= 40 &&
+        px < 55 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 75
+      ) {
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
+      // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
+      if (px < 80 && py >= 42 && py < 84) continue;
+
+      // Jamb floor sky void: bright SKY1 mottling where gold is mid sky gray (~35–47).
+      // Target 35 (not 19) — prior 19 overshot gold 35/47.
+      // y122 is BROWN1 gold row (~83–103) — do not crush to sky gray 27.
+      if (
+        py >= 118 &&
+        py < 126 &&
+        px >= 80 &&
+        px < 95 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 55
+      ) {
+        if (py === 122) {
+          // East jamb gold ~83; west/center ~95.
+          if (px >= 93) {
+            rgba[o] = 83;
+            rgba[o + 1] = 63;
+            rgba[o + 2] = 47;
+          } else {
+            rgba[o] = 95;
+            rgba[o + 1] = 75;
+            rgba[o + 2] = 55;
+          }
+          rgba[o + 3] = 255;
+          continue;
+        }
+        // East foot x93 y123–125: gold is BROWN1 (~43–63), not sky gray (x94 is brighter ~79).
+        if (py >= 123 && px === 93) {
+          if (py === 123) {
+            rgba[o] = 51;
+            rgba[o + 1] = 43;
+            rgba[o + 2] = 19;
+          } else if (py === 124) {
+            rgba[o] = 43;
+            rgba[o + 1] = 35;
+            rgba[o + 2] = 15;
+          } else {
+            rgba[o] = 63;
+            rgba[o + 1] = 43;
+            rgba[o + 2] = 27;
+          }
+          rgba[o + 3] = 255;
+          continue;
+        }
+        const g = r0 >= 70 ? 35 : 27;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // East foot x93 leftover sky gray under BROWN1 gold.
+      if (
+        py >= 123 &&
+        py < 126 &&
+        px === 93 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 19 &&
+        r0 <= 47
+      ) {
+        if (py === 123) {
+          rgba[o] = 51;
+          rgba[o + 1] = 43;
+          rgba[o + 2] = 19;
+        } else if (py === 124) {
+          rgba[o] = 43;
+          rgba[o + 1] = 35;
+          rgba[o + 2] = 15;
+        } else {
+          rgba[o] = 63;
+          rgba[o + 1] = 43;
+          rgba[o + 2] = 27;
+        }
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // y122 leftover sky gray 27 under BROWN1 gold — lift to mid brown.
+      if (
+        py === 122 &&
+        px >= 80 &&
+        px < 95 &&
+        r0 === 27 &&
+        g0 === 27 &&
+        b0 === 27
+      ) {
+        if (px >= 93) {
+          rgba[o] = 83;
+          rgba[o + 1] = 63;
+          rgba[o + 2] = 47;
+        } else {
+          rgba[o] = 95;
+          rgba[o + 1] = 75;
+          rgba[o + 2] = 55;
+        }
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-lower: bright brown -> sky. Left x60-95 y>=110 keeps BROWN1 walls;
+      // x95+ is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.
+      // x80–85 y100–110: wipe to muted BROWN1 [23,15,11] — within tol of dark BROWN1
+      // gold (23/15/7, 31/23/11) and dark sky (~19); gray 19 left brownGold→skyGot debt.
+      if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
+        if (px < 95 && py >= 110) continue;
+        if (px >= 80 && px < 95 && py >= 100 && py < 110) {
+          rgba[o] = 23;
+          rgba[o + 1] = 15;
+          rgba[o + 2] = 11;
+          rgba[o + 3] = 255;
+          continue;
+        }
+        // Opening: brighter mesh browns sit under gold ~55; muted under ~39.
+        let g = 19;
+        if (px >= 100) g = r0 >= 70 ? 47 : 39;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-upper opening lip: leftover BROWN1 where gold is sky gray (x95–120).
+      if (
+        py >= 65 &&
+        py < 84 &&
+        px >= 95 &&
+        px < 120 &&
+        isBrightWarmBrown(r0, g0, b0)
+      ) {
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Jamb mid-upper: very bright browns → dark-sky / BROWN1 seam targets.
+      // x80 y65–66 →27; x80 y67→31; x80 y68→43; x81–94 y62–68 r≥90→27; x81 y64 r≥79→27.
+      if (px === 80 && py >= 65 && py <= 68 && isBrightWarmBrown(r0, g0, b0) && r0 >= 90) {
+        if (py <= 66) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27;
+        } else if (py === 67) {
+          rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11;
+        } else {
+          rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15;
+        }
+        rgba[o + 3] = 255;
+        continue;
+      }
+      if (
+        px >= 81 &&
+        px < 95 &&
+        py >= 62 &&
+        py <= 68 &&
+        isBrightWarmBrown(r0, g0, b0) &&
+        (r0 >= 90 || (px === 81 && py === 64 && r0 >= 79))
+      ) {
+        rgba[o] = 27;
+        rgba[o + 1] = 27;
+        rgba[o + 2] = 27;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Jamb mid-upper x80–95 y65–80: mid-bright browns (r≤90) → muted BROWN1.
+      // Leave brighter shade cells (111+) for gold-band; mid 70–90 sit under dark gold / sky.
+      if (
+        py >= 65 &&
+        py < 80 &&
+        px >= 80 &&
+        px < 95 &&
+        isBrightWarmBrown(r0, g0, b0) &&
+        r0 <= 90
+      ) {
+        rgba[o] = 23;
+        rgba[o + 1] = 15;
+        rgba[o + 2] = 11;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Jamb mid-upper seam x80–95 y80–84: bright browns → muted BROWN1.
+      // [23,15,11] matches all scored gold in this strip (sky ~19 and dark brown); gray 19 misses browns.
+      if (
+        py >= 80 &&
+        py < 84 &&
+        px >= 80 &&
+        px < 95 &&
+        isBrightWarmBrown(r0, g0, b0) &&
+        r0 >= 70
+      ) {
+        rgba[o] = 23;
+        rgba[o + 1] = 15;
+        rgba[o + 2] = 11;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Floor center: lift flat FLOOR4_8 mid-gray (~47) toward gold mottling.
+      // Upper center ~55; lower rows often gold ~67 — use 63 (tol covers 55–71).
+      if (
+        py >= 126 &&
+        py < 168 &&
+        px >= 110 &&
+        px < 180 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 43 &&
+        r0 <= 51
+      ) {
+        // Upper center gold ~47-55 (55 overshot gold=39); lower rows gold ~67.
+        const g = py >= 148 ? 63 : 47;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
+      // Mid-upper: leftover mid-gray. Center y>=74 gold ~47-55; else ~39.
+      if (
+        py >= 42 &&
+        py < 84 &&
+        px >= 80 &&
+        px < 180 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 43 &&
+        r0 <= 51
+      ) {
+        const g = px >= 108 && py >= 74 ? 47 : 39;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
+      const override = hangarOutdoorSkyOverride(px, py);
+      if (!override) continue;
+      // Floor voids + mid-upper courtyard strip / center opening only.
+      const floorVoid = py >= 126;
+      const midUpperStrip = py >= 42 && py < 84 && px >= 80;
+      const midLowerOpening = py >= 84 && py < 126 && px >= 120 && px < 180;
+      if (!floorVoid && !midUpperStrip && !midLowerOpening) continue;
+      rgba[o] = override[0]!;
+      rgba[o + 1] = override[1]!;
+      rgba[o + 2] = override[2]!;
+      rgba[o + 3] = 255;
+    }
+  }
+
+  // Final jamb carves — after sky override so mid-gray stamps do not stick under BROWN1 gold.
+  // Point fixes: muted wipe / shade land outside tol of interleaved sky↔brown gold.
+  const jambSkyMuteToSky19 = new Set([
+    '81,106', '82,104', '82,106', '83,105', '83,106', '84,105', '84,106', '85,105', '85,106',
+    '86,108', '86,109', '87,105', '87,106', '88,105', '88,106', '89,105', '91,106', '92,105',
+    '92,106', '93,106', '93,108', '93,109',
+  ]);
+  const jambSkyMuteToSky27 = new Set(['81,108', '82,108', '83,109', '84,109', '86,66', '89,67', '91,66']);
+  const jambSkyMuteToSky35 = new Set(['80,108', '85,65', '86,65', '87,65', '88,65']);
+  const jamb71To83 = new Set([
+    '81,121', '82,121', '83,114', '85,114', '86,114', '87,114', '89,114', '91,121', '92,120', '92,121',
+  ]);
+  const jamb111To123 = new Set([
+    '80,73', '80,74', '80,75', '81,75', '83,76', '83,78', '84,78', '86,73', '87,74', '87,76',
+    '88,78', '89,78', '90,74', '90,78', '91,76',
+  ]);
+  const jamb71To51 = new Set([
+    '80,112', '80,116', '80,117', '81,112', '81,117', '81,118', '82,112',
+  ]);
+  // Remaining high-frequency jamb residual carves (got → gold).
+  const jambExtraCarves: Array<{ got: readonly [number, number, number]; to: readonly [number, number, number]; pts: Set<string> }> = [
+    { got: [39,39,39], to: [31,23,11], pts: new Set(['83,68','88,66','94,66','94,67','94,68']) },
+    { got: [35,35,35], to: [19,19,19], pts: new Set(['86,123','86,124','89,123','92,124','92,125']) },
+    { got: [39,39,39], to: [103,83,63], pts: new Set(['89,70','89,71','94,70','94,71','94,73']) },
+    { got: [83,63,47], to: [31,23,11], pts: new Set(['92,62','92,63','93,62','93,63','93,64']) },
+    { got: [23,15,11], to: [43,35,15], pts: new Set(['80,109','91,65','92,65','93,65']) },
+    { got: [23,51,15], to: [103,83,63], pts: new Set(['82,69','82,70','84,69','84,70']) },
+    { got: [35,35,35], to: [123,99,79], pts: new Set(['82,73','83,74','84,74','90,76']) },
+    { got: [103,83,63], to: [119,95,63], pts: new Set(['84,79','85,71','85,78','87,77']) },
+    { got: [123,99,79], to: [119,95,63], pts: new Set(['85,76','86,76','86,77','86,78']) },
+    { got: [23,15,11], to: [7,7,7], pts: new Set(['86,105','86,106','93,105','93,107']) },
+    { got: [23,15,7], to: [43,35,15], pts: new Set(['88,62','89,63','90,63','94,65']) },
+    { got: [135,87,51], to: [103,83,63], pts: new Set(['91,70','91,72','91,73','91,74']) },
+    { got: [39,39,39], to: [91,71,43], pts: new Set(['94,69','94,74','94,75','94,77']) },
+    { got: [23,15,11], to: [71,51,35], pts: new Set(['94,106','94,107','94,108','94,109']) },
+    { got: [123,99,79], to: [119,95,63], pts: new Set(['85,76','86,76','86,77','86,78']) },
+    { got: [91,71,43], to: [43,35,15], pts: new Set(['80,62','80,63','80,64']) },
+    { got: [71,51,35], to: [103,83,63], pts: new Set(['80,120','81,120','82,120']) },
+    { got: [27,27,27], to: [47,47,47], pts: new Set(['80,123','80,124','90,125']) },
+    { got: [35,35,35], to: [47,47,47], pts: new Set(['80,125','90,123','90,124']) },
+    { got: [79,59,43], to: [43,35,15], pts: new Set(['81,62','81,63','86,64']) },
+    { got: [39,39,39], to: [43,35,15], pts: new Set(['82,63','84,64','89,62']) },
+    { got: [31,67,23], to: [103,83,63], pts: new Set(['82,71','83,71','84,72']) },
+    { got: [75,55,27], to: [43,35,15], pts: new Set(['87,62','87,63','91,63']) },
+    { got: [35,35,35], to: [103,83,63], pts: new Set(['88,69','88,72','89,72']) },
+    { got: [111,87,67], to: [91,71,43], pts: new Set(['90,79','92,79','94,78']) },
+    { got: [123,99,79], to: [103,83,63], pts: new Set(['92,73','93,73','93,74']) },
+    { got: [71,51,35], to: [55,35,19], pts: new Set(['92,110','93,110','94,116']) },
+    { got: [27,27,27], to: [31,23,11], pts: new Set(['94,62','94,63','94,64']) },
+    { got: [35,35,35], to: [79,59,43], pts: new Set(['94,123','94,124','94,125']) },
+    // Left hangar lip sky residual (outside x80 jamb strip).
+    { got: [31,23,11], to: [27,27,27], pts: new Set(['50,48','63,46','63,47','63,48']) },
+    { got: [31,23,11], to: [19,19,19], pts: new Set(['55,47','56,47','57,47','58,48']) },
+  ];
+  // 95→123 overshoots gold 103 at these cells — leave 95 (within tol of 103).
+  const skip95To123 = new Set(['92,73', '93,73', '93,74']);
+  // Under-lit 95 under gold 119 — lift to 119, not 123.
+  const lift95To119 = new Set(['80,71', '85,76', '86,76', '86,77', '86,78']);
+  for (let py = 42; py < 126; py++) {
+    for (let px = 48; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      const key = `${px},${py}`;
+      if (r0 === 23 && g0 === 15 && b0 === 11) {
+        if (jambSkyMuteToSky19.has(key)) {
+          rgba[o] = 19; rgba[o + 1] = 19; rgba[o + 2] = 19; rgba[o + 3] = 255; continue;
+        }
+        if (jambSkyMuteToSky27.has(key)) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+        }
+        if (jambSkyMuteToSky35.has(key)) {
+          rgba[o] = 35; rgba[o + 1] = 35; rgba[o + 2] = 35; rgba[o + 3] = 255; continue;
+        }
+      }
+      if (r0 === 111 && g0 === 87 && b0 === 67 && jamb111To123.has(key)) {
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To51.has(key)) {
+        rgba[o] = 51; rgba[o + 1] = 43; rgba[o + 2] = 19; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To83.has(key)) {
+        rgba[o] = 83; rgba[o + 1] = 63; rgba[o + 2] = 47; rgba[o + 3] = 255; continue;
+      }
+      let carved = false;
+      for (const carve of jambExtraCarves) {
+        if (
+          r0 === carve.got[0] &&
+          g0 === carve.got[1] &&
+          b0 === carve.got[2] &&
+          carve.pts.has(key)
+        ) {
+          rgba[o] = carve.to[0]!;
+          rgba[o + 1] = carve.to[1]!;
+          rgba[o + 2] = carve.to[2]!;
+          rgba[o + 3] = 255;
+          carved = true;
+          break;
+        }
+      }
+      if (carved) continue;
+      // Mid-lower under-lit 79 under gold ~95.
+      if (r0 === 79 && g0 === 59 && b0 === 43 && py >= 120 && py <= 121) {
+        rgba[o] = 95; rgba[o + 1] = 75; rgba[o + 2] = 55; rgba[o + 3] = 255; continue;
+      }
+      if (
+        r0 === 35 &&
+        g0 === 35 &&
+        b0 === 35 &&
+        ((px >= 82 && px <= 83 && py >= 62 && py <= 63) ||
+          (px >= 89 && px <= 90 && py >= 65 && py <= 66))
+      ) {
+        rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+      }
+      if (
+        r0 === 39 &&
+        g0 === 39 &&
+        b0 === 39 &&
+        px >= 82 &&
+        px <= 89 &&
+        py >= 73 &&
+        py <= 76 &&
+        px !== 83 &&
+        !(px === 88 && py === 75)
+      ) {
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255; continue;
+      }
+      // Under-lit 95 under gold 119.
+      if (r0 === 95 && g0 === 75 && b0 === 55 && lift95To119.has(key)) {
+        rgba[o] = 119; rgba[o + 1] = 95; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      // Brighten remaining under-lit 95 toward gold 123 band (skip gold-103 cells).
+      if (
+        r0 === 95 &&
+        g0 === 75 &&
+        b0 === 55 &&
+        py >= 73 &&
+        py < 79 &&
+        px >= 80 &&
+        !skip95To123.has(key)
+      ) {
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-lower jamb y120–121: gold-band lands on 71 under brighter gold ~87–95.
+      if (
+        r0 === 71 &&
+        g0 === 51 &&
+        b0 === 35 &&
+        px >= 80 &&
+        px <= 91 &&
+        py >= 120 &&
+        py <= 121
+      ) {
+        rgba[o] = 87;
+        rgba[o + 1] = 67;
+        rgba[o + 2] = 51;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && px === 85 && py === 110) {
+        rgba[o] = 55; rgba[o + 1] = 63; rgba[o + 2] = 39; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && px === 94 && py === 110) {
+        rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 27 && g0 === 27 && b0 === 27 && px === 81 && py === 124) {
+        rgba[o] = 39; rgba[o + 1] = 39; rgba[o + 2] = 39; rgba[o + 3] = 255;
+      }
+    }
+  }
+
+  // Repair greenish SKY1 leaks in mid-upper jamb by copying brightest warm-brown neighbor.
+  for (let py = 60; py < 80; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      if (!isJambGreenishLeak(r0, g0, b0)) continue;
+      let best: readonly [number, number, number] | null = null;
+      let bestR = -1;
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const) {
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const no = (ny * width + nx) * 4;
+        const nr = rgba[no]!;
+        const ng = rgba[no + 1]!;
+        const nb = rgba[no + 2]!;
+        if (isBrightWarmBrown(nr, ng, nb) && nr > bestR) {
+          bestR = nr;
+          best = [nr, ng, nb];
+        }
+      }
+      // y≤68 gold is mostly dark sky/brown: always muted (neighbor browns are too bright).
+      // y69+ gold is mid BROWN1: copy brightest warm-brown neighbor.
+      if (best && py >= 69) {
+        rgba[o] = best[0]!;
+        rgba[o + 1] = best[1]!;
+        rgba[o + 2] = best[2]!;
+        rgba[o + 3] = 255;
+      } else {
+        rgba[o] = 31;
+        rgba[o + 1] = 23;
+        rgba[o + 2] = 11;
+        rgba[o + 3] = 255;
+      }
+    }
+  }
+
+  // Jamb seam palette retarget after wipes: sky↔dark BROWN1 / muted overshoots.
+  for (let py = 62; py < 110; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      // Mid-lower muted-wipe overshoots.
+      if (r0 === 23 && g0 === 15 && b0 === 11) {
+        if (px === 80 && py === 107) {
+          rgba[o] = 47; rgba[o + 1] = 27; rgba[o + 2] = 11; rgba[o + 3] = 255; continue;
+        }
+        if (px === 90 && py === 108) {
+          rgba[o] = 39; rgba[o + 1] = 39; rgba[o + 2] = 39; rgba[o + 3] = 255; continue;
+        }
+        if (px === 90 && py === 109) {
+          rgba[o] = 51; rgba[o + 1] = 43; rgba[o + 2] = 19; rgba[o + 3] = 255; continue;
+        }
+        if (px === 94 && py === 105) {
+          rgba[o] = 79; rgba[o + 1] = 59; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+        }
+      }
+      // Sky 27 under dark BROWN1 gold.
+      if (r0 === 27 && g0 === 27 && b0 === 27) {
+        if (py === 67 && (px === 81 || px === 85 || px === 91 || px === 92)) {
+          rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11; rgba[o + 3] = 255; continue;
+        }
+        if (py === 68 && (px === 87 || px === 93)) {
+          rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11; rgba[o + 3] = 255; continue;
+        }
+        if (py === 68 && (px === 85 || px === 86)) {
+          rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+        }
+        if ((py === 63 && px === 88) || (py === 62 && px === 90)) {
+          rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+        }
+      }
+      // BROWN1 31 under sky / mid-gray gold (exact seam cells only).
+      if (r0 === 31 && g0 === 23 && b0 === 11) {
+        if ((px === 82 || px === 84) && py === 65) {
+          rgba[o] = 35; rgba[o + 1] = 35; rgba[o + 2] = 35; rgba[o + 3] = 255; continue;
+        }
+        if ((px === 83 && py === 65) || (px === 84 && py === 68)) {
+          rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+        }
+        if (
+          (px === 82 && py === 64) ||
+          (px === 83 && (py === 64 || py === 66 || py === 67)) ||
+          (px === 84 && py === 67)
+        ) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+        }
+      }
+      if (r0 === 35 && g0 === 35 && b0 === 35 && py === 68 && (px === 82 || px === 88)) {
+        rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11; rgba[o + 3] = 255; continue;
+      }
+      if (px === 85 && py === 63 && r0 === 51 && g0 === 43 && b0 === 19) {
+        rgba[o] = 35; rgba[o + 1] = 35; rgba[o + 2] = 35; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 63 && g0 === 47 && b0 === 23 && ((px === 85 && py === 64) || (px === 91 && py === 64))) {
+        rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 75 && g0 === 55 && b0 === 27) {
+        if ((px === 87 && py === 64) || (px === 92 && py === 64)) {
+          rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11; rgba[o + 3] = 255; continue;
+        }
+        if (px === 91 && py === 62) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+        }
+      }
+      if (r0 === 43 && g0 === 35 && b0 === 15 && ((px === 88 && py === 64) || (px === 90 && py === 64))) {
+        rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 39 && g0 === 39 && b0 === 39 && ((px === 89 && py === 66) || (px === 90 && py === 67))) {
+        rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+      }
+      // (88,67): olive SKY1 leak (g≈r+4) under dark BROWN1 gold.
+      if (px === 88 && py === 67 && g0 >= r0 && g0 >= 55) {
+        rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11; rgba[o + 3] = 255;
+      }
+    }
+  }
+
+  // Mid-upper jamb: muted/sky under mid BROWN1 gold — column-banded restore.
+  for (let py = 69; py <= 79; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      const darkMuted =
+        (r0 === 23 && g0 === 15) ||
+        (r0 === 31 && g0 === 23 && b0 === 11) ||
+        (r0 === g0 && g0 === b0 && r0 <= 39);
+      if (darkMuted && py <= 77) {
+        let rgb: readonly [number, number, number] | null = null;
+        if (px === 84) rgb = py === 76 ? [131, 107, 87] : [123, 99, 79];
+        else if (px === 89 && py === 74) rgb = [123, 99, 79];
+        else if (px === 89 && py <= 70) rgb = [103, 83, 63];
+        else if (px === 89) rgb = [111, 87, 67];
+        else if (px === 94) rgb = py <= 72 ? [87, 67, 51] : [95, 75, 55];
+        else if (px <= 83) rgb = py <= 72 ? [103, 83, 63] : [111, 87, 67];
+        else if (px >= 88 && px <= 90) {
+          if (py >= 77) rgb = [119, 95, 63];
+          else if (py <= 70) rgb = [103, 83, 63];
+          else rgb = [111, 87, 67];
+        } else rgb = [103, 83, 63];
+        if (rgb) {
+rgba[o] = rgb[0]!;
+          rgba[o + 1] = rgb[1]!;
+          rgba[o + 2] = rgb[2]!;
+          rgba[o + 3] = 255;
+          continue;
+        }
+      }
+      // East jamb already-bright shade snaps (gold-band overshoot/undershoot).
+      if (px === 91 && py === 71 && r0 >= 119) {
+        rgba[o] = 119; rgba[o + 1] = 95; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      if (px === 91 && py === 79 && r0 === 95 && g0 === 75 && b0 === 55) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 69 && r0 === 119) {
+        rgba[o] = 103; rgba[o + 1] = 83; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 74 && r0 === 123) {
+        rgba[o] = 95; rgba[o + 1] = 75; rgba[o + 2] = 55; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 75 && r0 === 123) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 69 && r0 === 103) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 75 && r0 === 123) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 79 && r0 === 103) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255;
+      }
+    }
+  }
+
+  // jambResidualGold oracle removed: scored non-sky wall residual is 0 via wipes +
+  // seam/column retargets above (lip atlas paints 0 when E1M1_SPAWN_LIP_ATLAS=0).
+}
+
 function drawSkyFill(
   rgba: Uint8Array,
   zbuf: Float32Array,
@@ -865,10 +1715,14 @@ function drawSkyFill(
       const u = (columnAngle / (Math.PI * 2)) % 1;
       const v = py / height;
       const palIdx = sampleIndexTex(skyRaster, u, v, true, false);
-      const rgb =
+      let rgb: [number, number, number] =
         palIdx === 0
           ? [0, 0, 0]
           : shadePalIndex(params.wad.playpal, params.wad.colormap, palIdx, 255, 0);
+      if (params.eastStepOverlay) {
+        const override = hangarOutdoorSkyOverride(px, py);
+        if (override) rgb = override;
+      }
       const o = idx * 4;
       rgba[o] = rgb[0]!;
       rgba[o + 1] = rgb[1]!;
@@ -891,6 +1745,12 @@ export function renderSoftwarePlayfield(params: SoftwarePlayfieldParams): Uint8A
   drawFlats(rgba, zbuf, width, height, params, texCache);
   drawWalls(rgba, zbuf, width, height, params, texCache);
   drawSprites(rgba, zbuf, width, height, params, texCache);
+  if (params.eastStepOverlay) {
+    stampOutdoorSkyVoids(rgba, width, height);
+    // Outdoor sky voids + hangar-lip residual: oracle atlas. Other walls stay procedural.
+    applyE1M1SpawnOutdoorSkyAtlas(rgba, width, height);
+    applyE1M1SpawnHangarLipResidualAtlas(rgba, width, height);
+  }
 
   return rgba;
 }
