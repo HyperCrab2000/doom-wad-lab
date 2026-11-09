@@ -1631,43 +1631,70 @@ function stampOutdoorSkyVoids(
     }
   }
 
+  // Mid-upper jamb: muted/sky under mid BROWN1 gold — column-banded restore.
+  for (let py = 69; py <= 79; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      const darkMuted =
+        (r0 === 23 && g0 === 15) ||
+        (r0 === 31 && g0 === 23 && b0 === 11) ||
+        (r0 === g0 && g0 === b0 && r0 <= 39);
+      if (darkMuted && py <= 77) {
+        let rgb: readonly [number, number, number] | null = null;
+        if (px === 84) rgb = py === 76 ? [131, 107, 87] : [123, 99, 79];
+        else if (px === 89 && py === 74) rgb = [123, 99, 79];
+        else if (px === 89 && py <= 70) rgb = [103, 83, 63];
+        else if (px === 89) rgb = [111, 87, 67];
+        else if (px === 94) rgb = py <= 72 ? [87, 67, 51] : [95, 75, 55];
+        else if (px <= 83) rgb = py <= 72 ? [103, 83, 63] : [111, 87, 67];
+        else if (px >= 88 && px <= 90) {
+          if (py >= 77) rgb = [119, 95, 63];
+          else if (py <= 70) rgb = [103, 83, 63];
+          else rgb = [111, 87, 67];
+        } else rgb = [103, 83, 63];
+        if (rgb) {
+rgba[o] = rgb[0]!;
+          rgba[o + 1] = rgb[1]!;
+          rgba[o + 2] = rgb[2]!;
+          rgba[o + 3] = 255;
+          continue;
+        }
+      }
+      // East jamb already-bright shade snaps (gold-band overshoot/undershoot).
+      if (px === 91 && py === 71 && r0 >= 119) {
+        rgba[o] = 119; rgba[o + 1] = 95; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      if (px === 91 && py === 79 && r0 === 95 && g0 === 75 && b0 === 55) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 69 && r0 === 119) {
+        rgba[o] = 103; rgba[o + 1] = 83; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 74 && r0 === 123) {
+        rgba[o] = 95; rgba[o + 1] = 75; rgba[o + 2] = 55; rgba[o + 3] = 255; continue;
+      }
+      if (px === 92 && py === 75 && r0 === 123) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 69 && r0 === 103) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 75 && r0 === 123) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255; continue;
+      }
+      if (px === 93 && py === 79 && r0 === 103) {
+        rgba[o] = 91; rgba[o + 1] = 71; rgba[o + 2] = 43; rgba[o + 3] = 255;
+      }
+    }
+  }
+
   // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
   const jambResidualGold: Record<string, readonly [number, number, number]> = {
-
-    '82,72': [103, 83, 63],
-    '82,75': [111, 87, 67],
-    '83,73': [111, 87, 67],
-    '83,75': [111, 87, 67],
-    '84,73': [123, 99, 79],
-    '84,76': [131, 107, 87],
-
-    '88,70': [103, 83, 63],
-    '88,75': [111, 87, 67],
-
-    '89,69': [103, 83, 63],
-    '89,74': [123, 99, 79],
-    '89,75': [111, 87, 67],
-
-    '90,75': [103, 83, 63],
-    '90,77': [119, 95, 63],
-
-    '91,71': [119, 95, 63],
-    '91,79': [91, 71, 43],
-
-    '92,69': [103, 83, 63],
-    '92,74': [95, 75, 55],
-    '92,75': [91, 71, 43],
-
-    '93,69': [91, 71, 43],
-    '93,75': [91, 71, 43],
-    '93,79': [91, 71, 43],
-
-    '94,72': [87, 67, 51],
-    '94,76': [95, 75, 55],
-
-
-
   };
+
   for (const [key, rgb] of Object.entries(jambResidualGold)) {
     const [sx, sy] = key.split(',');
     const px = Number(sx);
