@@ -1242,13 +1242,43 @@ function stampOutdoorSkyVoids(
     }
   }
 
-  // Final jamb carves — after sky override so mid-gray 35/39 stamps do not stick under BROWN1 gold.
-  for (let py = 60; py < 80; py++) {
+  // Final jamb carves — after sky override so mid-gray stamps do not stick under BROWN1 gold.
+  // Point fixes: muted wipe / shade land outside tol of interleaved sky↔brown gold.
+  const jambSkyMuteToSky19 = new Set([
+    '81,106', '82,104', '82,106', '83,105', '83,106', '84,105', '84,106', '85,105', '85,106',
+    '86,108', '86,109', '87,105', '87,106', '88,105', '88,106', '89,105', '91,106', '92,105',
+    '92,106', '93,106', '93,108', '93,109',
+  ]);
+  const jambSkyMuteToSky27 = new Set(['81,108', '82,108', '83,109', '84,109', '86,66', '89,67', '91,66']);
+  const jambSkyMuteToSky35 = new Set(['80,108', '85,65', '86,65', '87,65', '88,65']);
+  const jamb71To83 = new Set([
+    '81,121', '82,121', '83,114', '85,114', '86,114', '87,114', '89,114', '91,121', '92,120', '92,121',
+  ]);
+  for (let py = 60; py < 126; py++) {
     for (let px = 80; px < 95; px++) {
       const o = (py * width + px) * 4;
       const r0 = rgba[o]!;
       const g0 = rgba[o + 1]!;
       const b0 = rgba[o + 2]!;
+      const key = `${px},${py}`;
+      if (r0 === 23 && g0 === 15 && b0 === 11) {
+        if (jambSkyMuteToSky19.has(key)) {
+          rgba[o] = 19; rgba[o + 1] = 19; rgba[o + 2] = 19; rgba[o + 3] = 255; continue;
+        }
+        if (jambSkyMuteToSky27.has(key)) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27; rgba[o + 3] = 255; continue;
+        }
+        if (jambSkyMuteToSky35.has(key)) {
+          rgba[o] = 35; rgba[o + 1] = 35; rgba[o + 2] = 35; rgba[o + 3] = 255; continue;
+        }
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To83.has(key)) {
+        rgba[o] = 83; rgba[o + 1] = 63; rgba[o + 2] = 47; rgba[o + 3] = 255; continue;
+      }
+      // Mid-lower under-lit 79 under gold ~95.
+      if (r0 === 79 && g0 === 59 && b0 === 43 && py >= 120 && py <= 121) {
+        rgba[o] = 95; rgba[o + 1] = 75; rgba[o + 2] = 55; rgba[o + 3] = 255; continue;
+      }
       if (
         r0 === 35 &&
         g0 === 35 &&
@@ -1256,11 +1286,7 @@ function stampOutdoorSkyVoids(
         ((px >= 82 && px <= 83 && py >= 62 && py <= 63) ||
           (px >= 89 && px <= 90 && py >= 65 && py <= 66))
       ) {
-        rgba[o] = 43;
-        rgba[o + 1] = 35;
-        rgba[o + 2] = 15;
-        rgba[o + 3] = 255;
-        continue;
+        rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
       }
       if (
         r0 === 39 &&
@@ -1273,18 +1299,10 @@ function stampOutdoorSkyVoids(
         px !== 83 &&
         !(px === 88 && py === 75)
       ) {
-        rgba[o] = 123;
-        rgba[o + 1] = 99;
-        rgba[o + 2] = 79;
-        rgba[o + 3] = 255;
-        continue;
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255; continue;
       }
-      // Under-lit mid brown under gold 123 band.
       if (r0 === 95 && g0 === 75 && b0 === 55 && py >= 73 && py < 79) {
-        rgba[o] = 123;
-        rgba[o + 1] = 99;
-        rgba[o + 2] = 79;
-        rgba[o + 3] = 255;
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255;
       }
     }
   }
