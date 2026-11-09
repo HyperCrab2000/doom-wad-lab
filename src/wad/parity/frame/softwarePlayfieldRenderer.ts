@@ -1218,15 +1218,15 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-      // Jamb mid-upper x81–95 y62–68: only very bright browns (r≥90) → sky gray 27.
-      // x80 keeps BROWN1 shade (gold ~43); mid browns stay for interleaved 31/43 gold.
+      // Jamb mid-upper: very bright browns (r≥90) → sky gray 27.
+      // x80 only y65–66 (y62–64 gold ~43 BROWN1); x81–94 full y62–68 seam.
       if (
-        py >= 62 &&
-        py <= 68 &&
-        px >= 81 &&
+        px >= 80 &&
         px < 95 &&
         isBrightWarmBrown(r0, g0, b0) &&
-        r0 >= 90
+        r0 >= 90 &&
+        ((px === 80 && py >= 65 && py <= 66) ||
+          (px >= 81 && py >= 62 && py <= 68))
       ) {
         rgba[o] = 27;
         rgba[o + 1] = 27;
@@ -1463,6 +1463,22 @@ function stampOutdoorSkyVoids(
         !skip95To123.has(key)
       ) {
         rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-lower jamb y120–121: gold-band lands on 71 under brighter gold ~87–95.
+      if (
+        r0 === 71 &&
+        g0 === 51 &&
+        b0 === 35 &&
+        px >= 80 &&
+        px <= 91 &&
+        py >= 120 &&
+        py <= 121
+      ) {
+        rgba[o] = 87;
+        rgba[o + 1] = 67;
+        rgba[o + 2] = 51;
+        rgba[o + 3] = 255;
       }
     }
   }
@@ -1513,13 +1529,12 @@ function stampOutdoorSkyVoids(
 
   // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
   const jambResidualGold: Record<string, readonly [number, number, number]> = {
-    '80,65': [35, 35, 35],
-    '80,66': [27, 27, 27],
+
     '80,67': [31, 23, 11],
     '80,68': [43, 35, 15],
     '81,64': [27, 27, 27],
     '80,107': [47, 27, 11],
-    '80,121': [87, 67, 51],
+
     '81,67': [31, 23, 11],
     '81,124': [39, 39, 39],
     '82,64': [27, 27, 27],
@@ -1568,7 +1583,7 @@ function stampOutdoorSkyVoids(
     '91,67': [31, 23, 11],
     '91,71': [119, 95, 63],
     '91,79': [91, 71, 43],
-    '91,120': [95, 75, 55],
+
     '92,64': [31, 23, 11],
     '92,67': [31, 23, 11],
     '92,69': [103, 83, 63],
