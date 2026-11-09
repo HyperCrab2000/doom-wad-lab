@@ -985,7 +985,8 @@ function hangarOutdoorSkyOverride(
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return [47, 47, 47];
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return hangarCourtyardSkyRgb(goldY);
   // Left-of-center: x80-95 gold often BROWN1 jamb (31/23/11); x95-108 sky ~35.
-  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 95) return [31, 23, 11];
+  // 31/23/19: tol covers gold BROWN1 31/23/11 and sky gray 27 (B channel).
+  if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 95) return [31, 23, 19];
   if (goldY >= 42 && goldY < 62 && pfX >= 80 && pfX < 108) return [35, 35, 35];
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return hangarCourtyardSkyRgb(goldY);
   if (goldY >= 51 && goldY < 84 && pfX >= 260) return [27, 27, 27];
