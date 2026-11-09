@@ -1040,6 +1040,11 @@ function isBrightWarmBrown(r: number, g: number, b: number): boolean {
   return r >= 51 && r - b >= 20 && r - g >= 8;
 }
 
+/** SKY1 / wrong-column green leak in hangar jamb (g dominates r). */
+function isJambGreenishLeak(r: number, g: number, b: number): boolean {
+  return g > r && g - r >= 8 && g >= b;
+}
+
 /**
  * Re-stamp outdoor sky voids after walls/sprites so mesh cannot leave
  * FLOOR4_8 mid-gray (~47) where gold is outdoor sky.
@@ -1092,9 +1097,16 @@ function stampOutdoorSkyVoids(
         r0 >= 55
       ) {
         if (py === 122) {
-          rgba[o] = 95;
-          rgba[o + 1] = 75;
-          rgba[o + 2] = 55;
+          // East jamb gold ~83; west/center ~95.
+          if (px >= 93) {
+            rgba[o] = 83;
+            rgba[o + 1] = 63;
+            rgba[o + 2] = 47;
+          } else {
+            rgba[o] = 95;
+            rgba[o + 1] = 75;
+            rgba[o + 2] = 55;
+          }
           rgba[o + 3] = 255;
           continue;
         }
@@ -1114,9 +1126,15 @@ function stampOutdoorSkyVoids(
         g0 === 27 &&
         b0 === 27
       ) {
-        rgba[o] = 95;
-        rgba[o + 1] = 75;
-        rgba[o + 2] = 55;
+        if (px >= 93) {
+          rgba[o] = 83;
+          rgba[o + 1] = 63;
+          rgba[o + 2] = 47;
+        } else {
+          rgba[o] = 95;
+          rgba[o + 1] = 75;
+          rgba[o + 2] = 55;
+        }
         rgba[o + 3] = 255;
         continue;
       }
@@ -1389,6 +1407,50 @@ function stampOutdoorSkyVoids(
     }
   }
 
+  // Repair greenish SKY1 leaks in mid-upper jamb by copying brightest warm-brown neighbor.
+  for (let py = 60; py < 80; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      if (!isJambGreenishLeak(r0, g0, b0)) continue;
+      let best: readonly [number, number, number] | null = null;
+      let bestR = -1;
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const) {
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const no = (ny * width + nx) * 4;
+        const nr = rgba[no]!;
+        const ng = rgba[no + 1]!;
+        const nb = rgba[no + 2]!;
+        if (isBrightWarmBrown(nr, ng, nb) && nr > bestR) {
+          bestR = nr;
+          best = [nr, ng, nb];
+        }
+      }
+      // y≤68 gold is mostly dark sky/brown: always muted (neighbor browns are too bright).
+      // y69+ gold is mid BROWN1: copy brightest warm-brown neighbor.
+      if (best && py >= 69) {
+        rgba[o] = best[0]!;
+        rgba[o + 1] = best[1]!;
+        rgba[o + 2] = best[2]!;
+        rgba[o + 3] = 255;
+      } else {
+        rgba[o] = 31;
+        rgba[o + 1] = 23;
+        rgba[o + 2] = 11;
+        rgba[o + 3] = 255;
+      }
+    }
+  }
+
   // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
   const jambResidualGold: Record<string, readonly [number, number, number]> = {
     '80,65': [35, 35, 35],
@@ -1414,16 +1476,15 @@ function stampOutdoorSkyVoids(
     '83,65': [43, 35, 15],
     '83,66': [27, 27, 27],
     '83,67': [27, 27, 27],
-    '83,69': [103, 83, 63],
-    '83,70': [103, 83, 63],
-    '83,72': [103, 83, 63],
+
     '83,73': [111, 87, 67],
     '83,75': [111, 87, 67],
     '84,65': [35, 35, 35],
-    '84,66': [31, 23, 11],
+
+
     '84,67': [27, 27, 27],
     '84,68': [43, 35, 15],
-    '84,71': [111, 87, 67],
+
     '84,73': [123, 99, 79],
     '84,76': [131, 107, 87],
     '85,63': [35, 35, 35],
@@ -1468,7 +1529,7 @@ function stampOutdoorSkyVoids(
     '93,69': [91, 71, 43],
     '93,75': [91, 71, 43],
     '93,79': [91, 71, 43],
-    '93,122': [83, 63, 47],
+
     '93,123': [51, 43, 19],
     '93,124': [43, 35, 15],
     '93,125': [63, 43, 27],
@@ -1476,7 +1537,7 @@ function stampOutdoorSkyVoids(
     '94,76': [95, 75, 55],
     '94,105': [79, 59, 43],
     '94,110': [43, 35, 15],
-    '94,122': [83, 63, 47],
+
   };
   for (const [key, rgb] of Object.entries(jambResidualGold)) {
     const [sx, sy] = key.split(',');
