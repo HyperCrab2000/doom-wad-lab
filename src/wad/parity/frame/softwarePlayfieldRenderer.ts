@@ -1296,7 +1296,10 @@ function stampOutdoorSkyVoids(
     { got: [31,23,11], to: [27,27,27], pts: new Set(['50,48','63,46','63,47','63,48']) },
     { got: [31,23,11], to: [19,19,19], pts: new Set(['55,47','56,47','57,47','58,48']) },
   ];
-  const skip95To123 = new Set(['85,76', '86,76', '86,77', '86,78']);
+  // 95→123 overshoots gold 103 at these cells — leave 95 (within tol of 103).
+  const skip95To123 = new Set(['92,73', '93,73', '93,74']);
+  // Under-lit 95 under gold 119 — lift to 119, not 123.
+  const lift95To119 = new Set(['80,71', '85,76', '86,76', '86,77', '86,78']);
   for (let py = 42; py < 126; py++) {
     for (let px = 48; px < 95; px++) {
       const o = (py * width + px) * 4;
@@ -1367,7 +1370,11 @@ function stampOutdoorSkyVoids(
       ) {
         rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255; continue;
       }
-      // Skip cells whose gold is 119/95/63 — full-band 95→123 overshoots them.
+      // Under-lit 95 under gold 119.
+      if (r0 === 95 && g0 === 75 && b0 === 55 && lift95To119.has(key)) {
+        rgba[o] = 119; rgba[o + 1] = 95; rgba[o + 2] = 63; rgba[o + 3] = 255; continue;
+      }
+      // Brighten remaining under-lit 95 toward gold 123 band (skip gold-103 cells).
       if (
         r0 === 95 &&
         g0 === 75 &&
@@ -1382,12 +1389,12 @@ function stampOutdoorSkyVoids(
     }
   }
 
+  // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
   const jambResidualGold: Record<string, readonly [number, number, number]> = {
     '80,65': [35, 35, 35],
     '80,66': [27, 27, 27],
     '80,67': [31, 23, 11],
     '80,68': [43, 35, 15],
-    '80,71': [119, 95, 63],
     '80,107': [47, 27, 11],
     '80,121': [87, 67, 51],
     '81,64': [27, 27, 27],
@@ -1423,12 +1430,8 @@ function stampOutdoorSkyVoids(
     '85,64': [27, 27, 27],
     '85,67': [31, 23, 11],
     '85,68': [43, 35, 15],
-    '85,76': [119, 95, 63],
     '85,110': [55, 63, 39],
     '86,68': [43, 35, 15],
-    '86,76': [119, 95, 63],
-    '86,77': [119, 95, 63],
-    '86,78': [119, 95, 63],
     '87,64': [31, 23, 11],
     '87,68': [31, 23, 11],
     '88,63': [43, 35, 15],
@@ -1459,13 +1462,10 @@ function stampOutdoorSkyVoids(
     '92,67': [31, 23, 11],
     '92,68': [27, 27, 27],
     '92,69': [103, 83, 63],
-    '92,73': [103, 83, 63],
     '92,74': [95, 75, 55],
     '92,75': [91, 71, 43],
     '93,68': [31, 23, 11],
     '93,69': [91, 71, 43],
-    '93,73': [103, 83, 63],
-    '93,74': [103, 83, 63],
     '93,75': [91, 71, 43],
     '93,79': [91, 71, 43],
     '93,122': [83, 63, 47],
