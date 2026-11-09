@@ -1254,6 +1254,13 @@ function stampOutdoorSkyVoids(
   const jamb71To83 = new Set([
     '81,121', '82,121', '83,114', '85,114', '86,114', '87,114', '89,114', '91,121', '92,120', '92,121',
   ]);
+  const jamb111To123 = new Set([
+    '80,73', '80,74', '80,75', '81,75', '83,76', '83,78', '84,78', '86,73', '87,74', '87,76',
+    '88,78', '89,78', '90,74', '90,78', '91,76',
+  ]);
+  const jamb71To51 = new Set([
+    '80,112', '80,116', '80,117', '81,112', '81,117', '81,118', '82,112',
+  ]);
   for (let py = 60; py < 126; py++) {
     for (let px = 80; px < 95; px++) {
       const o = (py * width + px) * 4;
@@ -1271,6 +1278,12 @@ function stampOutdoorSkyVoids(
         if (jambSkyMuteToSky35.has(key)) {
           rgba[o] = 35; rgba[o + 1] = 35; rgba[o + 2] = 35; rgba[o + 3] = 255; continue;
         }
+      }
+      if (r0 === 111 && g0 === 87 && b0 === 67 && jamb111To123.has(key)) {
+        rgba[o] = 123; rgba[o + 1] = 99; rgba[o + 2] = 79; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To51.has(key)) {
+        rgba[o] = 51; rgba[o + 1] = 43; rgba[o + 2] = 19; rgba[o + 3] = 255; continue;
       }
       if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To83.has(key)) {
         rgba[o] = 83; rgba[o + 1] = 63; rgba[o + 2] = 47; rgba[o + 3] = 255; continue;
