@@ -172,6 +172,14 @@ export function wallShadeOffsetBands(pfX: number, pfY: number, eastStepOverlay =
   if (eastStepOverlay && isSpawnRightLipWallPfBand(pfX, pfY)) {
     offset += 2.5;
   }
+  // BROWN1 jamb x80–95 mid-lower runs dark vs gold (~51 got vs ~79 gold).
+  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 105 && pfY < 126) {
+    offset -= 6.0;
+  }
+  // BROWN1 jamb mid-upper/lower seam — gold brighter warm browns (~111–123).
+  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 65 && pfY < 80) {
+    offset -= 4.0;
+  }
   return offset;
 }
 

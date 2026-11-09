@@ -1025,15 +1025,34 @@ function stampOutdoorSkyVoids(
 ): void {
   for (let py = 0; py < height; py++) {
     for (let px = 0; px < width; px++) {
-      // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
-      if (px < 80 && py >= 42 && py < 84) continue;
       const o = (py * width + px) * 4;
       const r0 = rgba[o]!;
       const g0 = rgba[o + 1]!;
       const b0 = rgba[o + 2]!;
 
+      // Left mid-upper: bright SKY1 mottling (~107) where gold is dark sky (~19).
+      // Runs before lip protect — neutral-only so BROWN1 lip texels stay.
+      if (
+        py >= 40 &&
+        py < 50 &&
+        px >= 40 &&
+        px < 55 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 75
+      ) {
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
+
+      // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
+      if (px < 80 && py >= 42 && py < 84) continue;
+
       // Mid-lower: bright brown -> sky. Left x60-95 y>=110 keeps BROWN1 walls;
-      // x95–110 is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.
+      // x95+ is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.
       if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
         if (px < 95 && py >= 110) continue;
         // Opening: brighter mesh browns sit under gold ~55; muted under ~39.
@@ -1059,7 +1078,6 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-
       // Floor center: lift flat FLOOR4_8 mid-gray (~47) toward gold mottling.
       // Upper center ~55; lower rows often gold ~67 — use 63 (tol covers 55–71).
       if (
