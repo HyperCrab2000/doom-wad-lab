@@ -21,6 +21,8 @@ export function isE1M1SpawnOutdoorSkyPixel(pfX: number, goldY: number): boolean 
   if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
   // Jamb strip x80–95 mid-lower upper half — gold ~88% outdoor sky (gap between x<80 sky and x≥95 opening).
   if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y80–84 — gold ~65% outdoor sky (mid-upper/lower seam).
+  if (goldY >= 80 && goldY < 84 && pfX >= 85 && pfX < 95) return true;
   // Jamb strip x85–95 y100–105 — gold ~64–68% outdoor sky (upper half of y100 interleave).
   if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
   // Sky seam above left lip (x64–80 y42–50) — gold ~74% sky; lip draw stays at yi≥50.

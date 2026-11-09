@@ -96,6 +96,8 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
   // Jamb strip x80–95 y84–100 — gold outdoor sky (~88%), not brown mesh.
   if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y80–84 — gold outdoor sky (~65%).
+  if (goldY >= 80 && goldY < 84 && pfX >= 85 && pfX < 95) return true;
   // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
   if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
   // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip @ (64,55).
@@ -130,6 +132,8 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
   // Jamb strip x80–95 y84–100 — gold outdoor sky, not BROWN1 overlay.
   if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y80–84 — gold outdoor sky (~65%).
+  if (goldY >= 80 && goldY < 84 && pfX >= 85 && pfX < 95) return true;
   // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
   if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
   // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip overlay.
