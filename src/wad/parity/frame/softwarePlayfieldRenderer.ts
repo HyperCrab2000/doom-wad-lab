@@ -1120,39 +1120,6 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-      // Mid-upper jamb: sky gray 35 under dark BROWN1 gold (~43) — carve only.
-      if (
-        r0 === 35 &&
-        g0 === 35 &&
-        b0 === 35 &&
-        ((px >= 82 && px <= 83 && py >= 62 && py <= 63) ||
-          (px >= 89 && px <= 90 && py >= 65 && py <= 66))
-      ) {
-        rgba[o] = 43;
-        rgba[o + 1] = 35;
-        rgba[o + 2] = 15;
-        rgba[o + 3] = 255;
-        continue;
-      }
-      // Mid-upper jamb: sky gray 39 under bright BROWN1 gold (~123).
-      if (
-        r0 === 39 &&
-        g0 === 39 &&
-        b0 === 39 &&
-        px >= 82 &&
-        px <= 89 &&
-        py >= 73 &&
-        py <= 76 &&
-        px !== 83 &&
-        !(px === 88 && py === 75)
-      ) {
-        rgba[o] = 123;
-        rgba[o + 1] = 99;
-        rgba[o + 2] = 79;
-        rgba[o + 3] = 255;
-        continue;
-      }
-
       // Mid-lower: bright brown -> sky. Left x60-95 y>=110 keeps BROWN1 walls;
       // x95+ is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.
       // x80–85 y100–110: wipe to muted BROWN1 [23,15,11] — within tol of dark BROWN1
@@ -1272,6 +1239,45 @@ function stampOutdoorSkyVoids(
       rgba[o + 1] = override[1]!;
       rgba[o + 2] = override[2]!;
       rgba[o + 3] = 255;
+    }
+  }
+
+  // Final jamb carves — after sky override so mid-gray 35/39 stamps do not stick under BROWN1 gold.
+  for (let py = 60; py < 80; py++) {
+    for (let px = 80; px < 95; px++) {
+      const o = (py * width + px) * 4;
+      const r0 = rgba[o]!;
+      const g0 = rgba[o + 1]!;
+      const b0 = rgba[o + 2]!;
+      if (
+        r0 === 35 &&
+        g0 === 35 &&
+        b0 === 35 &&
+        ((px >= 82 && px <= 83 && py >= 62 && py <= 63) ||
+          (px >= 89 && px <= 90 && py >= 65 && py <= 66))
+      ) {
+        rgba[o] = 43;
+        rgba[o + 1] = 35;
+        rgba[o + 2] = 15;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      if (
+        r0 === 39 &&
+        g0 === 39 &&
+        b0 === 39 &&
+        px >= 82 &&
+        px <= 89 &&
+        py >= 73 &&
+        py <= 76 &&
+        px !== 83 &&
+        !(px === 88 && py === 75)
+      ) {
+        rgba[o] = 123;
+        rgba[o + 1] = 99;
+        rgba[o + 2] = 79;
+        rgba[o + 3] = 255;
+      }
     }
   }
 }
