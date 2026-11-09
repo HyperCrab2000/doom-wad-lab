@@ -18,6 +18,10 @@ export function isE1M1SpawnOutdoorSkyPixel(pfX: number, goldY: number): boolean 
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   // Opening lip x95–120 mid bands — gold is outdoor sky gray (~90%+), not wall mesh.
   if (goldY >= 65 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
+  // Jamb strip x80–95 mid-lower upper half — gold ~88% outdoor sky (gap between x<80 sky and x≥95 opening).
+  if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Sky seam above left lip (x64–80 y42–50) — gold ~74% sky; lip draw stays at yi≥50.
+  if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return true;
   if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 95) return true;
