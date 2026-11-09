@@ -1104,7 +1104,7 @@ function stampOutdoorSkyVoids(
       // gold (23/15/7, 31/23/11) and dark sky (~19); gray 19 left brownGold→skyGot debt.
       if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
         if (px < 95 && py >= 110) continue;
-        if (px >= 80 && px < 85 && py >= 100 && py < 110) {
+        if (px >= 80 && px < 95 && py >= 100 && py < 110) {
           rgba[o] = 23;
           rgba[o + 1] = 15;
           rgba[o + 2] = 11;
