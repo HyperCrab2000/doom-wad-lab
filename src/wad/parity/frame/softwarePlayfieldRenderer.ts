@@ -96,6 +96,8 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
   // Jamb strip x80–95 y84–100 — gold outdoor sky (~88%), not brown mesh.
   if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
+  if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
   // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip @ (64,55).
   if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
   // Left mid-upper outside lip — gold outdoor sky (~83%).
@@ -128,6 +130,8 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 60 && goldY < 126 && pfX >= 95 && pfX < 120) return true;
   // Jamb strip x80–95 y84–100 — gold outdoor sky, not BROWN1 overlay.
   if (goldY >= 84 && goldY < 100 && pfX >= 80 && pfX < 95) return true;
+  // Jamb strip x85–95 y100–105 — gold outdoor sky (~64–68%).
+  if (goldY >= 100 && goldY < 105 && pfX >= 85 && pfX < 95) return true;
   // Sky seam above left lip — gold outdoor sky; keep yi≥50 for lip overlay.
   if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
   // Left mid-upper outside lip — gold outdoor sky.
@@ -1117,7 +1121,7 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-      // Jamb mid-upper seam x80–95 y80–84: bright browns under sky-gold (~60% sky).
+      // Jamb mid-upper seam x80–95 y80–84: bright browns under dark sky-gold (~19).
       if (
         py >= 80 &&
         py < 84 &&
@@ -1126,9 +1130,9 @@ function stampOutdoorSkyVoids(
         isBrightWarmBrown(r0, g0, b0) &&
         r0 >= 70
       ) {
-        rgba[o] = 35;
-        rgba[o + 1] = 35;
-        rgba[o + 2] = 35;
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
         rgba[o + 3] = 255;
         continue;
       }
