@@ -100,6 +100,10 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
   // Left mid-upper outside lip — gold outdoor sky (~83%).
   if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
+  // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
+  if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
+  // Mid-upper opening top — gold outdoor sky (~92%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 120) return true;
   // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
@@ -128,6 +132,10 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 42 && goldY < 50 && pfX >= 64 && pfX < 80) return true;
   // Left mid-upper outside lip — gold outdoor sky.
   if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
+  // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
+  if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
+  // Mid-upper opening top — gold outdoor sky.
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 120) return true;
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
