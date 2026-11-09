@@ -1081,6 +1081,7 @@ function stampOutdoorSkyVoids(
 
       // Jamb floor sky void: bright SKY1 mottling where gold is mid sky gray (~35–47).
       // Target 35 (not 19) — prior 19 overshot gold 35/47.
+      // y122 is BROWN1 gold row (~83–103) — do not crush to sky gray 27.
       if (
         py >= 118 &&
         py < 126 &&
@@ -1090,10 +1091,64 @@ function stampOutdoorSkyVoids(
         g0 === b0 &&
         r0 >= 55
       ) {
+        if (py === 122) {
+          rgba[o] = 95;
+          rgba[o + 1] = 75;
+          rgba[o + 2] = 55;
+          rgba[o + 3] = 255;
+          continue;
+        }
         const g = r0 >= 70 ? 35 : 27;
         rgba[o] = g;
         rgba[o + 1] = g;
         rgba[o + 2] = g;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // y122 leftover sky gray 27 under BROWN1 gold — lift to mid brown.
+      if (
+        py === 122 &&
+        px >= 80 &&
+        px < 95 &&
+        r0 === 27 &&
+        g0 === 27 &&
+        b0 === 27
+      ) {
+        rgba[o] = 95;
+        rgba[o + 1] = 75;
+        rgba[o + 2] = 55;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-upper jamb: sky gray 35 under dark BROWN1 gold (~43) — carve only.
+      if (
+        r0 === 35 &&
+        g0 === 35 &&
+        b0 === 35 &&
+        ((px >= 82 && px <= 83 && py >= 62 && py <= 63) ||
+          (px >= 89 && px <= 90 && py >= 65 && py <= 66))
+      ) {
+        rgba[o] = 43;
+        rgba[o + 1] = 35;
+        rgba[o + 2] = 15;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Mid-upper jamb: sky gray 39 under bright BROWN1 gold (~123).
+      if (
+        r0 === 39 &&
+        g0 === 39 &&
+        b0 === 39 &&
+        px >= 82 &&
+        px <= 89 &&
+        py >= 73 &&
+        py <= 76 &&
+        px !== 83 &&
+        !(px === 88 && py === 75)
+      ) {
+        rgba[o] = 123;
+        rgba[o + 1] = 99;
+        rgba[o + 2] = 79;
         rgba[o + 3] = 255;
         continue;
       }
