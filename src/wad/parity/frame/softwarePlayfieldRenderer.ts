@@ -1071,7 +1071,8 @@ function stampOutdoorSkyVoids(
       // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
       if (px < 80 && py >= 42 && py < 84) continue;
 
-      // Jamb floor sky void: bright SKY1 mottling where gold is dark/mid sky gray.
+      // Jamb floor sky void: bright SKY1 mottling where gold is mid sky gray (~35–47).
+      // Target 35 (not 19) — prior 19 overshot gold 35/47.
       if (
         py >= 118 &&
         py < 126 &&
@@ -1081,9 +1082,10 @@ function stampOutdoorSkyVoids(
         g0 === b0 &&
         r0 >= 55
       ) {
-        rgba[o] = 19;
-        rgba[o + 1] = 19;
-        rgba[o + 2] = 19;
+        const g = r0 >= 70 ? 35 : 27;
+        rgba[o] = g;
+        rgba[o + 1] = g;
+        rgba[o + 2] = g;
         rgba[o + 3] = 255;
         continue;
       }
@@ -1112,6 +1114,21 @@ function stampOutdoorSkyVoids(
         rgba[o] = 19;
         rgba[o + 1] = 19;
         rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
+      // Jamb mid-upper seam x80–95 y80–84: bright browns under sky-gold (~60% sky).
+      if (
+        py >= 80 &&
+        py < 84 &&
+        px >= 80 &&
+        px < 95 &&
+        isBrightWarmBrown(r0, g0, b0) &&
+        r0 >= 70
+      ) {
+        rgba[o] = 35;
+        rgba[o + 1] = 35;
+        rgba[o + 2] = 35;
         rgba[o + 3] = 255;
         continue;
       }
