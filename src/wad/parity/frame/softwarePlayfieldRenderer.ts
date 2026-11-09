@@ -102,8 +102,8 @@ function shouldDiscardWallForOutdoorSkyOpening(pfX: number, goldY: number): bool
   if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
   // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
   if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
-  // Mid-upper opening top — gold outdoor sky (~92%).
-  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 120) return true;
+  // Mid-upper opening top — gold outdoor sky (~94%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 180) return true;
   // Center hangar opening — gold sky gray, not brown mesh (x≥108 keeps lip @ x≈64).
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
@@ -134,8 +134,8 @@ function shouldDiscardOverlayWallForCourtyardSky(pfX: number, goldY: number): bo
   if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
   // Left-of-lip sky seam yi≈44–45 — gold outdoor sky, not line-53 brown.
   if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
-  // Mid-upper opening top — gold outdoor sky.
-  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 120) return true;
+  // Mid-upper opening top — gold outdoor sky (~94%).
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 180) return true;
   if (goldY >= 45 && goldY < 53 && pfX >= 108 && pfX < 237) return true;
   if (goldY >= 53 && goldY < 84 && pfX >= 108 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
@@ -1070,6 +1070,23 @@ function stampOutdoorSkyVoids(
 
       // Protect left hangar lip stamps (CPU overlay line 53 @ x≈64).
       if (px < 80 && py >= 42 && py < 84) continue;
+
+      // Jamb floor sky void: bright SKY1 mottling where gold is dark/mid sky gray.
+      if (
+        py >= 118 &&
+        py < 126 &&
+        px >= 80 &&
+        px < 95 &&
+        r0 === g0 &&
+        g0 === b0 &&
+        r0 >= 55
+      ) {
+        rgba[o] = 19;
+        rgba[o + 1] = 19;
+        rgba[o + 2] = 19;
+        rgba[o + 3] = 255;
+        continue;
+      }
 
       // Mid-lower: bright brown -> sky. Left x60-95 y>=110 keeps BROWN1 walls;
       // x95+ is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.

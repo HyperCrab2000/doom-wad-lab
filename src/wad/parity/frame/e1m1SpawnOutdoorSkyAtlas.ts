@@ -27,8 +27,8 @@ export function isE1M1SpawnOutdoorSkyPixel(pfX: number, goldY: number): boolean 
   if (goldY >= 40 && goldY < 50 && pfX >= 42 && pfX < 50) return true;
   // Left-of-lip sky seam rows yi≈44–45 — gold 100% outdoor sky (not line-53 brown).
   if (goldY >= 44 && goldY < 46 && pfX >= 50 && pfX < 64) return true;
-  // Mid-upper opening top (x100–120 y40–50) — gold ~92% outdoor sky.
-  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 120) return true;
+  // Mid-upper opening top (x100–180 y40–50) — gold ~94% outdoor sky.
+  if (goldY >= 40 && goldY < 50 && pfX >= 100 && pfX < 180) return true;
   if (goldY >= 84 && goldY < 126 && pfX >= 120 && pfX < 180) return true;
   if (goldY >= 42 && goldY < 44 && pfX >= 48 && pfX < 280) return true;
   if (goldY >= 44 && goldY < 58 && pfX >= 80 && pfX < 95) return true;
