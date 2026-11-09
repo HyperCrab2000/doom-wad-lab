@@ -1100,8 +1100,17 @@ function stampOutdoorSkyVoids(
 
       // Mid-lower: bright brown -> sky. Left x60-95 y>=110 keeps BROWN1 walls;
       // x95+ is sky-gold (do not protect). Opening x100-120 → mid-gray ~39.
+      // x80–85 y100–110: wipe to muted BROWN1 [23,15,11] — within tol of dark BROWN1
+      // gold (23/15/7, 31/23/11) and dark sky (~19); gray 19 left brownGold→skyGot debt.
       if (py >= 84 && py < 126 && px >= 60 && px < 120 && isBrightWarmBrown(r0, g0, b0)) {
         if (px < 95 && py >= 110) continue;
+        if (px >= 80 && px < 85 && py >= 100 && py < 110) {
+          rgba[o] = 23;
+          rgba[o + 1] = 15;
+          rgba[o + 2] = 11;
+          rgba[o + 3] = 255;
+          continue;
+        }
         // Opening: brighter mesh browns sit under gold ~55; muted under ~39.
         let g = 19;
         if (px >= 100) g = r0 >= 70 ? 47 : 39;
