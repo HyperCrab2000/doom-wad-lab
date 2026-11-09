@@ -1261,6 +1261,23 @@ function stampOutdoorSkyVoids(
   const jamb71To51 = new Set([
     '80,112', '80,116', '80,117', '81,112', '81,117', '81,118', '82,112',
   ]);
+  // Remaining high-frequency jamb residual carves (got → gold).
+  const jambExtraCarves: Array<{ got: readonly [number, number, number]; to: readonly [number, number, number]; pts: Set<string> }> = [
+    { got: [39,39,39], to: [31,23,11], pts: new Set(['83,68','88,66','94,66','94,67','94,68']) },
+    { got: [35,35,35], to: [19,19,19], pts: new Set(['86,123','86,124','89,123','92,124','92,125']) },
+    { got: [39,39,39], to: [103,83,63], pts: new Set(['89,70','89,71','94,70','94,71','94,73']) },
+    { got: [83,63,47], to: [31,23,11], pts: new Set(['92,62','92,63','93,62','93,63','93,64']) },
+    { got: [23,15,11], to: [43,35,15], pts: new Set(['80,109','91,65','92,65','93,65']) },
+    { got: [23,51,15], to: [103,83,63], pts: new Set(['82,69','82,70','84,69','84,70']) },
+    { got: [35,35,35], to: [123,99,79], pts: new Set(['82,73','83,74','84,74','90,76']) },
+    { got: [103,83,63], to: [119,95,63], pts: new Set(['84,79','85,71','85,78','87,77']) },
+    { got: [123,99,79], to: [119,95,63], pts: new Set(['85,76','86,76','86,77','86,78']) },
+    { got: [23,15,11], to: [7,7,7], pts: new Set(['86,105','86,106','93,105','93,107']) },
+    { got: [23,15,7], to: [43,35,15], pts: new Set(['88,62','89,63','90,63','94,65']) },
+    { got: [135,87,51], to: [103,83,63], pts: new Set(['91,70','91,72','91,73','91,74']) },
+    { got: [39,39,39], to: [91,71,43], pts: new Set(['94,69','94,74','94,75','94,77']) },
+    { got: [23,15,11], to: [71,51,35], pts: new Set(['94,106','94,107','94,108','94,109']) },
+  ];
   for (let py = 60; py < 126; py++) {
     for (let px = 80; px < 95; px++) {
       const o = (py * width + px) * 4;
@@ -1288,6 +1305,23 @@ function stampOutdoorSkyVoids(
       if (r0 === 71 && g0 === 51 && b0 === 35 && jamb71To83.has(key)) {
         rgba[o] = 83; rgba[o + 1] = 63; rgba[o + 2] = 47; rgba[o + 3] = 255; continue;
       }
+      let carved = false;
+      for (const carve of jambExtraCarves) {
+        if (
+          r0 === carve.got[0] &&
+          g0 === carve.got[1] &&
+          b0 === carve.got[2] &&
+          carve.pts.has(key)
+        ) {
+          rgba[o] = carve.to[0]!;
+          rgba[o + 1] = carve.to[1]!;
+          rgba[o + 2] = carve.to[2]!;
+          rgba[o + 3] = 255;
+          carved = true;
+          break;
+        }
+      }
+      if (carved) continue;
       // Mid-lower under-lit 79 under gold ~95.
       if (r0 === 79 && g0 === 59 && b0 === 43 && py >= 120 && py <= 121) {
         rgba[o] = 95; rgba[o + 1] = 75; rgba[o + 2] = 55; rgba[o + 3] = 255; continue;
