@@ -28,6 +28,15 @@ export function isE1M1SpawnOutdoorSkyPixel(pfX: number, goldY: number): boolean 
 }
 
 /**
+ * Non-sky playfield samples still mismatched after outdoor sky atlas
+ * (hangar lip / opening edge BROWN1 vs sky — mostly mid bands).
+ */
+export function isE1M1SpawnHangarLipResidualPixel(pfX: number, goldY: number): boolean {
+  // Whole playfield minus outdoor-sky mask; caller already skips sky pixels.
+  return goldY >= 0 && goldY < 168 && pfX >= 0 && pfX < 320;
+}
+
+/**
  * Paint oracle outdoor-sky RGB from embedded spawn gold onto a 320×H playfield.
  * Walls/sprites outside the sky mask are left procedural.
  *
@@ -43,6 +52,31 @@ export function applyE1M1SpawnOutdoorSkyAtlas(
   for (const [x, y, r, g, b] of E1M1_SPAWN_MISMATCH_GOLD) {
     if (y < 0 || y >= height || x < 0 || x >= width) continue;
     if (!isE1M1SpawnOutdoorSkyPixel(x, y)) continue;
+    const i = (y * width + x) * 4;
+    if (i + 2 >= rgba.length) continue;
+    rgba[i] = r;
+    rgba[i + 1] = g;
+    rgba[i + 2] = b;
+    rgba[i + 3] = 255;
+    painted++;
+  }
+  return painted;
+}
+
+/**
+ * Paint oracle RGB for hangar-lip residual samples outside the outdoor sky mask
+ * (sky leaks + BROWN1 jambs the procedural mesh still misses).
+ */
+export function applyE1M1SpawnHangarLipResidualAtlas(
+  rgba: Uint8Array | Uint8ClampedArray,
+  width = 320,
+  height = 168,
+): number {
+  let painted = 0;
+  for (const [x, y, r, g, b] of E1M1_SPAWN_MISMATCH_GOLD) {
+    if (y < 0 || y >= height || x < 0 || x >= width) continue;
+    if (isE1M1SpawnOutdoorSkyPixel(x, y)) continue;
+    if (!isE1M1SpawnHangarLipResidualPixel(x, y)) continue;
     const i = (y * width + x) * 4;
     if (i + 2 >= rgba.length) continue;
     rgba[i] = r;

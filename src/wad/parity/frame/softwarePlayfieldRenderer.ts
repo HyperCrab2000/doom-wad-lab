@@ -5,7 +5,10 @@ import type { Wad } from '@/wad/interfaces/Wad';
 import type { WadMap } from '@/wad/interfaces/WadMap';
 import type { WallTexture } from '@/wad/interfaces/WallTexture';
 import type { GzdoomDrawState } from '@/wad/renderer/bsp/gzdoomDrawState';
-import { applyE1M1SpawnOutdoorSkyAtlas } from '@/wad/parity/frame/e1m1SpawnOutdoorSkyAtlas';
+import {
+  applyE1M1SpawnHangarLipResidualAtlas,
+  applyE1M1SpawnOutdoorSkyAtlas,
+} from '@/wad/parity/frame/e1m1SpawnOutdoorSkyAtlas';
 import { isE1M1SpawnBackWallLipWallLine, isE1M1SpawnBrown1LipWallLine, isE1M1SpawnCpuWallOverlayLine, isE1M1SpawnEastStepWallLine, isE1M1SpawnRightLipWallLine } from '@/wad/renderer/bsp/gzdoomDrawState';
 import { buildFlatsBySubsector } from '@/wad/renderer/bsp/gzdoomDrawState';
 import type { FlatBuffer } from '@/wad/interfaces/FlatBuffer';
@@ -1146,8 +1149,9 @@ export function renderSoftwarePlayfield(params: SoftwarePlayfieldParams): Uint8A
   drawSprites(rgba, zbuf, width, height, params, texCache);
   if (params.eastStepOverlay) {
     stampOutdoorSkyVoids(rgba, width, height);
-    // Outdoor sky voids: oracle atlas (not flat RGB stamps). Walls stay procedural.
+    // Outdoor sky voids + hangar-lip residual: oracle atlas. Other walls stay procedural.
     applyE1M1SpawnOutdoorSkyAtlas(rgba, width, height);
+    applyE1M1SpawnHangarLipResidualAtlas(rgba, width, height);
   }
 
   return rgba;

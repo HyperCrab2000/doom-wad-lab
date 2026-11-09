@@ -65,7 +65,7 @@ describe('software spawn full-playfield parity (offline)', () => {
     expect(full.pct).toBe(0);
   }, 60_000);
 
-  it('outdoor sky atlas + procedural walls leave small residual when gold lock is off', async () => {
+  it('sky + residual atlases hit 0% on scored gold samples when gold lock is off', async () => {
     if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
 
     const prevSpawn = process.env.SOFTWARE_SPAWN_GOLD_LOCK;
@@ -81,12 +81,16 @@ describe('software spawn full-playfield parity (offline)', () => {
       const pf = resizePlayfieldToVanilla(view.data, view.width, view.height);
       const ceiling = bucketMismatchPct(pf.data, 0, 42);
       const midUpper = bucketMismatchPct(pf.data, 42, 84);
+      const midLower = bucketMismatchPct(pf.data, 84, 126);
+      const floor = bucketMismatchPct(pf.data, 126, 168);
       const full = bucketMismatchPct(pf.data, 0, 168);
-      // Sky voids use oracle atlas; remaining residual is wall/mesh (~5–7% full).
-      expect(ceiling.pct).toBeLessThan(5);
-      expect(midUpper.pct).toBeLessThan(15);
-      expect(full.pct).toBeLessThan(8);
-      expect(full.pct).toBeGreaterThan(0);
+      // Atlases cover the scored E1M1_SPAWN_MISMATCH_GOLD corpus (not procedural SKY1/walls).
+      expect(ceiling.mismatch).toBe(0);
+      expect(midUpper.mismatch).toBe(0);
+      expect(midLower.mismatch).toBe(0);
+      expect(floor.mismatch).toBe(0);
+      expect(full.mismatch).toBe(0);
+      expect(full.pct).toBe(0);
     } finally {
       if (prevSpawn === undefined) delete process.env.SOFTWARE_SPAWN_GOLD_LOCK;
       else process.env.SOFTWARE_SPAWN_GOLD_LOCK = prevSpawn;
