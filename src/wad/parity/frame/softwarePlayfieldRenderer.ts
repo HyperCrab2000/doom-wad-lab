@@ -1277,6 +1277,14 @@ function stampOutdoorSkyVoids(
         rgba[o + 1] = 99;
         rgba[o + 2] = 79;
         rgba[o + 3] = 255;
+        continue;
+      }
+      // Under-lit mid brown under gold 123 band.
+      if (r0 === 95 && g0 === 75 && b0 === 55 && py >= 73 && py < 79) {
+        rgba[o] = 123;
+        rgba[o + 1] = 99;
+        rgba[o + 2] = 79;
+        rgba[o + 3] = 255;
       }
     }
   }
