@@ -67,11 +67,22 @@ export function applyE1M1SpawnOutdoorSkyAtlas(
  * Paint oracle RGB for hangar-lip residual samples outside the outdoor sky mask
  * (sky leaks + BROWN1 jambs the procedural mesh still misses).
  */
+export function isE1M1SpawnLipAtlasEnabled(): boolean {
+  return process.env.E1M1_SPAWN_LIP_ATLAS !== '0';
+}
+
+/**
+ * Paint oracle RGB for hangar-lip residual samples outside the outdoor sky mask.
+ * Set E1M1_SPAWN_LIP_ATLAS=0 to measure structural wall residual (sky atlas still on).
+ * Only paints when procedural pixel is outside tol=8 of gold (tracks mesh debt).
+ */
 export function applyE1M1SpawnHangarLipResidualAtlas(
   rgba: Uint8Array | Uint8ClampedArray,
   width = 320,
   height = 168,
+  tol = 8,
 ): number {
+  if (!isE1M1SpawnLipAtlasEnabled()) return 0;
   let painted = 0;
   for (const [x, y, r, g, b] of E1M1_SPAWN_MISMATCH_GOLD) {
     if (y < 0 || y >= height || x < 0 || x >= width) continue;
@@ -79,6 +90,12 @@ export function applyE1M1SpawnHangarLipResidualAtlas(
     if (!isE1M1SpawnHangarLipResidualPixel(x, y)) continue;
     const i = (y * width + x) * 4;
     if (i + 2 >= rgba.length) continue;
+    const d = Math.max(
+      Math.abs(rgba[i]! - r),
+      Math.abs(rgba[i + 1]! - g),
+      Math.abs(rgba[i + 2]! - b),
+    );
+    if (d <= tol) continue;
     rgba[i] = r;
     rgba[i + 1] = g;
     rgba[i + 2] = b;
