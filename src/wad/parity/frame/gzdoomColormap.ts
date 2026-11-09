@@ -372,18 +372,10 @@ export function shadePalIndexWall(
     );
   }
   const rgb = shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
-  // Mid-lower jamb: palette lands on 75/55/27 under gold 79/59/43 — snap that exact cell.
-  if (
-    eastStepOverlay &&
-    pfX >= 80 &&
-    pfX < 95 &&
-    pfY >= 110 &&
-    pfY < 126 &&
-    rgb[0] === 75 &&
-    rgb[1] === 55 &&
-    rgb[2] === 27
-  ) {
-    return [79, 59, 43];
+  // Mid-lower jamb: exact palette cells under nearby gold browns — snap those cells only.
+  if (eastStepOverlay && pfX >= 80 && pfX < 95 && pfY >= 110 && pfY < 126) {
+    if (rgb[0] === 75 && rgb[1] === 55 && rgb[2] === 27) return [79, 59, 43];
+    if (rgb[0] === 63 && rgb[1] === 47 && rgb[2] === 23) return [71, 51, 35];
   }
   return rgb;
 }
