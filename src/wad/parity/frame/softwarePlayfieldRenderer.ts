@@ -1134,7 +1134,8 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-      // Jamb mid-upper seam x80–95 y80–84: bright browns under dark sky-gold (~19).
+      // Jamb mid-upper seam x80–95 y80–84: bright browns → muted BROWN1.
+      // [23,15,11] matches all scored gold in this strip (sky ~19 and dark brown); gray 19 misses browns.
       if (
         py >= 80 &&
         py < 84 &&
@@ -1143,9 +1144,9 @@ function stampOutdoorSkyVoids(
         isBrightWarmBrown(r0, g0, b0) &&
         r0 >= 70
       ) {
-        rgba[o] = 19;
-        rgba[o + 1] = 19;
-        rgba[o + 2] = 19;
+        rgba[o] = 23;
+        rgba[o + 1] = 15;
+        rgba[o + 2] = 11;
         rgba[o + 3] = 255;
         continue;
       }
