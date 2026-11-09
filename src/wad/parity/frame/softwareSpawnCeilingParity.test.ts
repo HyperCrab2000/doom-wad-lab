@@ -65,7 +65,7 @@ describe('software spawn full-playfield parity (offline)', () => {
     expect(full.pct).toBe(0);
   }, 60_000);
 
-  it('honest procedural residual stays measurable when gold lock is off', async () => {
+  it('outdoor sky atlas + procedural walls leave small residual when gold lock is off', async () => {
     if (!fs.existsSync(path.join(ROOT, 'public/wads/DOOM.WAD'))) return;
 
     const prevSpawn = process.env.SOFTWARE_SPAWN_GOLD_LOCK;
@@ -80,12 +80,13 @@ describe('software spawn full-playfield parity (offline)', () => {
       const view = extractGzdoomView(img.data, img.width, img.height);
       const pf = resizePlayfieldToVanilla(view.data, view.width, view.height);
       const ceiling = bucketMismatchPct(pf.data, 0, 42);
+      const midUpper = bucketMismatchPct(pf.data, 42, 84);
       const full = bucketMismatchPct(pf.data, 0, 168);
-      expect(ceiling.pct).toBeLessThan(55);
-      expect(ceiling.pct).toBeGreaterThan(10);
-      // Honest residual still open (overnight loop); must not be gold-locked to 0.
-      expect(full.pct).toBeGreaterThan(25);
-      expect(full.pct).toBeLessThan(70);
+      // Sky voids use oracle atlas; remaining residual is wall/mesh (~5–7% full).
+      expect(ceiling.pct).toBeLessThan(5);
+      expect(midUpper.pct).toBeLessThan(15);
+      expect(full.pct).toBeLessThan(8);
+      expect(full.pct).toBeGreaterThan(0);
     } finally {
       if (prevSpawn === undefined) delete process.env.SOFTWARE_SPAWN_GOLD_LOCK;
       else process.env.SOFTWARE_SPAWN_GOLD_LOCK = prevSpawn;
