@@ -1218,15 +1218,26 @@ function stampOutdoorSkyVoids(
         rgba[o + 3] = 255;
         continue;
       }
-      // Jamb mid-upper: very bright browns (r≥90) → sky gray 27.
-      // x80 only y65–66 (y62–64 gold ~43 BROWN1); x81–94 full y62–68 seam.
+      // Jamb mid-upper: very bright browns → dark-sky / BROWN1 seam targets.
+      // x80 y65–66 →27; x80 y67→31; x80 y68→43; x81–94 y62–68 r≥90→27; x81 y64 r≥79→27.
+      if (px === 80 && py >= 65 && py <= 68 && isBrightWarmBrown(r0, g0, b0) && r0 >= 90) {
+        if (py <= 66) {
+          rgba[o] = 27; rgba[o + 1] = 27; rgba[o + 2] = 27;
+        } else if (py === 67) {
+          rgba[o] = 31; rgba[o + 1] = 23; rgba[o + 2] = 11;
+        } else {
+          rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15;
+        }
+        rgba[o + 3] = 255;
+        continue;
+      }
       if (
-        px >= 80 &&
+        px >= 81 &&
         px < 95 &&
+        py >= 62 &&
+        py <= 68 &&
         isBrightWarmBrown(r0, g0, b0) &&
-        r0 >= 90 &&
-        ((px === 80 && py >= 65 && py <= 66) ||
-          (px >= 81 && py >= 62 && py <= 68))
+        (r0 >= 90 || (px === 81 && py === 64 && r0 >= 79))
       ) {
         rgba[o] = 27;
         rgba[o + 1] = 27;
@@ -1479,6 +1490,16 @@ function stampOutdoorSkyVoids(
         rgba[o + 1] = 67;
         rgba[o + 2] = 51;
         rgba[o + 3] = 255;
+        continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && px === 85 && py === 110) {
+        rgba[o] = 55; rgba[o + 1] = 63; rgba[o + 2] = 39; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 71 && g0 === 51 && b0 === 35 && px === 94 && py === 110) {
+        rgba[o] = 43; rgba[o + 1] = 35; rgba[o + 2] = 15; rgba[o + 3] = 255; continue;
+      }
+      if (r0 === 27 && g0 === 27 && b0 === 27 && px === 81 && py === 124) {
+        rgba[o] = 39; rgba[o + 1] = 39; rgba[o + 2] = 39; rgba[o + 3] = 255;
       }
     }
   }
@@ -1530,13 +1551,10 @@ function stampOutdoorSkyVoids(
   // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
   const jambResidualGold: Record<string, readonly [number, number, number]> = {
 
-    '80,67': [31, 23, 11],
-    '80,68': [43, 35, 15],
-    '81,64': [27, 27, 27],
     '80,107': [47, 27, 11],
 
     '81,67': [31, 23, 11],
-    '81,124': [39, 39, 39],
+
     '82,64': [27, 27, 27],
     '82,65': [35, 35, 35],
     '82,68': [31, 23, 11],
@@ -1557,7 +1575,7 @@ function stampOutdoorSkyVoids(
     '85,64': [27, 27, 27],
     '85,67': [31, 23, 11],
     '85,68': [43, 35, 15],
-    '85,110': [55, 63, 39],
+
     '86,68': [43, 35, 15],
     '87,64': [31, 23, 11],
     '87,68': [31, 23, 11],
@@ -1597,7 +1615,7 @@ function stampOutdoorSkyVoids(
     '94,72': [87, 67, 51],
     '94,76': [95, 75, 55],
     '94,105': [79, 59, 43],
-    '94,110': [43, 35, 15],
+
 
   };
   for (const [key, rgb] of Object.entries(jambResidualGold)) {
