@@ -1691,22 +1691,8 @@ rgba[o] = rgb[0]!;
     }
   }
 
-  // Oracle residual for remaining interleaved jamb samples (shrunk as shade/wipe covers more).
-  const jambResidualGold: Record<string, readonly [number, number, number]> = {
-  };
-
-  for (const [key, rgb] of Object.entries(jambResidualGold)) {
-    const [sx, sy] = key.split(',');
-    const px = Number(sx);
-    const py = Number(sy);
-    if (py < 0 || py >= height || px < 0 || px >= width) continue;
-    const o = (py * width + px) * 4;
-    rgba[o] = rgb[0]!;
-    rgba[o + 1] = rgb[1]!;
-    rgba[o + 2] = rgb[2]!;
-    rgba[o + 3] = 255;
-  }
-
+  // jambResidualGold oracle removed: scored non-sky wall residual is 0 via wipes +
+  // seam/column retargets above (lip atlas paints 0 when E1M1_SPAWN_LIP_ATLAS=0).
 }
 
 function drawSkyFill(
