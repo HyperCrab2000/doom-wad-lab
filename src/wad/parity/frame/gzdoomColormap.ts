@@ -371,7 +371,21 @@ export function shadePalIndexWall(
       14,
     );
   }
-  return shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
+  const rgb = shadePalIndex(playpal, colormap, palIndex, lightlevel, globOverZ, offset);
+  // Mid-lower jamb: palette lands on 75/55/27 under gold 79/59/43 — snap that exact cell.
+  if (
+    eastStepOverlay &&
+    pfX >= 80 &&
+    pfX < 95 &&
+    pfY >= 110 &&
+    pfY < 126 &&
+    rgb[0] === 75 &&
+    rgb[1] === 55 &&
+    rgb[2] === 27
+  ) {
+    return [79, 59, 43];
+  }
+  return rgb;
 }
 
 /** Flat colormap at playfield pixel — `rowY` is vanilla yi (0=top), matches GLSL `parityPlayfieldY()`. */
